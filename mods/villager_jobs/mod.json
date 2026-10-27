@@ -1,0 +1,18 @@
+{
+  "id": "villager_jobs",
+  "name": "Villager Jobs",
+  "version": "1.4.0",
+  "description": "Villagers farm, tend animals, haul between chests and craft at a chest. K on a villager, then on a chest, opens the job wheel. Saved per world. Installed switched off.",
+  "authors": ["EMF"],
+  "emf": 20,
+  "enabled": false,
+  "settings": [
+    {"key": "key", "type": "key", "default": "K", "label": "Job key",
+     "help": "Look at a villager and press it, then hold it while looking at a chest."},
+    {"key": "seconds_per_item", "type": "int", "default": 30, "min": 1, "max": 86400, "label": "Seconds per crafted item",
+     "help": "For recipes without their own crafting time."},
+    {"key": "farm_radius", "type": "int", "default": 20, "min": 1, "max": 100, "label": "Farm radius (m)"},
+    {"key": "tend_radius", "type": "int", "default": 20, "min": 1, "max": 100, "label": "Animal radius (m)"},
+    {"key": "haul_per_trip", "type": "int", "default": 20, "min": 1, "max": 9999, "label": "Items per haul trip"}
+  ]
+}

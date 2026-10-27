@@ -1,0 +1,15 @@
+{
+  "id": "kill_counter",
+  "name": "Kill Counter",
+  "version": "1.0.0",
+  "description": "Counts the creatures you kill and shows the number on screen. A Lua example mod: open main.lua and change it while the game runs. Installed switched off.",
+  "authors": ["EMF"],
+  "emf": 14,
+  "enabled": false,
+  "main": "main.lua",
+  "depends": {"lua": ">=1.1"},
+  "settings": [
+    {"key": "corner", "type": "choice", "default": "top right", "choices": ["top right", "bottom right", "bottom left"],
+     "label": "Corner", "live": true}
+  ]
+}

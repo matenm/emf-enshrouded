@@ -1,0 +1,8 @@
+{
+  "id": "model_probe",
+  "name": "Model Probe",
+  "version": "0.1.0",
+  "capabilities": ["export"],
+  "description": "Read-only: checks for the custom-model research (GUID registry contents, io.read paths).",
+  "authors": ["EMF contributors"]
+}

@@ -1,0 +1,1 @@
+{"errors":[{"message":"Mod not found","locations":[{"line":1,"column":43}],"path":["mod"],"extensions":{"code":"NOT_FOUND","detail":[{"message":"Mod not found","entity":"Mod","attribute":"uid","value":null,"type":"LOCATE_ERROR","code":"NOT_FOUND"}]}}],"data":null}

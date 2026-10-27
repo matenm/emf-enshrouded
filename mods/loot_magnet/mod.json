@@ -1,0 +1,33 @@
+{
+  "id": "loot_magnet",
+  "name": "Loot Magnet",
+  "version": "1.0.0",
+  "description": "The corpses of creatures killed near you are looted into your inventory a moment later. On the host or a dedicated server it works for every player, also those who joined without EMF; each switches their own with /loot.toggle. Never inside a base, never a player's or an ally's body, never a corpse twice.",
+  "authors": ["EMF"],
+  "enabled": false,
+  "emf": 17,
+  "settings": [
+    {"key": "radius", "type": "slider", "min": 2, "max": 20, "step": 0.5, "default": 8, "label": "Reach (m)",
+     "live": true, "group": "Loot", "help": "Corpses this close to a player come to them."},
+    {"key": "delay", "type": "slider", "min": 0, "max": 10, "step": 0.5, "default": 1, "label": "After the kill (s)",
+     "live": true, "group": "Loot", "help": "The loot comes no sooner than this after the death."},
+    {"key": "window", "type": "slider", "min": 8, "max": 60, "step": 1, "default": 15, "label": "Looks for loot for (s)",
+     "live": true, "group": "Loot",
+     "help": "After the kill. The game gives a corpse its loot 1-3 s after it dies; an older corpse is left to you."},
+    {"key": "categories", "type": "select", "default": "materials", "label": "What comes", "live": true, "group": "Loot",
+     "options": [{"value": "materials", "label": "Corpses that hold only materials (and food)"},
+                 {"value": "everything", "label": "Every corpse, whatever it holds"}],
+     "help": "A corpse with gear in it is left for you to open."},
+    {"key": "include_ammo", "type": "bool", "default": true, "label": "Arrows count as materials", "live": true,
+     "group": "Loot", "enabledWhen": {"setting": "categories", "equals": "materials"}},
+    {"key": "default_on", "type": "bool", "default": true, "label": "On for players who never switched it", "live": true,
+     "group": "Players", "help": "Each player switches their own with /loot.toggle (kept per world and account)."},
+    {"key": "toggle_key", "type": "keybind", "default": "", "label": "Your key to switch it", "live": true,
+     "group": "Players", "help": "The host's own magnet; empty = no key (loot.toggle in the console works too)."},
+    {"key": "base_radius", "type": "slider", "min": 10, "max": 100, "step": 5, "default": 30,
+     "label": "Never within (m) of a flame altar", "live": true, "group": "Players",
+     "help": "Nothing inside a base is looted."},
+    {"key": "debug_log", "type": "bool", "default": true, "label": "Log every decision", "live": true, "group": "Log",
+     "help": "A line in emf_core.log for each death noted and each corpse looted or left, with the reason."}
+  ]
+}

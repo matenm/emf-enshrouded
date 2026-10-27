@@ -1,0 +1,9 @@
+{
+  "id": "write_test",
+  "name": "Write Test (developer)",
+  "version": "1.0.0",
+  "description": "Developer check for API v16: writes an entity's Faction on the host's server world through program_write_other (tracked) or a plain pointer (untracked), and logs the client world's copy when it changes.",
+  "authors": ["EMF"],
+  "emf": 16,
+  "enabled": false
+}

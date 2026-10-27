@@ -1,0 +1,27 @@
+{
+  "name": "fake_game",
+  "description": "Every step kind against build\\msvc\\tools\\emf_bridge_fake.exe (scripts/test_tools.ps1 runs it; the folder has emf\\mods\\demo\\main.lua).",
+  "steps": [
+    {"do": "hello", "expect": {"emf": "fake", "api": 16, "protocol": 1}},
+    {"do": "wait", "for": "world", "timeout_s": 10},
+    {"do": "wait", "for": "player", "timeout_s": 10},
+    {"do": "state", "path": "player.position.x", "op": "==", "value": 100.5},
+    {"do": "state", "path": "overlay.hud[id=clock].text", "op": "exists"},
+    {"do": "state", "path": "player.health.value", "op": ">", "value": 0},
+    {"do": "console", "text": "near 10", "expect": "3 entities within 10 m"},
+    {"do": "console", "text": "put Material_T1_Wood_Logs 1", "expect": ["put: queued", "1 added"]},
+    {"do": "console", "text": "nosuch", "status": "unknown"},
+    {"do": "mods", "id": "clock", "status": "loaded"},
+    {"do": "mods", "id": "quick_stack", "status": "disabled"},
+    {"do": "log_mark", "name": "m"},
+    {"do": "log_since_mark", "mark": "m", "match": "[life_skills] fake level up", "timeout_s": 10},
+    {"do": "log_since_mark", "mark": "m", "match_re": "\\[fake\\] tick \\d+", "timeout_s": 5},
+    {"do": "wait", "for": "log", "match": "[fake] tick", "timeout_s": 5},
+    {"do": "mod_key", "key": "L", "min_reads": 1},
+    {"do": "screenshot", "name": "fake", "max_width": 32},
+    {"do": "edit_file", "path": "emf/mods/demo/main.lua", "find": "hello", "replace": "changed"},
+    {"do": "sleep", "s": 0.2},
+    {"do": "edit_file", "path": "emf/mods/demo/extra.lua", "write": "emf.log('extra')\n"},
+    {"do": "restore_file", "path": "emf/mods/demo/extra.lua"}
+  ]
+}

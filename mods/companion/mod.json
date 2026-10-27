@@ -1,0 +1,29 @@
+{
+  "id": "companion",
+  "name": "Companion",
+  "version": "1.5.0",
+  "description": "A companion that follows you, fights at your side, takes orders (follow, stay, attack) and wears gear you give it. G opens its order wheel. Saved per world. Installed switched off.",
+  "authors": ["EMF"],
+  "emf": 13,
+  "enabled": false,
+  "settings": [
+    {"key": "key", "type": "key", "default": "G", "label": "Order wheel key",
+     "help": "Hold to open the wheel (Follow me, Stay here, Attack, Gear, Dismiss); tap for a click wheel."},
+    {"key": "key_follow", "type": "key", "default": "", "label": "Key: follow me", "help": "Empty = no key."},
+    {"key": "key_stay", "type": "key", "default": "", "label": "Key: stay here", "help": "Empty = no key."},
+    {"key": "key_attack", "type": "key", "default": "", "label": "Key: attack what you look at", "help": "Empty = no key."},
+    {"key": "key_dismiss", "type": "key", "default": "", "label": "Key: dismiss", "help": "Empty = no key."},
+    {"key": "auto_summon", "type": "bool", "default": false, "label": "Summon when a world loads"},
+    {"key": "respawn_seconds", "type": "int", "default": 0, "min": 0, "max": 86400, "label": "Respawn after (seconds)",
+     "help": "0 = it stays dead until you summon it again."},
+    {"key": "gear_bonus_max", "type": "int", "default": 10, "min": 0, "max": 100, "label": "Most levels gear adds"},
+    {"key": "faction", "type": "int", "default": 11, "min": -1, "max": 15, "label": "Faction",
+     "help": "11 = PlayerAlly: never hits you, fights at full damage."},
+    {"key": "guid", "type": "text", "default": "d5d05217-52dc-467a-9192-26b4f661d8d9", "label": "Body (template GUID)",
+     "help": "The template the companion is spawned from (Enemy_Vukah_Melee)."},
+    {"key": "marker_guid", "type": "text", "default": "", "label": "Stay marker (template GUID)",
+     "help": "What 'Stay here' places for it to guard. Empty = a barrel."},
+    {"key": "follow_distance", "type": "float", "default": 0, "min": 0, "max": 50, "label": "Follow distance (m)",
+     "help": "0 = the body's own. Changes every creature of that template, wild ones too."}
+  ]
+}

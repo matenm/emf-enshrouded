@@ -1,0 +1,14 @@
+{
+  "id": "hotkey_wheel",
+  "name": "Hotkey Wheel",
+  "version": "1.0.0",
+  "description": "Hold a key to open a radial wheel and pick a time of day (dawn, noon, dusk, midnight). An EMF example mod in Lua; the host only.",
+  "authors": ["EMF"],
+  "emf": 14,
+  "main": "main.lua",
+  "depends": {"lua": ">=1.3"},
+  "settings": [
+    {"key": "wheel_key", "type": "keybind", "default": "F3", "label": "Key that opens the wheel",
+     "help": "Hold it, move the mouse to an entry, let go. Click it, then press a key.", "live": true}
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "necromancer",
+  "name": "Necromancer",
+  "version": "1.1.0",
+  "description": "A Necromancer class: raise skeleton warriors that stay, follow you and fight (3 at a time), a lich and a bone golem with the undead pack, and cast raging spirits, flaming skulls that rush your foe for a few seconds. Hold V for the summoning wheel (shared with Beastmaster when both are installed); /necromancer in the chat for players who join. Host or dedicated server. Installed switched off.",
+  "authors": ["EMF contributors"],
+  "enabled": false,
+  "emf": 14,
+  "side": "server",
+  "main": "main.lua",
+  "depends": {"lua": ">=1.9"},
+  "settings": [
+    {"key": "wheel_key", "type": "keybind", "default": "V", "label": "Summoning wheel (hold)", "live": true, "group": "Controls"},
+    {"key": "shared_wheel", "type": "bool", "default": true, "label": "One wheel with Beastmaster's beasts (when both are installed)", "live": true, "group": "Controls"},
+    {"key": "raise_mana_pct", "type": "slider", "min": 0, "max": 60, "step": 1, "default": 25, "label": "Mana to raise a skeleton (% of max)", "live": true, "group": "Skeletons"},
+    {"key": "skeleton_cap", "type": "slider", "min": 1, "max": 8, "step": 1, "default": 3, "label": "Skeletons at once", "live": true, "group": "Skeletons"},
+    {"key": "raise_cooldown_s", "type": "slider", "min": 0, "max": 10, "step": 1, "default": 1, "label": "Seconds between raises", "live": true, "group": "Skeletons"},
+    {"key": "lich_cap", "type": "slider", "min": 0, "max": 3, "step": 1, "default": 1, "label": "Liches at once (0: none)", "live": true, "group": "Lich (undead pack)"},
+    {"key": "lich_mana_pct", "type": "slider", "min": 0, "max": 80, "step": 1, "default": 40, "label": "Mana to raise a lich (% of max)", "live": true, "group": "Lich (undead pack)"},
+    {"key": "golem_cap", "type": "slider", "min": 0, "max": 2, "step": 1, "default": 1, "label": "Bone golems at once (0: none)", "live": true, "group": "Bone golem (undead pack)"},
+    {"key": "golem_mana_pct", "type": "slider", "min": 0, "max": 90, "step": 1, "default": 60, "label": "Mana to raise a bone golem (% of max)", "live": true, "group": "Bone golem (undead pack)"},
+    {"key": "spirit_mana_pct", "type": "slider", "min": 0, "max": 50, "step": 1, "default": 8, "label": "Mana for raging spirits (% of max)", "live": true, "group": "Raging spirits"},
+    {"key": "spirits_per_cast", "type": "slider", "min": 1, "max": 5, "step": 1, "default": 2, "label": "Spirits per cast", "live": true, "group": "Raging spirits"},
+    {"key": "spirit_life_s", "type": "slider", "min": 2, "max": 30, "step": 1, "default": 6, "label": "A spirit lasts (s)", "live": true, "group": "Raging spirits"},
+    {"key": "spirit_cap", "type": "slider", "min": 1, "max": 20, "step": 1, "default": 10, "label": "Spirits at once (the oldest go first)", "live": true, "group": "Raging spirits"},
+    {"key": "leash_m", "type": "slider", "min": 15, "max": 100, "step": 5, "default": 40, "label": "Minions come back from (m)", "live": true, "group": "Behaviour"},
+    {"key": "leash_far_m", "type": "slider", "min": 30, "max": 300, "step": 10, "default": 80, "label": "At once from (m)", "live": true, "group": "Behaviour"},
+    {"key": "xp_credit", "type": "bool", "default": true, "label": "You get your minions' kills (XP and loot)", "live": true, "group": "Behaviour"}
+  ]
+}

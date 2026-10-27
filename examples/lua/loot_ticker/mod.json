@@ -1,0 +1,18 @@
+{
+  "id": "loot_ticker",
+  "name": "Loot Ticker",
+  "version": "1.0.0",
+  "description": "Your last 5 pickups on screen, newest first, fading out. An EMF example mod in Lua: a game event and fading HUD lines.",
+  "authors": ["EMF"],
+  "emf": 14,
+  "main": "main.lua",
+  "depends": {"lua": ">=1.3"},
+  "settings": [
+    {"key": "seconds", "type": "slider", "min": 3, "max": 30, "step": 1, "default": 8,
+     "label": "Each line stays (seconds)", "live": true},
+    {"key": "corner", "type": "select", "default": "bottom_right", "label": "Corner", "live": true,
+     "options": [{"value": "top_right", "label": "Top right"}, {"value": "bottom_right", "label": "Bottom right"},
+                 {"value": "bottom_left", "label": "Bottom left"}]},
+    {"key": "color", "type": "color", "default": "#ffffff", "label": "Colour", "live": true}
+  ]
+}

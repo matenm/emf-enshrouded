@@ -1,0 +1,2 @@
+Vulkan-Headers v1.3.296 (https://github.com/KhronosGroup/Vulkan-Headers, tag v1.3.296), the vendored headers carry SPDX Apache-2.0 (LICENSE.md; full text in LICENSES/Apache-2.0.txt).
+Vendored: the C headers used on Windows (include/vulkan without the C++ .hpp files and other platforms, include/vk_video).

@@ -1,0 +1,11 @@
+{
+  "id": "pet_follow",
+  "name": "Pet Follow",
+  "version": "1.0.0",
+  "description": "pet_follow.summon: a rabbit appears next to you and follows you; pet_follow.dismiss sends it away. An EMF example mod in Lua: spawn, a component write and an event. Host only; the pet is not saved.",
+  "authors": ["EMF"],
+  "emf": 14,
+  "main": "main.lua",
+  "depends": {"lua": ">=1.3"},
+  "side": "server"
+}

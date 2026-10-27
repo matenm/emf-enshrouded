@@ -1,0 +1,32 @@
+// EMF.exe's icon and version information (shown in Explorer's file properties).
+#include <winres.h>
+
+1 ICON "emf.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION EMF_VER_MAJOR, EMF_VER_MINOR, EMF_VER_PATCH, 0
+ PRODUCTVERSION EMF_VER_MAJOR, EMF_VER_MINOR, EMF_VER_PATCH, 0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "EMF project"
+            VALUE "FileDescription", "EMF - Enshrouded mod manager"
+            VALUE "FileVersion", EMF_VERSION
+            VALUE "InternalName", "EMF"
+            VALUE "OriginalFilename", "EMF.exe"
+            VALUE "ProductName", "EMF (Enshrouded Modding Framework)"
+            VALUE "ProductVersion", EMF_VERSION
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

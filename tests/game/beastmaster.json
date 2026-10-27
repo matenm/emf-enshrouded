@@ -1,0 +1,17 @@
+{
+  "name": "beastmaster",
+  "description": "mods/beastmaster: a beast from the collection is called, shows on the HUD line, answers the bare /beastmaster command and goes home again. Needs beastmaster switched on (a copy of mods/beastmaster with \"enabled\": true, installed as emf\\mods\\beastmaster) and tools/models/model_viewer (god mode), e.g. scripts/game_session.ps1 start -Mods <copy>=beastmaster,tools/models/model_viewer, and a LOCAL world.",
+  "steps": [
+    {"do": "wait", "for": "player", "timeout_s": 300},
+    {"do": "mods", "id": "beastmaster", "status": "script"},
+    {"do": "console", "text": "model_viewer.god on", "expect": "god mode on"},
+    {"do": "console", "text": "beastmaster.give wolf", "expect": "to your collection"},
+    {"do": "console", "text": "beastmaster", "expect": "/beastmaster list | tame | feed | call | dismiss | attack"},
+    {"do": "console", "text": "beastmaster call Wolf", "expect": "comes"},
+    {"do": "state", "path": "overlay.hud[id=beastmaster.out].text", "op": "contains", "value": "(out)", "timeout_s": 5},
+    {"do": "console", "text": "beastmaster list", "expect": "wolf, out"},
+    {"do": "screenshot", "name": "wolf_out", "max_width": 1280},
+    {"do": "console", "text": "beastmaster dismiss all", "expect": "goes home"},
+    {"do": "console", "text": "beastmaster list", "expect": "wolf, at home"}
+  ]
+}

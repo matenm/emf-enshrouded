@@ -1,0 +1,8 @@
+{
+  "id": "emf_emberbrand",
+  "name": "Emberbrand (EMF content example)",
+  "version": "1.0.0",
+  "capabilities": ["patch"],
+  "description": "Adds a new sword, the Emberbrand (a Bronze Sword with more damage and fire). Get it with EMF (put/give). It also adds a recipe (5 wood logs) that the crafting menu does not list. An example of new content with fixed GUIDs; everyone in a game needs the same mod.",
+  "authors": ["EMF"]
+}

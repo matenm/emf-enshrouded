@@ -1,0 +1,12 @@
+{
+  "id": "loot_scale",
+  "name": "Loot Scale",
+  "version": "1.0.0",
+  "description": "More (or fewer) materials per loot stack: chests, enemy drops and pickups, on top of the world's own Loot Amount setting. Nothing is saved into the world. In a game you host it applies to every player (not tested on a dedicated server).",
+  "authors": ["EMF"],
+  "emf": 14,
+  "enabled": false,
+  "settings": [
+    {"key": "factor", "type": "float", "default": 2, "min": 0.1, "max": 10, "label": "Loot amount factor", "live": true}
+  ]
+}

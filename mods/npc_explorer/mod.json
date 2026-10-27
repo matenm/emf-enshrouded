@@ -1,0 +1,8 @@
+{
+  "id": "npc_explorer",
+  "name": "NPC Explorer",
+  "version": "0.1.0",
+  "capabilities": ["export"],
+  "description": "Read-only: dumps resource types and NPC/AI-related game data for research.",
+  "authors": ["EMF contributors"]
+}

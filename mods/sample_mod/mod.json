@@ -1,0 +1,18 @@
+{
+  "id": "sample_mod",
+  "name": "Sample Mod (developer)",
+  "version": "1.0.0",
+  "description": "EMF's developer test mod: F8 time of day, F9/F11 spawn, F10 destroy, F7 villager 'come here', F12 give an item. Not for players.",
+  "authors": ["EMF"],
+  "emf": 13,
+  "settings": [
+    {"key": "enable_write", "type": "bool", "default": false, "label": "Allow the write tests (F7-F12)"},
+    {"key": "give_item", "type": "text", "default": "", "label": "F12 gives (item name)"},
+    {"key": "give_count", "type": "int", "default": 1, "min": 1, "max": 65535, "label": "F12 count"},
+    {"key": "dump_items", "type": "bool", "default": false, "label": "Write emf\\items.csv at load"},
+    {"key": "guid_layout", "type": "choice", "default": "ms", "choices": ["ms", "raw"], "label": "GUID byte layout",
+     "help": "ms = the Windows layout the game uses; raw = bytes in text order."},
+    {"key": "spawn_guid", "type": "text", "default": "", "label": "F9 spawns (template GUID)"},
+    {"key": "spawn_guid2", "type": "text", "default": "", "label": "F11 spawns (template GUID)"}
+  ]
+}

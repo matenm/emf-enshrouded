@@ -1,0 +1,13 @@
+{
+  "id": "big_stacks",
+  "name": "Big Stacks",
+  "version": "1.0.0",
+  "description": "Bigger item stacks. Off by default: the game saves the bigger stacks, and a game without the mod then holds oversized stacks.",
+  "authors": ["EMF"],
+  "emf": 13,
+  "enabled": false,
+  "settings": [
+    {"key": "multiplier", "type": "float", "default": 4, "min": 1, "max": 1000, "label": "Stack size multiplier"},
+    {"key": "max", "type": "int", "default": 9999, "min": 1, "max": 65535, "label": "Largest stack"}
+  ]
+}

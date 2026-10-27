@@ -1,0 +1,18 @@
+{
+  "id": "life_skills",
+  "name": "Life Skills",
+  "version": "1.1.0",
+  "description": "Woodcutting, mining, foraging, hunting and fishing level up as you gather; each level adds a chance of extra yield. Per world and per player. A Lua example mod. Installed switched off.",
+  "authors": ["EMF"],
+  "emf": 14,
+  "enabled": false,
+  "main": "main.lua",
+  "depends": {"lua": ">=1.1"},
+  "settings": [
+    {"key": "bonus_per_level", "type": "int", "default": 2, "min": 0, "max": 100,
+     "label": "Extra yield chance per level (%)", "live": true},
+    {"key": "hud", "type": "bool", "default": true, "label": "Show the skills on screen", "live": true},
+    {"key": "corner", "type": "choice", "default": "top right", "choices": ["top right", "bottom right", "bottom left"],
+     "label": "Corner", "live": true}
+  ]
+}

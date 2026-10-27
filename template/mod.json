@@ -1,0 +1,26 @@
+{
+  "id": "mymod",
+  "name": "My Mod",
+  "version": "0.1.0",
+  "description": "A starting point for an EMF mod: a console command, your position on screen and a key that hides it.",
+  "authors": ["you"],
+  "emf": 13,
+  "settings": [
+    {"key": "show", "type": "bool", "default": true, "label": "Show the position", "live": true,
+     "group": "Position on screen"},
+    {"key": "corner", "type": "select", "default": "bottom_left", "label": "Corner", "live": true,
+     "group": "Position on screen",
+     "options": [{"value": "top_right", "label": "Top right"}, {"value": "bottom_right", "label": "Bottom right"},
+                 {"value": "bottom_left", "label": "Bottom left"}],
+     "enabledWhen": {"setting": "show", "equals": true}},
+    {"key": "color", "type": "color", "default": "#ffffff", "label": "Colour", "live": true,
+     "group": "Position on screen", "enabledWhen": {"setting": "show", "equals": true}},
+    {"key": "prefix", "type": "text", "default": "", "maxLength": 24, "label": "Text in front", "live": true,
+     "group": "Position on screen", "enabledWhen": {"setting": "show", "equals": true}},
+    {"key": "every", "type": "slider", "min": 0.25, "max": 5, "step": 0.25, "default": 1,
+     "label": "Update every (seconds)", "live": true, "group": "Position on screen",
+     "enabledWhen": {"setting": "show", "equals": true}},
+    {"key": "toggle_key", "type": "keybind", "default": "F8", "label": "Key that shows and hides it", "live": true,
+     "group": "Keys"}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "chat_command",
+  "name": "Chat Commands",
+  "version": "1.0.0",
+  "description": "/chat_command.where and /chat_command.home: commands every player may type into the game's chat, answered to whoever typed them. An EMF example mod in Lua.",
+  "authors": ["EMF"],
+  "emf": 17,
+  "main": "main.lua",
+  "depends": {"lua": ">=1.4"},
+  "side": "server"
+}

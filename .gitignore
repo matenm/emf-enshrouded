@@ -1,0 +1,17 @@
+# build output
+build/
+out/
+# regenerable / large
+tools/eml-0.2.0/
+export/
+analysis/*.snapshot.json
+*.pkl
+__pycache__/
+# scratch folders of local tools
+.superpowers/
+.playwright-mcp/
+# run logs and screenshots: local paths and account ids, never published
+analysis/runs/
+# custom-model research: game-derived data and dumps, never published
+analysis/model_survey/
+analysis/models/

@@ -1,0 +1,13 @@
+{
+  "id": "sim_rate",
+  "name": "Sim Rate (developer)",
+  "version": "1.0.0",
+  "description": "How many simulation steps the game runs per second (all worlds), on screen. An example of hooking a game function by pattern: it hooks the same function EMF hooks, and both run.",
+  "authors": ["EMF"],
+  "emf": 14,
+  "enabled": false,
+  "settings": [
+    {"key": "corner", "type": "choice", "default": "bottom left", "choices": ["top right", "bottom right", "bottom left"],
+     "label": "Corner", "live": true}
+  ]
+}

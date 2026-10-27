@@ -1,0 +1,52 @@
+{
+    "format":  1,
+    "kind":  "starter",
+    "label":  "Before EMF",
+    "time":  1793103533,
+    "time_local":  "2026-10-27 13:18:53",
+    "emf_version":  "0.3.0",
+    "made_by":  "install",
+    "files":  [
+                  {
+                      "storage":  "steam",
+                      "steam_id":  "4242",
+                      "type":  "character",
+                      "slot":  0,
+                      "name":  "character0.ksd",
+                      "path":  "steam/4242/character0.ksd",
+                      "size":  10,
+                      "sha256":  "bcb9cd07445e7f2f9cb88b2d30dc7c121c43fdf96f7c7e0d3f44bd18e4d23439",
+                      "modified":  1793103532
+                  },
+                  {
+                      "storage":  "local",
+                      "type":  "world",
+                      "slot":  0,
+                      "name":  "world0.ksd",
+                      "path":  "local/default/world0.ksd",
+                      "size":  11,
+                      "sha256":  "fb5d989c7d88bf48d33444398d8a25ed31442de9ff5dede286fc902e3f39bb3b",
+                      "modified":  1793103532
+                  }
+              ],
+    "info":  [
+                 {
+                     "storage":  "steam",
+                     "type":  "character",
+                     "slot":  0,
+                     "name":  "Björn \u003c\u0026\u003e",
+                     "level":  8
+                 },
+                 {
+                     "storage":  "local",
+                     "type":  "world",
+                     "slot":  0,
+                     "name":  "My World 1",
+                     "played":  1793000000,
+                     "play_seconds":  7200
+                 }
+             ],
+    "problems":  [
+
+                 ]
+}

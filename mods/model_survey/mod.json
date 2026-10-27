@@ -1,0 +1,8 @@
+{
+  "id": "model_survey",
+  "name": "Model Survey",
+  "version": "0.1.0",
+  "capabilities": ["export"],
+  "description": "Read-only: surveys render models, skeletons, animations and which creature templates use them (custom-model research).",
+  "authors": ["EMF contributors"]
+}

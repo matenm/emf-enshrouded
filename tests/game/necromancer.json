@@ -1,0 +1,16 @@
+{
+  "name": "necromancer",
+  "description": "mods/necromancer: a skeleton warrior is raised, shows on the HUD line, answers the bare /necromancer command and returns to the ground. Needs necromancer switched on (a copy of mods/necromancer with \"enabled\": true, installed as emf\\mods\\necromancer) and tools/models/model_viewer (god mode), e.g. scripts/game_session.ps1 start -Mods <copy>=necromancer,tools/models/model_viewer, and a LOCAL world.",
+  "steps": [
+    {"do": "wait", "for": "player", "timeout_s": 300},
+    {"do": "mods", "id": "necromancer", "status": "script"},
+    {"do": "console", "text": "model_viewer.god on", "expect": "god mode on"},
+    {"do": "console", "text": "necromancer dismiss"},
+    {"do": "console", "text": "necromancer", "expect": "/necromancer raise | spirits | list | gather | attack | dismiss"},
+    {"do": "console", "text": "necromancer raise", "expect": "rises (1/"},
+    {"do": "state", "path": "overlay.hud[id=necromancer.out].text", "op": "contains", "value": "Skeletons 1/", "timeout_s": 5},
+    {"do": "screenshot", "name": "skeleton_raised", "max_width": 1280},
+    {"do": "console", "text": "necromancer dismiss", "expect": "returns to the ground"},
+    {"do": "console", "text": "necromancer list", "expect": "0/"}
+  ]
+}

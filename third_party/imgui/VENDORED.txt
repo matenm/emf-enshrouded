@@ -1,0 +1,2 @@
+Dear ImGui v1.91.9 (https://github.com/ocornut/imgui, tag v1.91.9), MIT licence (LICENSE.txt).
+Vendored: core sources and backends/imgui_impl_vulkan.*; imgui_demo.cpp left out.

@@ -1,0 +1,15 @@
+{
+  "id": "clock",
+  "name": "Clock",
+  "version": "1.1.0",
+  "description": "The game's time of day in a corner of the screen. Read-only: it also works in someone else's world.",
+  "authors": ["EMF"],
+  "emf": 13,
+  "side": "client",
+  "settings": [
+    {"key": "place", "type": "choice", "default": "bottom right",
+     "choices": ["top right", "bottom right", "bottom left"], "label": "Corner", "live": true,
+     "help": "Top right sits below the game's quest tracker."},
+    {"key": "h24", "type": "bool", "default": true, "label": "24-hour clock", "live": true}
+  ]
+}

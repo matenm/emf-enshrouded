@@ -1,0 +1,18 @@
+{
+  "id": "hud_widget",
+  "name": "HUD Widget",
+  "version": "1.0.0",
+  "description": "A tidy corner widget: where you are, a day/night bar and the time to dusk or dawn. An EMF example mod in Lua.",
+  "authors": ["EMF"],
+  "emf": 17,
+  "main": "main.lua",
+  "depends": {"lua": ">=1.4"},
+  "side": "client",
+  "settings": [
+    {"key": "show_position", "type": "bool", "default": true, "label": "Show where you are", "live": true},
+    {"key": "corner", "type": "select", "default": "top_right", "label": "Corner", "live": true,
+     "options": [{"value": "top_right", "label": "Top right"}, {"value": "bottom_right", "label": "Bottom right"},
+                 {"value": "bottom_left", "label": "Bottom left"}]},
+    {"key": "color", "type": "color", "default": "#e8e8e8", "label": "Colour", "live": true}
+  ]
+}

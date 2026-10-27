@@ -1,0 +1,26 @@
+{
+  "id": "bulk_craft",
+  "name": "Bulk Craft",
+  "version": "1.0.0",
+  "description": "Craft one by hand, then craft many: look at a crafting station and press U for x5 / x10 / x25 / max of a recipe you crafted there by hand, or type /craft <n> in the chat (every player on your server). Crafted by the game itself from your own materials, one at a time at the recipe's own pace. Host or dedicated server; players who join need nothing. Installed switched off.",
+  "authors": ["EMF"],
+  "enabled": false,
+  "emf": 17,
+  "side": "server",
+  "settings": [
+    {"key": "key", "type": "keybind", "default": "U", "label": "Bulk craft key (host)", "live": true, "group": "Bulk craft",
+     "help": "Look at a crafting station (or at nothing, for hand crafting) and press it: the wheel offers what you crafted there by hand."},
+    {"key": "pace", "type": "select", "default": "paced", "label": "Pace", "live": true, "group": "Bulk craft",
+     "options": [{"value": "paced", "label": "One at a time (the recipe's crafting time, at least the time below)"},
+                 {"value": "instant", "label": "All at once (recipes with a crafting time still wait for it)"}]},
+    {"key": "seconds", "type": "slider", "min": 0.1, "max": 5, "step": 0.1, "default": 0.5,
+     "label": "Seconds per craft (recipes without a crafting time)", "live": true, "group": "Bulk craft",
+     "enabledWhen": {"setting": "pace", "equals": "paced"}},
+    {"key": "max_amount", "type": "slider", "min": 5, "max": 500, "step": 5, "default": 100, "label": "Most crafts per order",
+     "live": true, "group": "Bulk craft", "help": "Max in the wheel and /craft max stop here too."},
+    {"key": "range", "type": "slider", "min": 2, "max": 15, "step": 1, "default": 5, "label": "Station within (m)",
+     "live": true, "group": "Bulk craft", "help": "Walk farther away and the order stops."},
+    {"key": "notes", "type": "bool", "default": true, "label": "Notes on screen", "live": true, "group": "Screen",
+     "help": "When your order starts and ends (the host's screen; players who joined get chat lines)."}
+  ]
+}

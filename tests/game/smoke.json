@@ -1,0 +1,15 @@
+{
+  "name": "smoke",
+  "description": "EMF and the debug bridge in a running world: hello, the world and the local player, the position, a console command, the mod list, a screenshot. Load a world first (scripts/game_session.ps1 start).",
+  "steps": [
+    {"do": "hello", "expect": {"protocol": 1}},
+    {"do": "wait", "for": "world", "timeout_s": 300},
+    {"do": "wait", "for": "player", "timeout_s": 60},
+    {"do": "state", "path": "world.status", "op": "==", "value": "running"},
+    {"do": "state", "path": "player.position", "op": "exists"},
+    {"do": "console", "text": "pos", "expect_re": "player \\d+ at \\(-?\\d"},
+    {"do": "mods", "id": "clock", "status": "loaded"},
+    {"do": "state", "path": "mods[id=clock].status", "op": "==", "value": "loaded"},
+    {"do": "screenshot", "name": "world", "max_width": 1280}
+  ]
+}

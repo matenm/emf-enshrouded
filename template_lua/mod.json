@@ -1,0 +1,26 @@
+{
+  "id": "my_first_mod",
+  "name": "My First Mod",
+  "version": "1.0.0",
+  "description": "A line of text on screen that a key shows and hides. EMF's Lua starter: change main.lua while the game runs.",
+  "authors": ["you"],
+  "emf": 14,
+  "main": "main.lua",
+  "depends": {"lua": ">=1.3"},
+  "settings": [
+    {"key": "show", "type": "bool", "default": true, "label": "Show the line", "live": true, "group": "On screen"},
+    {"key": "text", "type": "text", "default": "Hello from my first mod!", "maxLength": 40, "label": "Text",
+     "live": true, "group": "On screen", "enabledWhen": {"setting": "show", "equals": true}},
+    {"key": "corner", "type": "select", "default": "bottom_left", "label": "Corner", "live": true, "group": "On screen",
+     "options": [{"value": "top_right", "label": "Top right"}, {"value": "bottom_right", "label": "Bottom right"},
+                 {"value": "bottom_left", "label": "Bottom left"}],
+     "enabledWhen": {"setting": "show", "equals": true}},
+    {"key": "color", "type": "color", "default": "#ffd070", "label": "Colour", "live": true, "group": "On screen",
+     "enabledWhen": {"setting": "show", "equals": true}},
+    {"key": "decimals", "type": "slider", "min": 0, "max": 2, "step": 1, "default": 0,
+     "label": "Decimals of your position", "help": "0 shows whole metres.", "live": true, "group": "On screen",
+     "enabledWhen": {"setting": "show", "equals": true}},
+    {"key": "toggle_key", "type": "keybind", "default": "F7", "label": "Key that shows and hides the line",
+     "help": "Click it in the Mods tab, then press a key.", "live": true, "group": "Keys"}
+  ]
+}

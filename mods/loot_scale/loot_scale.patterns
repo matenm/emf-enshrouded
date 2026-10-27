@@ -1,0 +1,3 @@
+# loot_scale's engine function, found by bytes. Check it against a game or server exe without starting it:
+#   emf_sigcheck --patterns loot_scale.patterns "C:\...\Enshrouded\enshrouded.exe"
+loot_factor = 48 8B 81 90 00 00 00 F3 0F 10 40 38 C3

@@ -1,0 +1,2 @@
+doctest 2.4.11 (https://github.com/doctest/doctest, tag v2.4.11), MIT (LICENSE.txt). Vendored: doctest.h only.
+Used by the unit tests only; not shipped in the release.

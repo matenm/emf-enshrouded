@@ -1,0 +1,73 @@
+# Builds EMF on every push and pull request, runs the unit tests and the package test (install scripts against fake
+# game folders, both zips, the mod template built from the zip), and keeps the two zips as an artifact. A tag like
+# v0.3.0 also attaches the zips to a GitHub release. Nothing here needs the game: the in-game checks and the signature
+# check against the real enshrouded.exe stay on a developer's PC (scripts/verify.sh).
+# Actions are pinned to commits (the tag in the comment); .github/dependabot.yml proposes updates.
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        with:
+          arch: x64
+
+      - name: Ninja
+        uses: seanmiddleditch/gha-setup-ninja@96bed6edff20d1dd61ecff9b75cc519d516e6401 # v5
+
+      - name: Configure
+        run: cmake --preset msvc
+
+      - name: Build
+        run: cmake --build --preset msvc
+
+      - name: Unit tests
+        run: ctest --preset msvc
+
+      - name: Package test
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test_package.ps1
+
+      - name: Package
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1
+
+      - name: SHA-256 of the zips
+        shell: pwsh
+        run: Get-FileHash build/package/*.zip -Algorithm SHA256 | Format-Table -AutoSize | Out-String -Width 200
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: EMF-packages
+          path: build/package/*.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: EMF-packages
+          path: packages
+
+      - name: Draft a GitHub release with both zips
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          draft: true
+          files: packages/*.zip

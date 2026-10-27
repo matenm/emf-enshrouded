@@ -1,0 +1,26 @@
+{
+  "id": "sleep",
+  "name": "Sleep Through the Day",
+  "version": "1.0.0",
+  "description": "Sleep in a bed by day and the day passes 60x faster until the evening; then the clock runs normally again. Everyone has to be in bed by default (or each sleeper speeds it up, or a share of the players). Host or dedicated server; players who join need nothing. Installed switched off.",
+  "authors": ["EMF"],
+  "enabled": false,
+  "emf": 17,
+  "side": "server",
+  "settings": [
+    {"key": "wake_hour", "type": "slider", "min": 12, "max": 18, "step": 0.5, "default": 17.5, "label": "Skip to (hour)",
+     "live": true, "group": "Sleep",
+     "help": "The day races until this hour. Night falls at 18:00: stay in bed past it and the game's own night skip carries on."},
+    {"key": "who", "type": "select", "default": "all", "label": "Who has to sleep", "live": true, "group": "Sleep",
+     "options": [{"value": "all", "label": "Everyone (each player in a bed)"},
+                 {"value": "share", "label": "Each sleeper speeds it up (2 of 4 in bed: 30x)"},
+                 {"value": "percent", "label": "A share of the players (below), also at night"}]},
+    {"key": "percent", "type": "slider", "min": 10, "max": 100, "step": 5, "default": 50, "label": "Share in bed (%)",
+     "live": true, "group": "Sleep", "enabledWhen": {"setting": "who", "equals": "percent"},
+     "help": "This share of the players in bed gives the full speed, by day and (topping up the game's own skip) by night."},
+    {"key": "speed", "type": "slider", "min": 10, "max": 60, "step": 5, "default": 60, "label": "How much faster",
+     "live": true, "group": "Sleep", "help": "60 = as fast as the game's own night skip."},
+    {"key": "notes", "type": "bool", "default": true, "label": "Notes on screen", "live": true, "group": "Screen",
+     "help": "When the day starts racing and when the evening comes (the host's screen; a server logs them)."}
+  ]
+}

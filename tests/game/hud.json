@@ -1,0 +1,13 @@
+{
+  "name": "hud",
+  "description": "The console's hud command keeps a line on screen, the state lists it, and 'hud <id>' without text removes it. Needs a world you host.",
+  "steps": [
+    {"do": "wait", "for": "world", "timeout_s": 300},
+    {"do": "console", "text": "hud probe 2 text", "expect": "hud: probe shown (place 2)"},
+    {"do": "state", "path": "overlay.hud[id=probe].text", "op": "==", "value": "text", "timeout_s": 5},
+    {"do": "state", "path": "overlay.hud[id=probe].place", "op": "==", "value": 2},
+    {"do": "screenshot", "name": "hud_probe", "max_width": 1280},
+    {"do": "console", "text": "hud probe", "expect": "hud: probe removed"},
+    {"do": "state", "path": "overlay.hud[id=probe]", "op": "missing", "timeout_s": 5}
+  ]
+}

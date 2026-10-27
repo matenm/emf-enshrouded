@@ -1,0 +1,14 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "release",
+      "displayName": "Release (x64)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "architecture": { "value": "x64", "strategy": "external" },
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo", "CMAKE_CXX_COMPILER": "cl" }
+    }
+  ],
+  "buildPresets": [ { "name": "release", "configurePreset": "release" } ]
+}

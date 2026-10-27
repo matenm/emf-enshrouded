@@ -1,0 +1,25 @@
+{
+  "id": "handover",
+  "name": "Hand-over",
+  "version": "1.0.0",
+  "description": "Give items to the player next to you: /handover wood 20 in the game's chat hands 20 wood logs to the nearest other player within 5 m (/handover.to Alice wood 20 picks one). It runs where the world runs (the host or a dedicated server), so players who joined need nothing. Items are never lost: what does not fit comes back, and what cannot come back drops at your feet. Gear is refused (it would lose its gems and perks). The host also gets a wheel on a key.",
+  "authors": ["EMF"],
+  "enabled": false,
+  "emf": 19,
+  "side": "server",
+  "main": "main.lua",
+  "depends": {"lua": ">=1.6"},
+  "settings": [
+    {"key": "range", "type": "slider", "min": 2, "max": 20, "step": 1, "default": 5, "label": "Reach (m)",
+     "live": true, "group": "Hand-over", "help": "Items go to a player at most this far from you."},
+    {"key": "cooldown_seconds", "type": "slider", "min": 0, "max": 30, "step": 1, "default": 2,
+     "label": "Wait between hand-overs (s)", "live": true, "group": "Hand-over",
+     "help": "Per player: keeps the chat calm."},
+    {"key": "allow_gear", "type": "bool", "default": false, "label": "Allow gear", "live": true, "group": "Hand-over",
+     "help": "Gear loses its gems and perks when handed over (the game makes a new copy with the same level and rarity). Off: gear is refused; use a chest."},
+    {"key": "notes", "type": "bool", "default": true, "label": "Tell both players", "live": true, "group": "Hand-over",
+     "help": "A chat line for the giver and the receiver when the items arrived (the host gets a note on screen)."},
+    {"key": "key", "type": "keybind", "default": "H", "label": "Your wheel (host)", "live": true, "group": "Host",
+     "help": "Hold it: pick a player near you, then a stack, then how many. Empty = no wheel."}
+  ]
+}

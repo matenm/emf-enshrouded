@@ -1,0 +1,15 @@
+{
+  "id": "model_viewer",
+  "name": "Model Viewer",
+  "version": "0.1.0",
+  "description": "Developer tool for new creature models: model_viewer.show <template guid> [ahead] [right] spawns it in front of the camera as an ally that stays with you; foe spawns a creature as it is; attack sends the allies at the last foe; hurt brings the last foe down to a percent; status shows their health; near lists creatures around you (health, level, scale, base health); push moves one with the game's teleport; god keeps you alive; clear removes them. Host only; nothing is saved.",
+  "authors": [
+    "EMF contributors"
+  ],
+  "emf": 14,
+  "main": "main.lua",
+  "depends": {
+    "lua": ">=1.7"
+  },
+  "side": "server"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "guid_dump",
+  "name": "GUID Dump",
+  "version": "0.1.0",
+  "capabilities": ["export"],
+  "description": "Read-only: exports template name -> GUID (for EMF spawn tests and the framework's name lookup).",
+  "authors": ["EMF contributors"]
+}

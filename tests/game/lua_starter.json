@@ -1,0 +1,21 @@
+{
+  "name": "lua_starter",
+  "description": "docs/modding/first_mod.md part 3: change main.lua while the game runs; the mod reloads, the line on screen changes, and it changes back when the file is put back. Needs template_lua installed as emf\\mods\\my_first_mod (scripts/game_session.ps1 start -Mods template_lua) and a world.",
+  "steps": [
+    {"do": "wait", "for": "player", "timeout_s": 300},
+    {"do": "mods", "id": "my_first_mod", "status": "script"},
+    {"do": "state", "path": "overlay.hud[id=my_first_mod.line].text", "op": "matches", "value": "^Hello from my first mod!", "timeout_s": 10},
+    {"do": "log_mark", "name": "edit"},
+    {"do": "edit_file", "path": "emf/mods/my_first_mod/main.lua",
+     "find": "  local text = emf.setting(\"text\")",
+     "replace": "  local text = \"[\" .. emf.setting(\"text\") .. \"]\""},
+    {"do": "log_since_mark", "mark": "edit", "match": "[my_first_mod] reloaded", "timeout_s": 15},
+    {"do": "state", "path": "overlay.hud[id=my_first_mod.line].text", "op": "contains", "value": "[Hello from my first mod!]", "timeout_s": 5},
+    {"do": "log_since_mark", "mark": "edit", "match": "my_first_mod/main.lua:", "absent": true},
+    {"do": "screenshot", "name": "edited", "max_width": 1280},
+    {"do": "log_mark", "name": "back"},
+    {"do": "restore_file", "path": "emf/mods/my_first_mod/main.lua"},
+    {"do": "log_since_mark", "mark": "back", "match": "[my_first_mod] reloaded", "timeout_s": 15},
+    {"do": "state", "path": "overlay.hud[id=my_first_mod.line].text", "op": "matches", "value": "^Hello from my first mod!", "timeout_s": 5}
+  ]
+}
