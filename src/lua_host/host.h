@@ -39,8 +39,8 @@ public:
     void set_memory_limit(size_t bytes);
     // How emf.on_key and emf.key_down read a key (default: held, with the game window in front; tests use a fake).
     void set_key_reader(std::function<bool(uint32_t vk)> down);
-    // The clock (ms) of the scripts' chat line limit (emf.tell / emf.broadcast: 30 lines per 10 s; default
-    // GetTickCount64; tests use a fake).
+    // The clock (ms) of the scripts' chat line limit (emf.tell / emf.broadcast: 30 lines per 10 s) and of the 250 ms
+    // time limit per call (default GetTickCount64; tests use a fake).
     void set_clock(std::function<uint64_t()> now_ms);
 
     struct Impl;

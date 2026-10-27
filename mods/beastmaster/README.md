@@ -14,8 +14,9 @@ without them everything else works and those beasts are simply not there.
 1. **Tame a beast**, in one of two ways:
    - **By defeat:** bring it under **25 %** health and choose **Tame** (wheel) or type `/beastmaster tame` with it
      within 8 m: the beast under your crosshair, else the nearest beaten-down one (in a fight it is often at your side).
-     It calms down for those 3 s: it comes to you and stops fighting, and your beasts leave it alone. Stay within 8 m.
-     If it dies or you walk away, taming stops and it turns wild again.
+     It calms down for those 3 s: it stops fighting and is held where it is (one that still runs off is put back),
+     and your beasts leave it alone. Stay within 8 m. If it dies or you walk away, taming stops and it turns wild
+     again. A beast someone else is taming or feeding is theirs to finish.
    - **By bait:** choose **Feed** 3 times within 10 s (the beast you look at, else the nearest within 8 m). Each feed
      takes one bait from your bag: dog bait for wolves and hounds, lean meat for boars, game meat for sabretooths and panthers, red
      berries for bears and aurochs.

@@ -502,7 +502,7 @@ for 6 s (at most 10). `attack`, `gather`, `dismiss`, `list` for every player; th
 Hold **V** for the wheel: with Beastmaster installed, V and B open one "Summons" wheel with both classes' sections
 (Lua 1.9 wheel groups; `shared_wheel` off gives a mod its own wheel). The undead pack (`emf_necromancer_undead`, EML)
 adds a lich (`/necromancer raise lich`, 40 % mana, one; on the skeleton mage) and a bone golem (`raise golem`, 60 %,
-one; 4 m, on the heavy skeleton knight, 2x health). Details: `mods/necromancer/README.md`.
+one; 3 m, on the Vukah elite, 2x health). Details: `mods/necromancer/README.md`.
 
 ## Writing a mod
 ```cpp

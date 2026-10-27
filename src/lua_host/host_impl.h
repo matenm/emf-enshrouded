@@ -69,7 +69,9 @@ struct Script {
     } hand;
     uint64_t chat_window = 0;                         // emf.tell / emf.broadcast: start of the 10 s window
     int chat_lines = 0;                                // lines sent in it
-    uint64_t call_start = 0;                           // GetTickCount64 at the start of the current call
+    uint64_t call_start = 0;                           // the host clock at the start of the current call (moved on
+                                                       // by the time its world-data writes took, up to 1 s)
+    uint64_t call_credit = 0;                          // how far call_start was moved on in this call
     std::string timeout;                               // the time limit's message with file:line, while it unwinds
     std::string not_run;                               // the core did not keep it as a script mod: never runs again
     uint64_t generation = 1;                         // worlds and proxies made in an older generation are stale
@@ -124,7 +126,7 @@ struct Host::Impl {
     std::atomic<uint64_t> server_seen{0};                // GetTickCount64 of the last server world step
     std::atomic<int> chat_hooked{0};                     // the core's on_chat for emf.on_chat: 0 not asked, 1 on, -1 refused
     std::atomic<int> moves{0};                           // emf.move requests in flight (each holds one place in the item queue)
-    std::function<uint64_t()> now_ms;                    // the clock of the scripts' chat limit (tests replace it)
+    std::function<uint64_t()> now_ms;                    // the clock of the chat limit and time limit (tests replace it)
 
     Script* find(const std::string& id);
     bool load(Script& s);

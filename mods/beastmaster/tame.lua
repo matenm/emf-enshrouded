@@ -2,6 +2,9 @@
 -- tame_range_m) or by bait (feed_count baits within feed_window_s, one taken from you each time).
 -- M.new(env) where env has: setting(key), now(world), tell(world, player, text), on_tamed(world, player, id, species).
 -- One channel per player: a new tame or feed ends the one before (its calmed beast turns wild again).
+-- The beast is held for the channel (seen in game: a beaten panther ran out of range though calmed): its Movement
+-- multiplier at 0, given back when the channel ends any way, and a teleport back to where it was held when it still
+-- gets more than HOLD_M away from there (a player who walks away does not drag it along: the channel breaks).
 local aim = require("aim")
 local species = require("species")
 
@@ -10,6 +13,8 @@ local T = {}
 T.__index = T
 
 local PLAYER_ALLY = 11
+local HOLD_M = 5        -- a beast being tamed this far from where it was held is put back there
+local HOLD_EVERY_S = 1  -- at most one such teleport a second
 
 function M.new(env)
 	return setmetatable({ env = env, channels = {}, dead = {} }, T)
@@ -78,8 +83,38 @@ local function distance(world, a, b)
 	return math.sqrt((ax - bx) ^ 2 + (ay - by) ^ 2 + (az - bz) ^ 2)
 end
 
+-- Holds the channel's beast still: Movement's multiplier (storage [2]) at 0, the old value kept in ch.held, and its
+-- place in ch.spot.
+local function hold(world, ch)
+	local x, y, z = world:position(ch.id)
+	if x then ch.spot = { x, y, z } end
+	local m = world:get("Movement", ch.id)
+	if m and m.dataStorage then
+		ch.held = m.dataStorage[2]
+		m.dataStorage[2] = 0
+	end
+end
+
+-- Gives the beast its movement back (once; only while it is still there).
+local function release(world, ch)
+	if ch.held == nil then return end
+	local m = world:position(ch.id) and world:get("Movement", ch.id)
+	if m and m.dataStorage then m.dataStorage[2] = ch.held end
+	ch.held = nil
+end
+
+-- The player whose channel has the beast `id`, if any (one channel per beast: a second one would fight the first's
+-- hold and could leave the beast held for good).
+local function holder(self, id)
+	for p, ch in pairs(self.channels) do
+		if ch.id == id then return p end
+	end
+	return nil
+end
+
 function T:succeed(world, player, ch)
 	self.channels[player] = nil
+	release(world, ch)
 	local f = world:get("Faction", ch.id)
 	if not f then return end
 	f.faction = PLAYER_ALLY
@@ -93,6 +128,7 @@ end
 function T:drop(world, player)
 	local ch = self.channels[player]
 	self.channels[player] = nil
+	if ch then release(world, ch) end
 	if ch and ch.wild_faction and world:position(ch.id) then
 		local f = world:get("Faction", ch.id)
 		if f then f.faction = ch.wild_faction end
@@ -110,6 +146,8 @@ function T:tame(world, player)
 	if not id then return "There is no beast to tame near you (wolf, boar, sabretooth, hound or bear, within "
 		.. self.env.setting("tame_range_m") .. " m)." end
 	local sp = M.species_of(world, id)
+	local other = holder(self, id)
+	if other and other ~= player then return "Someone else is taming the " .. sp.id .. "." end
 	local cur, max = emf.health(world, id)
 	local pct = self.env.setting("tame_health_pct")
 	if not max or max <= 0 or cur * 100 > max * pct then
@@ -128,6 +166,7 @@ function T:tame(world, player)
 		emf.emit("server", "StartGuardingEvent", { guardingEntityId = id, guardedEntityId = player })
 	end
 	self.channels[player] = ch
+	hold(world, ch)
 	return string.format("Taming the %s... stay within %d m for %d s.", sp.id, self.env.setting("tame_range_m"), secs)
 end
 
@@ -136,6 +175,8 @@ function T:feed(world, player)
 	local id = self:target(world, player, false)
 	if not id then return "There is no beast to feed near you." end
 	local sp = M.species_of(world, id)
+	local other = holder(self, id)
+	if other and other ~= player then return "Someone else is taming the " .. sp.id .. "." end
 	local now = self.env.now(world)
 	local ch = self.channels[player]
 	local fresh = not ch or ch.mode ~= "bait" or ch.id ~= id
@@ -143,6 +184,7 @@ function T:feed(world, player)
 		self:drop(world, player)  -- one channel at a time
 		ch = { id = id, sp = sp, mode = "bait", feeds = 0, first = now }
 		self.channels[player] = ch
+		hold(world, ch)
 	end
 	local bait = self.env.setting("bait_" .. sp.id)
 	local need = self.env.setting("feed_count")
@@ -162,7 +204,7 @@ function T:feed(world, player)
 		end
 	end)
 	if not called then
-		if fresh then self.channels[player] = nil end
+		if fresh then self:drop(world, player) end  -- lets the beast go (its hold) too
 		return string.format("The game has no item named %s: check the setting bait_%s.", tostring(bait), sp.id)
 	end
 	if not ok then return "Feeding did not work just now; try again." end
@@ -180,6 +222,14 @@ function T:step(world)
 	local now = self.env.now(world)
 	for player, ch in pairs(self.channels) do
 		local what = ch.sp.id
+		local bx, by, bz = world:position(ch.id)
+		local spot = ch.spot
+		if spot and bx and math.sqrt((bx - spot[1]) ^ 2 + (by - spot[2]) ^ 2 + (bz - spot[3]) ^ 2) > HOLD_M
+			and emf.teleport and alive(world, ch.id) and not self.dead[ch.id]
+			and now - (ch.moved or -math.huge) >= HOLD_EVERY_S then
+			ch.moved = now  -- also when the game refuses: no retry every step
+			emf.teleport(world, ch.id, spot[1], spot[2] + 0.5, spot[3], { ground = true })
+		end
 		local far = distance(world, player, ch.id) > self.env.setting("tame_range_m")
 		if far then ch.far_since = ch.far_since or now else ch.far_since = nil end
 		if self.dead[ch.id] or not alive(world, ch.id) then

@@ -14,8 +14,9 @@ summoning wheel holds your undead and your beasts.
    mana, 1 s apart. At most 3 at a time. It is your ally at your level, guards you and follows you.
    **Raise Lich** (wheel, or `/necromancer raise lich`; needs the undead pack, below): a robed sorcerer that casts
    bolts, for 40 % of your maximum mana. At most 1. It has 1.5x a skeleton mage's health and 1.3x its damage.
-   **Raise Bone Golem** (wheel, or `/necromancer raise golem`; the undead pack): a 4 m brute of fused bones that
-   fights with the game's heavy skeleton knight's moves, with twice its health, for 60 % of your maximum mana.
+   **Raise Bone Golem** (wheel, or `/necromancer raise golem`; the undead pack): a 3 m brute of fused bones that
+   fights with the moves of the game's Vukah elite (hunched, long arms, fists), with twice its health, for 60 % of
+   your maximum mana.
    At most 1.
 2. **Your undead stay** until they fall. A fallen one is gone (raise a new one); its body goes a second later, so our
    own minions never drop loot. When you reload the world, the undead you had come back beside you, free of mana.
@@ -74,8 +75,8 @@ All of these work from the game's chat for every player (`/necromancer <word>`) 
 An EML data patch that adds new undead, made with Meshy and fitted to game skeletons, so they move and fight with
 those creatures' animations and AI:
 - the Lich, `Necromancer_Lich` (template `c4e1a7d2-6b3f-4d8e-9a10-5f2b7c3d9e02`), on the skeleton mage;
-- the Bone Golem, `Necromancer_BoneGolem` (template `e7b3c9d1-2a4f-4e6b-8c15-9d2f4a6b8e02`), on the heavy skeleton
-  knight (`Enemy_Skeleton_Heavy_Hero`), as tall as it (4 m).
+- the Bone Golem, `Necromancer_BoneGolem` (template `e7b3c9d1-2a4f-4e6b-8c15-9d2f4a6b8e02`), on the Vukah elite
+  (`Enemy_Vukah_Melee_Elite_Armored`), as tall as it (3 m).
 
 Install it like any EML mod (the `mods` folder next to the game, run through EML's `emm.exe`). The lich's template sets
 the damage (DamageMod multiplier x1.3); its health (x1.5) comes from Necromancer when it raises a lich, and the golem's
@@ -87,7 +88,7 @@ installed.
 
 To rebuild it from its sources (for modders; the sources are not in the repository): `python -I
 tools/models/make_mod.py tools/models/packs/necromancer_undead.json`. The pack holds the new model and its texture, plus
-instructions that copy and change the game's skeleton mage and knight at load time; no game files are copied into it.
+instructions that copy and change the game's skeleton mage and Vukah elite at load time; no game files are copied into it.
 
 ## Good to know
 

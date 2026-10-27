@@ -569,6 +569,55 @@ TEST_CASE("app servers: EMF installs into a server folder with the package's own
     CHECK(bad_out.find("enshrouded_server.exe") != std::string::npos);
 }
 
+TEST_CASE("app servers: the installer works when PowerShell 7's modules come first in PSModulePath") {
+    // Windows PowerShell started from a PowerShell 7 window (or GitHub's runners) inherits PowerShell 7's PSModulePath:
+    // its Microsoft.PowerShell.Utility comes first, and Windows PowerShell then answers that Get-FileHash "is not
+    // recognized" (the other cmdlets still work). A module folder like PowerShell 7's, with its export list, first:
+    TempGame ps7(L"emfinst_ps7mods", false);
+    ps7.write(L"Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1",
+              "@{\r\nGUID=\"1DA87E53-152B-403E-98DC-74D7B4D63D59\"\r\nModuleVersion=\"7.0.0.0\"\r\n"
+              "CompatiblePSEditions=@(\"Core\")\r\nPowerShellVersion=\"3.0\"\r\n"
+              "CmdletsToExport=@(\"Export-Alias\",\"Get-Alias\",\"Import-Alias\",\"New-Alias\",\"Remove-Alias\",\"Set-Alias\","
+              "\"Export-Clixml\",\"Import-Clixml\",\"Measure-Command\",\"Trace-Command\",\"ConvertFrom-Csv\",\"ConvertTo-Csv\","
+              "\"Export-Csv\",\"Import-Csv\",\"Get-Culture\",\"Format-Custom\",\"Get-Date\",\"Set-Date\",\"Write-Debug\","
+              "\"Wait-Debugger\",\"Register-EngineEvent\",\"Write-Error\",\"Get-Event\",\"New-Event\",\"Remove-Event\","
+              "\"Unregister-Event\",\"Wait-Event\",\"Get-EventSubscriber\",\"Invoke-Expression\",\"Out-File\",\"Unblock-File\","
+              "\"Get-FileHash\",\"Export-FormatData\",\"Get-FormatData\",\"Update-FormatData\",\"New-Guid\",\"Format-Hex\","
+              "\"Get-Host\",\"Read-Host\",\"Write-Host\",\"ConvertTo-Html\",\"Write-Information\",\"ConvertFrom-Json\","
+              "\"ConvertTo-Json\",\"Test-Json\",\"Format-List\",\"Import-LocalizedData\",\"Add-Member\",\"Get-Member\","
+              "\"Compare-Object\",\"Group-Object\",\"Measure-Object\",\"New-Object\",\"Select-Object\",\"Sort-Object\","
+              "\"Tee-Object\",\"Register-ObjectEvent\",\"Write-Output\",\"Import-PowerShellDataFile\",\"Write-Progress\","
+              "\"Get-Random\",\"Invoke-RestMethod\",\"Get-PSBreakpoint\",\"Select-String\",\"Start-Sleep\",\"Join-String\","
+              "\"Out-String\",\"ConvertFrom-StringData\",\"Format-Table\",\"New-TemporaryFile\",\"New-TimeSpan\",\"Add-Type\","
+              "\"Get-TypeData\",\"Remove-TypeData\",\"Update-TypeData\",\"Get-UICulture\",\"Get-Unique\",\"Get-Uptime\","
+              "\"Clear-Variable\",\"Get-Variable\",\"New-Variable\",\"Remove-Variable\",\"Set-Variable\",\"Get-Verb\","
+              "\"Write-Verbose\",\"Write-Warning\",\"Invoke-WebRequest\",\"Format-Wide\",\"ConvertTo-Xml\",\"Select-Xml\","
+              "\"Get-Error\",\"Update-List\",\"Out-GridView\",\"Show-Command\",\"Out-Printer\")\r\n"
+              "FunctionsToExport=@()\r\nNestedModules=@(\"Microsoft.PowerShell.Commands.Utility.dll\")\r\n}\r\n");
+    wchar_t old[32767];
+    const DWORD had = GetEnvironmentVariableW(L"PSModulePath", old, 32767);
+    SetEnvironmentVariableW(L"PSModulePath", (ps7.dir + (had ? L";" + std::wstring(old) : L"")).c_str());
+    struct Restore {
+        bool had;
+        const wchar_t* old;
+        ~Restore() { SetEnvironmentVariableW(L"PSModulePath", had ? old : nullptr); }
+    } restore{had != 0, old};
+
+    TempGame pkg(L"emfinst_ps7_package", false);
+    package_tree(pkg, L"game");
+    const EmfPackage p = find_emf_package(pkg.at(L"game\\emf"));
+    REQUIRE(p.ok);
+    TempGame srv(L"emfinst_ps7_server", false);
+    srv.write(L"enshrouded_server.exe", "fake");
+    srv.write(L"dinput8.dll", "MZ creative-mode-marker another tool");  // hashed when it is moved aside
+    const ScriptRun r = install_emf_into(p, srv.dir);
+    std::string out = r.error + "\n";
+    for (const auto& l : r.lines) out += l + "\n";
+    REQUIRE_MESSAGE(r.ok, out);
+    CHECK(srv.read(L"dinput8.dll").find("EMF-LOADER-7d3c9f") != std::string::npos);
+    CHECK(srv.read(L"dinput8-chain.ini").find(".dll") != std::string::npos);
+}
+
 TEST_CASE("app servers: redaction takes the passwords out first, then whole values after a password word") {
     const std::vector<std::string> secrets{"Adm1nSecretXyz"};
     // a secret is taken out before the password rule masks part of it

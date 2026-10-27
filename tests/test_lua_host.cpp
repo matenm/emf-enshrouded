@@ -392,6 +392,60 @@ TEST_CASE("lua host: world data: a reloaded script gets the saved text again; an
     DeleteFileW(two.c_str());
 }
 
+TEST_CASE("lua host: world data: a slow write of the world's data (a busy disk) does not count toward the time limit") {
+    Rig r(L"slowsave");
+    add_script(r.dir, "keeper",
+               "emf.on_world_data(function(w, text) end)\n"
+               "emf.command('save', '<text>', function(w, args)\n"
+               "  local ok = emf.save_world_data(args[1] or '')\n"
+               "  local n = 0\n"
+               "  for i = 1, 100000 do n = n + i end\n"  // the limit is looked at every 10000 instructions
+               "  emf.reply(tostring(ok))\n"
+               "end)\n");
+    const std::wstring file = r.dir + L"\\..\\config\\keeper\\0001.txt";
+    DeleteFileW(file.c_str());
+    Host host(&r.api, r.dir);
+    // the write takes 400 ms by this clock: the time moves on once the file is there
+    host.set_clock([&file] { return uint64_t{1000} + (GetFileAttributesW(file.c_str()) != INVALID_FILE_ATTRIBUTES ? 400 : 0); });
+    host.load_all();
+    fire_load(1);
+    host.tick(kServer);
+    r.run_command("keeper.save kills=3");
+    CHECK(host.status("keeper") == "running");
+    REQUIRE(!r.fake.replies.empty());
+    CHECK(r.fake.replies.back() == "true");
+    CHECK(read_file(file) == "kills=3");
+    DeleteFileW(file.c_str());
+}
+
+TEST_CASE("lua host: world data: at most 1 s of writes per call is left out of the time limit (a loop of saves still ends)") {
+    Rig r(L"slowsaves");
+    add_script(r.dir, "keeper",
+               "emf.on_world_data(function(w, text) end)\n"
+               "emf.command('save', '', function(w, args)\n"
+               "  for i = 1, 10 do emf.save_world_data(tostring(i)) end\n"
+               "  local n = 0\n"
+               "  for i = 1, 100000 do n = n + i end\n"
+               "  emf.reply('done')\n"
+               "end)\n");
+    const std::wstring file = r.dir + L"\\..\\config\\keeper\\0001.txt";
+    DeleteFileW(file.c_str());
+    Host host(&r.api, r.dir);
+    // each write takes 400 ms by this clock: the file holds the number of writes so far
+    host.set_clock([&file] {
+        const std::string t = read_file(file);
+        return uint64_t{1000} + 400 * (t.empty() ? 0 : std::stoull(t));
+    });
+    host.load_all();
+    fire_load(1);
+    host.tick(kServer);
+    r.run_command("keeper.save");
+    CHECK(read_file(file) == "10");
+    CHECK(host.status("keeper").find("paused") == 0);  // 4 s of writes, 1 s of them left out
+    CHECK(std::find(r.fake.replies.begin(), r.fake.replies.end(), "done") == r.fake.replies.end());
+    DeleteFileW(file.c_str());
+}
+
 TEST_CASE("lua host: world data: after a reload save_world_data answers false until on_world_data has run again") {
     Rig r(L"worlddata3");
     auto code = [](const char* state) {

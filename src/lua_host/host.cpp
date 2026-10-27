@@ -14,6 +14,7 @@ namespace emf::lua {
 namespace {
 
 constexpr uint64_t kCallLimitMs = 250;
+constexpr uint64_t kSaveCreditMs = 1000;  // world-data writes left out of the time limit, per call
 constexpr const char* kScriptKey = "emf.script";
 
 std::wstring wide(const std::string& s) {
@@ -72,7 +73,10 @@ void* capped_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
     return p;
 }
 
-bool over_time(const Script* s) { return s && s->call_start && GetTickCount64() - s->call_start > kCallLimitMs; }
+// The clock of the time limit: the host's (tests replace it).
+uint64_t clock_ms(const Script& s) { return s.host && s.host->now_ms ? s.host->now_ms() : GetTickCount64(); }
+
+bool over_time(const Script* s) { return s && s->call_start && clock_ms(*s) - s->call_start > kCallLimitMs; }
 
 // Every 10000 instructions: past the limit, raise an error naming where the script was running.
 void count_hook(lua_State* L, lua_Debug* ar) {
@@ -455,11 +459,21 @@ int l_on_world_data(lua_State* L) {
 
 // emf.save_world_data(text): true when written (or unchanged); false before this load of the script got the running
 // world's data (a reloaded script would otherwise save its fresh defaults over it) or while no hosted world runs.
+// The time the write takes (a busy disk, a virus scanner) does not count toward the script's time limit, up to
+// kSaveCreditMs per call (a loop of saves still ends).
 int l_save_world_data(lua_State* L) {
     Script* s = script_of(L);
     size_t n = 0;
     const char* text = luaL_checklstring(L, 1, &n);
-    lua_pushboolean(L, s->file && s->world_delivered == s->loads && s->file->save(std::string(text, n)));
+    const uint64_t before = clock_ms(*s);
+    const bool saved = s->file && s->world_delivered == s->loads && s->file->save(std::string(text, n));
+    const uint64_t after = clock_ms(*s);
+    if (s->call_start && after > before && s->call_credit < kSaveCreditMs) {
+        const uint64_t add = (std::min)(after - before, kSaveCreditMs - s->call_credit);
+        s->call_start += add;
+        s->call_credit += add;
+    }
+    lua_pushboolean(L, saved);
     return 1;
 }
 
@@ -585,7 +599,10 @@ std::string to_text(lua_State* L, int index) {
 
 bool call_lua(Script& s, int nargs) {
     const uint64_t outer = s.call_start;
-    if (!outer) s.call_start = GetTickCount64();  // the outermost call sets the clock
+    if (!outer) {  // the outermost call sets the clock
+        s.call_start = clock_ms(s);
+        s.call_credit = 0;
+    }
     const bool armed = s.mem.armed;
     s.mem.armed = true;  // an allocation past the limit fails in here, where Lua can raise it as an error
     const int r = lua_pcall(s.L, nargs, 0, 0);

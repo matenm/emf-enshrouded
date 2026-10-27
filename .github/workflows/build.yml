@@ -36,12 +36,13 @@ jobs:
       - name: Unit tests
         run: ctest --preset msvc
 
+      # cmd: Windows PowerShell starts with the runner's module path, never one a PowerShell 7 parent passed on
       - name: Package test
-        shell: pwsh
+        shell: cmd
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test_package.ps1
 
       - name: Package
-        shell: pwsh
+        shell: cmd
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1
 
       - name: SHA-256 of the zips

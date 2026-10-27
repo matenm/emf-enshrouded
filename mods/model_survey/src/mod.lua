@@ -125,7 +125,9 @@ local DUMP = {
 	char_enemy_skeleton_mage_01 = true,                      -- Summoner: skeleton mage
 	char_enemy_skeleton_hound_01_Skeleton_Hound = true,      -- Summoner: skeleton hound
 	enemy_skeleton_heavy_melee_01 = true,                    -- Necromancer: the heavy skeleton (a 9 m boss: not used)
-	char_enemy_skeleton_elite_02 = true,                     -- Necromancer: the bone golem's body (Heavy Hero, 4 m)
+	char_enemy_skeleton_elite_02 = true,                     -- Necromancer: the heavy skeleton knight (4 m)
+	char_enemy_vukah_elite_01 = true,                        -- Necromancer: the bone golem's body (Vukah elite, 3 m)
+	char_enemy_scavenger_bully_01 = true,                    -- Necromancer: a golem body candidate (scavenger bully)
 }
 for _, res in ipairs(game.assets.get_resources_by_type("keen::RenderModel")) do
 	local name = s(res.data.debugName)

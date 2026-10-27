@@ -92,6 +92,22 @@ function Get-DllToolName([string]$Path, $Tools = @()) {
     return $null
 }
 
+# A file's SHA-256 as lowercase hex, with .NET: Windows PowerShell started from a PowerShell 7 window inherits PowerShell
+# 7's module path and then does not find Get-FileHash.
+function Get-Sha256Hex([string]$Path) {
+    $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    $sha = $null
+    $in = $null
+    try {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $in = [System.IO.File]::OpenRead($full)
+        return ([System.BitConverter]::ToString($sha.ComputeHash($in)) -replace '-', '').ToLowerInvariant()
+    } finally {
+        if ($in) { $in.Dispose() }
+        if ($sha) { $sha.Dispose() }
+    }
+}
+
 # What to do with another mod's dinput8.dll:
 #   Name       its new name: <tool>.dll (or <tool>-2.dll ...), dinput8-previous.dll for an unknown one
 #   Identical  a file with the same bytes is already there under Name (no second copy is kept)
@@ -101,7 +117,7 @@ function Get-DllToolName([string]$Path, $Tools = @()) {
 #   Earlier    listed earlier unknown copies: left on, the player is told
 function Get-MovePlan([string]$Dir, [string]$Proxy, $Tools = @()) {
     $tool = Get-DllToolName $Proxy $Tools
-    $hash = (Get-FileHash -LiteralPath $Proxy).Hash
+    $hash = Get-Sha256Hex $Proxy
     $listed = @(Get-ChainEntries $Dir)
     $plan = @{ Tool = $tool; Name = $null; Identical = $false; RunsAs = $null; SwitchOff = @(); Earlier = @() }
     $base = if ($tool) { $tool } else { "dinput8-previous" }
@@ -110,7 +126,7 @@ function Get-MovePlan([string]$Dir, [string]$Proxy, $Tools = @()) {
         $name = if ($i -eq 1) { "$base.dll" } else { "$base-$i.dll" }
         $at = Join-Path $Dir $name
         if (-not (Test-Path -LiteralPath $at)) { $plan.Name = $name; break }
-        if ((Get-FileHash -LiteralPath $at).Hash -eq $hash) { $plan.Name = $name; $plan.Identical = $true; break }
+        if ((Get-Sha256Hex $at) -eq $hash) { $plan.Name = $name; $plan.Identical = $true; break }
         if ($listed -contains $name) {
             if ($tool) { $plan.SwitchOff += $name } else { $plan.Earlier += $name }
         }
@@ -400,7 +416,7 @@ function Copy-SaveFileChecked([string]$Src, [string]$Dst, [int]$RetryMs = 250) {
             if ($sha) { $sha.Dispose() }
         }
         if ($len1 -ne $len2 -or $t1 -ne $t2 -or $total -ne $len2) { $why = "it changed while EMF copied it (the game was probably saving)"; continue }
-        if ((Get-FileHash -LiteralPath $Dst -Algorithm SHA256).Hash.ToLowerInvariant() -ne $hex) { $why = "the copy did not match the file"; continue }
+        if ((Get-Sha256Hex $Dst) -ne $hex) { $why = "the copy did not match the file"; continue }
         return @{ Ok = $true; Sha = $hex; Size = [int64]$total; Modified = [int64](([DateTimeOffset]$t2).ToUnixTimeSeconds()) }
     }
     Remove-Item -LiteralPath $Dst -Force -ErrorAction SilentlyContinue

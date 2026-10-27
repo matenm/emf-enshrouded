@@ -9,7 +9,7 @@
     {"do": "state", "path": "overlay.hud[id=clock].text", "op": "exists"},
     {"do": "state", "path": "player.health.value", "op": ">", "value": 0},
     {"do": "console", "text": "near 10", "expect": "3 entities within 10 m"},
-    {"do": "console", "text": "put Material_T1_Wood_Logs 1", "expect": ["put: queued", "1 added"]},
+    {"do": "console", "text": "put Material_T1_Wood_Logs 1", "expect": ["put: queued", "1 added"], "settle_ms": 2000},
     {"do": "console", "text": "nosuch", "status": "unknown"},
     {"do": "mods", "id": "clock", "status": "loaded"},
     {"do": "mods", "id": "quick_stack", "status": "disabled"},

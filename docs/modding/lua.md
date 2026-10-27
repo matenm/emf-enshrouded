@@ -69,7 +69,8 @@ A script error or an endless loop does not crash or freeze the game. EMF runs ev
 - An error stops that call, the log gets `[hello_lua] hello_lua/main.lua:12: attempt to ...` and a note shows on
   screen. The mod is **paused**: its callbacks stop until you save one of its files again, then it reloads.
 - A call that runs longer than 250 ms (an endless loop) is stopped the same way, with the line it was running;
-  `pcall` cannot catch that stop.
+  `pcall` cannot catch that stop. The time `emf.save_world_data` spends writing (a slow disk) does not count, up to
+  1 s per call.
 - A Lua mod may use up to 256 MB of memory. Past that the call fails with "not enough memory" and the mod is paused
   the same way.
 - `require` loads `.lua` files from the mod's own folder. Only Lua source runs: precompiled chunks are refused.

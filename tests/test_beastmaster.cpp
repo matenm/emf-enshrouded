@@ -852,3 +852,107 @@ TEST_CASE("beastmaster: an aurochs that was out comes back after its first call-
     for (const auto& x : b.r.fake.notes) notes += x.find("Aurochs") != std::string::npos;
     CHECK(notes == 0);
 }
+
+// ---- holding a beast during the taming channel (a beaten panther ran out of range in game) ----
+namespace {
+// Movement's attribute storage: [0] movement, [1] the multiplier (1 normally), [2..] speeds
+float move_mul(Fake& f, uint32_t id) {  // read as it is (component<> would reset it)
+    const auto& v = f.components[{ecs::Movement::kHash, id}];
+    return v.size() < sizeof(ecs::Movement) ? -1.0f : reinterpret_cast<const ecs::Movement*>(v.data())->dataStorage[1];
+}
+void set_move_mul(Fake& f, uint32_t id, float m) { component<ecs::Movement>(f, id).dataStorage[1] = m; }
+}  // namespace
+
+TEST_CASE("beastmaster: a beast being tamed is held: its movement multiplier is 0 for the channel and back after") {
+    BeastRig b;
+    b.beast(50, kWolfGraph, 0, 5, kWildBeast, 20, 100);
+    set_move_mul(b.r.fake, 50, 1.0f);
+    b.look(1, 0, 10.5, 0, 0);
+    CHECK(b.reply("beastmaster.tame").find("Taming") != std::string::npos);
+    CHECK(move_mul(b.r.fake, 50) == 0.0f);
+    b.seconds(4);
+    CHECK(b.noted("You tamed a wolf"));
+    CHECK(move_mul(b.r.fake, 50) == 1.0f);
+}
+
+TEST_CASE("beastmaster: a held beast is let go when the channel breaks or another one starts") {
+    BeastRig b;
+    b.beast(50, kWolfGraph, 0, 5, kWildBeast, 20, 100);
+    set_move_mul(b.r.fake, 50, 1.0f);
+    b.look(1, 0, 10.5, 0, 0);
+    b.reply("beastmaster.tame");
+    CHECK(move_mul(b.r.fake, 50) == 0.0f);
+    // another beaten wolf under the crosshair, the first one aside: a new channel lets the first go
+    place(b.r.fake, 50, 6, 10, 3);
+    b.beast(51, kWolfGraph, 0, 5, kWildBeast, 20, 100);
+    set_move_mul(b.r.fake, 51, 1.0f);
+    CHECK(b.reply("beastmaster.tame").find("Taming") != std::string::npos);
+    CHECK(move_mul(b.r.fake, 50) == 1.0f);
+    CHECK(move_mul(b.r.fake, 51) == 0.0f);
+    // the player walks far away: the held beast stays where it is (it is not dragged along), the channel breaks and
+    // the beast is let go
+    place(b.r.fake, 1, 0, 10, -40);
+    b.seconds(4);
+    CHECK(teleports_of(b.r.fake, 51) == 0);
+    CHECK(b.noted("too far"));
+    CHECK(move_mul(b.r.fake, 51) == 1.0f);
+}
+
+TEST_CASE("beastmaster: a beast that still runs off during the taming is put back where it was held, and tamed") {
+    BeastRig b;
+    b.beast(50, kWolfGraph, 0, 5, kWildBeast, 20, 100);
+    b.look(1, 0, 10.5, 0, 0);
+    b.reply("beastmaster.tame");
+    place(b.r.fake, 50, 0, 10, 12);  // it runs off
+    b.seconds(1);
+    REQUIRE(teleports_of(b.r.fake, 50) == 1);  // once in that second, not every step
+    const auto t = b.r.fake.teleports.back();
+    CHECK(std::hypot(t.x - 0.0, t.z - 5.0) <= 0.5);  // where it was when the taming began (0, 10, 5)
+    CHECK((t.flags & EMF_TELEPORT_FIND_GROUND) != 0);
+    place(b.r.fake, 50, t.x, 10, t.z);  // the game moved it
+    b.seconds(4);
+    CHECK(b.noted("You tamed a wolf"));
+    CHECK(!b.noted("too far"));
+    CHECK(teleports_of(b.r.fake, 50) == 1);
+}
+
+TEST_CASE("beastmaster: feeding holds the beast too, and lets it go when the feeding ends") {
+    BeastRig b;
+    b.r.fake.item_names[kDogBait] = "Food_T2_Dog_Bait";
+    b.beast(50, kWolfGraph, 0, 5, kWildBeast, 100, 100);
+    set_move_mul(b.r.fake, 50, 1.0f);
+    b.look(1, 0, 10.5, 0, 0);
+    b.reply("beastmaster.feed");
+    CHECK(move_mul(b.r.fake, 50) == 0.0f);
+    b.seconds(11);  // no more bait: it loses interest
+    CHECK(b.noted("lost interest"));
+    CHECK(move_mul(b.r.fake, 50) == 1.0f);
+}
+
+TEST_CASE("beastmaster: a feed with an unknown bait name leaves the beast free to move") {
+    BeastRig b({{"bait_wolf", "No_Such_Item"}});
+    b.look(1, 0, 10.5, 0, 0);
+    b.beast(50, kWolfGraph, 0, 5, kWildBeast, 100, 100);
+    set_move_mul(b.r.fake, 50, 1.0f);
+    CHECK(b.reply("beastmaster.feed").find("No_Such_Item") != std::string::npos);
+    CHECK(move_mul(b.r.fake, 50) == 1.0f);
+}
+
+TEST_CASE("beastmaster: a beast in one player's taming cannot be fed or tamed by another, and is let go once") {
+    BeastRig b;
+    b.r.fake.item_names[kDogBait] = "Food_T2_Dog_Bait";
+    b.beast(50, kWolfGraph, 0, 5, kWildBeast, 20, 100);
+    set_move_mul(b.r.fake, 50, 1.0f);
+    b.look(1, 0, 10.5, 0, 0);
+    b.reply("beastmaster.feed");  // player 1 holds it (feeding)
+    CHECK(move_mul(b.r.fake, 50) == 0.0f);
+    place(b.r.fake, 2, 0, 10, 9);  // player 2 right behind it, looking at it
+    b.look(2, 0, 10.5, 9, 180);
+    CHECK(b.reply("beastmaster.feed", 2, 0xBB).find("Someone else") != std::string::npos);
+    CHECK(b.reply("beastmaster.tame", 2, 0xBB).find("Someone else") != std::string::npos);
+    b.seconds(11);  // player 1's feeding ends: the wolf moves again, and nothing sets it back to 0
+    CHECK(b.noted("lost interest"));
+    CHECK(move_mul(b.r.fake, 50) == 1.0f);
+    b.seconds(11);
+    CHECK(move_mul(b.r.fake, 50) == 1.0f);
+}

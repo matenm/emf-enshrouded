@@ -3,7 +3,7 @@
   "title": "Necromancer: new undead",
   "version": "1.0.0",
   "out": "../../../analysis/models/mods/emf_necromancer_undead",
-  "description": "New undead for the Necromancer mod, made with Meshy: a Lich (a robed sorcerer that casts bolts, on the game's skeleton mage) and a Bone Golem (a 4 m brute of fused bones, on the game's heavy skeleton knight). Raise them with the Necromancer's wheel or /necromancer raise lich | golem.",
+  "description": "New undead for the Necromancer mod, made with Meshy: a Lich (a robed sorcerer that casts bolts, on the game's skeleton mage) and a Bone Golem (a 3 m brute of fused bones, on the game's Vukah elite). Raise them with the Necromancer's wheel or /necromancer raise lich | golem.",
   "authors": [
     "EMF contributors"
   ],
@@ -11,7 +11,7 @@
     "The sources are not in the repository: the Meshy glbs and textures, the fitted glbs, the game dumps; the paths below point to a local folder. Build: python -I tools/models/make_mod.py tools/models/packs/necromancer_undead.json",
     "The GUIDs are fixed forever: mods/necromancer/minions.lua and players' saves refer to them.",
     "Lich: Meshy preview 01a17d27-93bc-71d6-9384-47273a6382b8, refine 01a17d29-80c9-7359-9b8b-8f5b481bce0a; fitted with blender/fit_humanoid.py --keep-uvs onto char_enemy_skeleton_mage_01 (skeleton 5a4d9d98); a copy of Enemy_Skeleton_Mage01 with DamageMod_Multiplier x1.3 (health x1.5 comes from Necromancer at runtime).",
-    "Bone Golem: Meshy preview 01a17d4a-d5ab-73b2-8fde-5eda7bccb1b4, refine 01a17d4c-6e3e-743a-bd7a-a2aae07fc22a; fitted with blender/fit_humanoid.py --keep-uvs --material 1 --height-scale 0.92 onto char_enemy_skeleton_elite_02 (skeleton 6d3d9870, body material 1; the measured top is the helmet's plume); a copy of Enemy_Skeleton_Heavy_Hero (health x2 comes from Necromancer at runtime; not a boss: the heavy cyclops skeleton's templates are all bosses, and 9 m tall)."
+    "Bone Golem: Meshy preview 01a17d4a-d5ab-73b2-8fde-5eda7bccb1b4, refine 01a17d4c-6e3e-743a-bd7a-a2aae07fc22a; albedo lightened (texture_mips.py --tint 1.85,1.85,1.9 --add 0.03,0.03,0.04); fitted with blender/fit_humanoid.py --keep-uvs --material 1 --height-scale 0.95 onto char_enemy_vukah_elite_01 (the Vukah elite: hunched, long arms, fists; body material 1); a copy of Enemy_Vukah_Melee_Elite_Armored (health x2 comes from Necromancer at runtime). Earlier on the heavy skeleton knight, whose greatsword moves and own effects did not suit it."
   ],
   "creatures": [
     {
@@ -40,11 +40,11 @@
     },
     {
       "name": "necromancer_golem",
-      "glb": "../../../analysis/models/golem_on_hero.glb",
-      "hierarchy": "../../../analysis/model_survey/dump/char_enemy_skeleton_elite_02.hierarchy.json",
-      "source_model_guid": "c96e44aa-3b23-480b-b69c-441b7b8ae3b7",
-      "source_model_json": "../../../analysis/model_survey/dump/char_enemy_skeleton_elite_02.json",
-      "source_template": "Enemy_Skeleton_Heavy_Hero",
+      "glb": "../../../analysis/models/golem_on_vukah.glb",
+      "hierarchy": "../../../analysis/model_survey/dump/char_enemy_vukah_elite_01.hierarchy.json",
+      "source_model_guid": "852427b1-c66e-491c-a0a8-fafcb4c4c0c3",
+      "source_model_json": "../../../analysis/model_survey/dump/char_enemy_vukah_elite_01.json",
+      "source_template": "Enemy_Vukah_Melee_Elite_Armored",
       "template_name": "Necromancer_BoneGolem",
       "model_guid": "e7b3c9d1-2a4f-4e6b-8c15-9d2f4a6b8e01",
       "template_guid": "e7b3c9d1-2a4f-4e6b-8c15-9d2f4a6b8e02",
