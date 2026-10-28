@@ -52,6 +52,25 @@ bool fail(std::string* why, const std::string& text) {
     return false;
 }
 
+std::string num(double v) {
+    char b[64];
+    std::snprintf(b, sizeof b, "%.15g", v);
+    return b;
+}
+
+// A number from the ini that had to change (out of range, off the step, not a number), for the log: a hand-edited 1
+// on a slider in steps of 5 becomes 0, which can mean "off". Empty when the meaning stayed (1e1 for 10, yes for 1).
+std::string moved_note(const SettingDef& d, const std::string& stored, const std::string& value) {
+    if (d.type != SettingType::Int && d.type != SettingType::Float) return "";
+    double was = 0.0, now = 0.0;
+    if (parse_number(stored, was) && parse_number(value, now) && was == now) return "";
+    std::string allowed;
+    if (d.has_min && d.has_max) allowed = "from " + num(d.min) + " to " + num(d.max);
+    if (d.step > 0) allowed += std::string(allowed.empty() ? "" : " ") + "in steps of " + num(d.step);
+    return "setting \"" + d.key + "\": " + stored + " in the ini became " + value +
+           (allowed.empty() ? "" : " (allowed: " + allowed + ")");
+}
+
 }  // namespace
 
 std::optional<std::string> FileIniBackend::read(const std::string& mod, const std::string& key) {
@@ -132,6 +151,7 @@ bool SettingsStore::declare(const std::string& mod, SettingDef def, std::string*
     const std::string key = def.key;
     std::string value = def.default_value;
     std::optional<std::string> before;  // the value it had when redeclared
+    std::string note;                   // a hand-edited value that had to change, for the log
     {
         std::lock_guard<std::mutex> l(m_);
         auto& list = mods_[mod];
@@ -144,6 +164,7 @@ bool SettingsStore::declare(const std::string& mod, SettingDef def, std::string*
             }
         if (stored)
             if (auto v = setting_value(def, *stored, true, nullptr)) value = *v;
+        if (!live && stored && trim(*stored) != value) note = moved_note(def, trim(*stored), value);
         list.push_back({std::move(def), value});
         if (live && before && *before != value) changes_.emplace_back(mod, key);  // the value a mod reads moved
         ++version_;
@@ -151,7 +172,7 @@ bool SettingsStore::declare(const std::string& mod, SettingDef def, std::string*
     // A value that had to be clamped or replaced is written back, so mods that read their ini themselves
     // (GetPrivateProfile*) see the value the Mods tab shows. Never for a live edit: it may be half-way.
     if (!live && stored && trim(*stored) != value && backend_) backend_->write(mod, key, value);
-    if (why) *why = warning;  // declared; something worth a log line (the caller shows it)
+    if (why) *why = warning.empty() ? note : note.empty() ? warning : warning + "; " + note;  // worth a log line
     return true;
 }
 
