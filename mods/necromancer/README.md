@@ -78,7 +78,8 @@ those creatures' animations and AI:
 - the Bone Golem, `Necromancer_BoneGolem` (template `e7b3c9d1-2a4f-4e6b-8c15-9d2f4a6b8e02`), on the Vukah elite
   (`Enemy_Vukah_Melee_Elite_Armored`), as tall as it (3 m).
 
-Install it like any EML mod (the `mods` folder next to the game, run through EML's `emm.exe`). The lich's template sets
+It is in the **EMF creature packs** download on EMF's Nexus page: install it with EMF.exe ("Install a downloaded file")
+or like any EML mod (the `mods` folder next to the game, run through EML's `emm.exe`). The lich's template sets
 the damage (DamageMod multiplier x1.3); its health (x1.5) comes from Necromancer when it raises a lich, and the golem's
 (x2) when it raises a golem.
 
