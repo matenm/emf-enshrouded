@@ -24,7 +24,7 @@ $scriptMods = @("kill_counter", "life_skills", "champion", "bounty", "grave", "h
 $exampleMods = @("companion", "quick_stack", "clock", "big_stacks", "sample_mod", "event_log", "sim_rate", "loot_scale", "lua", "loot_magnet", "sleep", "herald", "teleports", "bulk_craft", "villager_jobs", "raids")
 
 $extraPacks = @()
-foreach ($pack in $ExtraContent) {
+foreach ($pack in @($ExtraContent | ForEach-Object { $_ -split "," })) {  # powershell -File passes a list as one string
     if (-not $pack) { continue }
     if (-not (Test-Path -LiteralPath $pack -PathType Container)) { throw "-ExtraContent: there is no folder $pack" }
     $p = Get-Item -LiteralPath $pack

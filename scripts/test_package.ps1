@@ -631,6 +631,51 @@ try {
         $msg = ""
         try { & (Join-Path $repo "scripts\package.ps1") -Build $fb -Out $fbOut -ExtraContent (Join-Path $xc "missing") | Out-Null } catch { $msg = $_.Exception.Message }
         Check ($msg -match "no folder") "package.ps1 -ExtraContent refuses a folder that is not there ($msg)"
+        # package_packs.ps1: the same prebuilt packs as one optional download (mods\<pack>\ and README.txt), the layout
+        # EMF.exe's "Install a downloaded file" installs as EML mods
+        $ppOut = New-TempDir "packs out [x]"
+        $msg = ""
+        try { & (Join-Path $repo "scripts\package_packs.ps1") -Packs (Join-Path $xc "emf_fake_pack") -Version 1.2.3 -Out $ppOut | Out-Null } catch { $msg = $_.Exception.Message }
+        Check ($msg -eq "") "package_packs.ps1 packages a prebuilt pack ($msg)"
+        $ppZip = Join-Path $ppOut "EMF-creature-packs-1.2.3.zip"
+        if (Test-Path -LiteralPath $ppZip) {
+            $za = [System.IO.Compression.ZipFile]::OpenRead($ppZip)
+            $names = @($za.Entries | ForEach-Object { $_.FullName })
+            $readme = ""
+            $e = $za.GetEntry("EMF-creature-packs-1.2.3/README.txt")
+            if ($e) { $r = New-Object System.IO.StreamReader($e.Open()); $readme = $r.ReadToEnd(); $r.Dispose() }
+            $za.Dispose()
+            Check (($names -contains "EMF-creature-packs-1.2.3/mods/emf_fake_pack/mod.json") -and ($names -contains "EMF-creature-packs-1.2.3/mods/emf_fake_pack/src/mod.lua")) "the packs zip has mods\<pack>\ with mod.json and src\mod.lua"
+            Check (-not @($names | Where-Object { $_ -match "emf_other_pack" }).Count) "the packs zip has only the named packs"
+            Check (($readme -match "emf_fake_pack") -and ($readme -match "EML")) "its README.txt names the pack and says it needs EML"
+            Check (-not @($names | Where-Object { $_.Contains("\") }).Count) "its entry names use '/'"
+        } else { Check $false "$ppZip was written" }
+        $msg = ""
+        $two = (Join-Path $xc "emf_fake_pack") + "," + (Join-Path $xc "emf_third_pack")  # one string, as powershell -File passes a list
+        Write-File (Join-Path $xc "emf_third_pack\mod.json") '{"id": "emf_third_pack", "capabilities": ["patch"]}'
+        Write-File (Join-Path $xc "emf_third_pack\src\mod.lua") "-- a third fake pack"
+        try { & (Join-Path $repo "scripts\package_packs.ps1") -Packs $two -Version 1.2.4 -Out $ppOut | Out-Null } catch { $msg = $_.Exception.Message }
+        $both = $false
+        if (Test-Path -LiteralPath (Join-Path $ppOut "EMF-creature-packs-1.2.4.zip")) {
+            $za = [System.IO.Compression.ZipFile]::OpenRead((Join-Path $ppOut "EMF-creature-packs-1.2.4.zip"))
+            $n2 = @($za.Entries | ForEach-Object { $_.FullName })
+            $za.Dispose()
+            $both = ($n2 -contains "EMF-creature-packs-1.2.4/mods/emf_fake_pack/mod.json") -and ($n2 -contains "EMF-creature-packs-1.2.4/mods/emf_third_pack/mod.json")
+        }
+        Check ($both -and $msg -eq "") "package_packs.ps1 takes a comma-separated list in one string ($msg)"
+        $msg = ""
+        try { & (Join-Path $repo "scripts\package.ps1") -Build $fb -Out $fbOut -ExtraContent $two | Out-Null } catch { $msg = $_.Exception.Message }
+        Check ($msg -eq "") "package.ps1 -ExtraContent takes a comma-separated list in one string ($msg)"
+        $msg = ""
+        try { & (Join-Path $repo "scripts\package_packs.ps1") -Packs (Join-Path $xc "emf_other_pack") -Version 1.2.3 -Out $ppOut | Out-Null } catch { $msg = $_.Exception.Message }
+        Check (($msg -match "emf_other_pack") -and ($msg -match "src\\mod\.lua")) "package_packs.ps1 refuses a pack without src\mod.lua and names it ($msg)"
+        $msg = ""
+        try { & (Join-Path $repo "scripts\package_packs.ps1") -Packs $xc -Version 1.2.3 -Out $ppOut | Out-Null } catch { $msg = $_.Exception.Message }
+        Check ($msg -match "mod\.json") "package_packs.ps1 refuses a folder of packs ($msg)"
+        $msg = ""
+        try { & (Join-Path $repo "scripts\package_packs.ps1") -Packs (Join-Path $xc "emf_fake_pack") -Version "1.2" -Out $ppOut | Out-Null } catch { $msg = $_.Exception.Message }
+        Check ($msg -match "x\.y\.z") "package_packs.ps1 wants a version of three numbers ($msg)"
+        Remove-Item -LiteralPath $ppOut -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $xc -Recurse -Force -ErrorAction SilentlyContinue
         # a core built before a VERSION bump says the old version (its first log line "emf_core <version> starting")
         Write-File (Join-Path $fb "dist\emf\emf_core.dll") ("MZ an old build: emf_core 0.0.1" + [char]0 + " starting")
