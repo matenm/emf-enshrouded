@@ -656,7 +656,7 @@ try {
         $fnames = @($zf.Entries | ForEach-Object { $_.FullName })
         $zf.Dispose()
         Check (($fnames -contains "EMF-$ver/LICENSE.txt") -and ($fnames -contains "EMF-$ver/licenses/THIRD_PARTY_NOTICES.md") -and ($mnames -contains "EMF-$ver-manual/LICENSE.txt")) "both zips carry EMF's MIT licence and the third-party notices"
-        # in both downloads: Loot Magnet (DLL + mod.json), Wandering Champion (Lua); Night Raids is left out
+        # in both downloads: Loot Magnet (DLL + mod.json), Wandering Champion (Lua)
         foreach ($z in @(@{n = $fnames; p = "EMF-$ver"}, @{n = $mnames; p = "EMF-$ver-manual"})) {
             $missing = @(@("game/emf/mods/loot_magnet/loot_magnet.dll",
                          "game/emf/mods/loot_magnet/mod.json", "game/emf/mods/champion/main.lua", "game/emf/mods/champion/mod.json",
@@ -686,9 +686,14 @@ try {
                          "mods/bulk_craft/bc_recipes.h", "mods/bulk_craft/bulk_craft.cpp") |
                          Where-Object { $z.n -notcontains "$($z.p)/$_" })
             Check ($missing.Count -eq 0) "$($z.p).zip has Bulk Craft (missing: $($missing -join ', '))"
-            # left out of the release (their code stays in the repository): Villager Jobs, Night Raids, Beastmaster, Necromancer
-            $present = @($z.n | Where-Object { $_ -match "/(villager_jobs|raids|beastmaster|necromancer)/" })
-            Check ($present.Count -eq 0) "$($z.p).zip leaves out Villager Jobs, Night Raids, Beastmaster and Necromancer (found: $($present -join ', '))"
+            # Villager Jobs and Night Raids (DLL + mod.json + their source), Beastmaster and Necromancer (Lua), all switched off
+            $missing = @(@("game/emf/mods/villager_jobs/villager_jobs.dll", "game/emf/mods/villager_jobs/mod.json",
+                         "game/emf/mods/raids/raids.dll", "game/emf/mods/raids/mod.json", "mods/raids/README.md",
+                         "mods/villager_jobs/villager_jobs.cpp", "game/emf/mods/beastmaster/main.lua",
+                         "game/emf/mods/beastmaster/mod.json", "game/emf/mods/beastmaster/README.md",
+                         "game/emf/mods/necromancer/main.lua", "game/emf/mods/necromancer/mod.json",
+                         "game/emf/mods/necromancer/README.md") | Where-Object { $z.n -notcontains "$($z.p)/$_" })
+            Check ($missing.Count -eq 0) "$($z.p).zip has Villager Jobs, Night Raids, Beastmaster and Necromancer (missing: $($missing -join ', '))"
         }
         # the example mods are in both downloads under examples\, and never installed
         # every folder in examples\lua and examples\cpp, read from the repository (a new example cannot be left out)
@@ -759,6 +764,10 @@ try {
         Check (-not ((Get-Content (Join-Path $pkg "game\emf\mods\quick_stack\mod.json") -Raw) -match '"enabled": false')) "Quick Stack is on by default"
         Check (-not ((Get-Content (Join-Path $pkg "game\emf\mods\lua\mod.json") -Raw) -match '"enabled": false')) "the Lua host is on by default"
         Check ((Get-Content (Join-Path $pkg "game\emf\mods\teleports\mod.json") -Raw) -match '"enabled": false') "Waypoint Teleports is off by default"
+        Check ((Get-Content (Join-Path $pkg "game\emf\mods\villager_jobs\mod.json") -Raw) -match '"enabled": false') "Villager Jobs is off by default"
+        Check ((Get-Content (Join-Path $pkg "game\emf\mods\raids\mod.json") -Raw) -match '"enabled": false') "Night Raids is off by default"
+        Check ((Get-Content (Join-Path $pkg "game\emf\mods\beastmaster\mod.json") -Raw) -match '"enabled": false') "Beastmaster is off by default"
+        Check ((Get-Content (Join-Path $pkg "game\emf\mods\necromancer\mod.json") -Raw) -match '"enabled": false') "Necromancer is off by default"
 
         # build the template inside the unzipped package (path with spaces), with only the packaged SDK, the way its README
         # says: with the preset it ships (cmake --preset release, then cmake --build --preset release, in its folder)
