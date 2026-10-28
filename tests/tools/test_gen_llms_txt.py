@@ -101,9 +101,10 @@ class OtherSourcesTests(unittest.TestCase):
         self.assertIn(("lua", "lua.status"), cmds)
         for name in ("unstuck", "home", "tp", "bring", "tp.pos", "tp.back", "tp.list"):  # through a helper
             self.assertIn(("teleports", name), cmds)
-        # mods the release leaves out (scripts/package.ps1) are not listed
-        for mod in ("raids", "villager_jobs", "beastmaster", "necromancer"):
-            self.assertNotIn(mod, {m for m, _ in cmds})
+        # the mods the release ships switched off (scripts/package.ps1) are listed too
+        self.assertIn(("raids", "raids.start"), cmds)
+        self.assertIn(("villager_jobs", "job.recall"), cmds)
+        self.assertIn(("beastmaster", "beastmaster.species"), cmds)
         for name in ("quick_stack", "qs", "qs.chests", "qs.mark", "qs.list"):  # through a helper
             self.assertIn(("quick_stack", name), cmds)
         self.assertIn(("loot_magnet", "loot.toggle"), cmds)
