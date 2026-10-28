@@ -1,7 +1,7 @@
 """Blender (headless): writes a simple humanoid in A-pose (boxes and spheres, about 1.8 m, facing -Y like the game's
 characters after the glTF import) as a .glb, a test figure for fit_humanoid.py.
 
-  blender --background --factory-startup --python make_test_humanoid.py -- <out.glb> [--messy]
+  blender --background --factory-startup --python make_test_humanoid.py -- <out.glb> [--messy] [--wide-legs]
 
 --messy adds what generated models (Meshy) have and Blender's heat weighting fails on: open cloth panels (a robe
 without a back), separate overlapping parts and doubled faces.
@@ -15,6 +15,7 @@ import bpy
 args = sys.argv[sys.argv.index("--") + 1:]
 out = os.path.abspath(args[0])
 messy = "--messy" in args
+wide_legs = "--wide-legs" in args  # legs at x +-0.19 instead of +-0.10 (wider than the game skeleton's)
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
@@ -30,12 +31,21 @@ def box(name, loc, size, rot_y=0.0):
 parts = [
     box("torso", (0, 0, 1.15), (0.36, 0.2, 0.6)),
     box("hips", (0, 0, 0.82), (0.34, 0.2, 0.16)),
-    box("leg_l", (0.1, 0, 0.42), (0.12, 0.12, 0.84)),
-    box("leg_r", (-0.1, 0, 0.42), (0.12, 0.12, 0.84)),
+    box("leg_l", (0.19 if wide_legs else 0.1, 0, 0.42), (0.12, 0.12, 0.84)),
+    box("leg_r", (-0.19 if wide_legs else -0.1, 0, 0.42), (0.12, 0.12, 0.84)),
     # A-pose arms: from the shoulders, 45 degrees down
     box("arm_l", (0.18 + 0.25, 0, 1.4 - 0.25), (0.6, 0.1, 0.1), rot_y=math.radians(45)),
     box("arm_r", (-0.18 - 0.25, 0, 1.4 - 0.25), (0.6, 0.1, 0.1), rot_y=math.radians(-45)),
 ]
+if wide_legs:  # enough vertices along the legs to find them at knee height
+    for o in parts[2:4]:
+        bpy.ops.object.select_all(action="DESELECT")
+        o.select_set(True)
+        bpy.context.view_layer.objects.active = o
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.subdivide(number_cuts=6)
+        bpy.ops.object.mode_set(mode="OBJECT")
 bpy.ops.mesh.primitive_uv_sphere_add(radius=0.13, location=(0, 0, 1.62))
 parts.append(bpy.context.active_object)
 if messy:
