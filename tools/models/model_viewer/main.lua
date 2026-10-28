@@ -221,3 +221,29 @@ emf.command("clear", ": remove every ally and foe model_viewer spawned", functio
 	spawned, foes = {}, {}
 	emf.reply("removed " .. n)
 end)
+
+-- Every hit to or from one creature, and its death: what hurt it, and who got the kill.
+local watched, hits = nil, {}
+emf.command("watch", "<id>: record every hit to or from this creature and its death (model_viewer.hits shows them)", function(world, args)
+	watched = tonumber(args[1] or "")
+	hits = {}
+	emf.reply(watched and ("watching " .. watched) or "usage: model_viewer.watch <id>")
+end)
+
+emf.on_event("HitEvent", function(world, h)
+	if not watched or (h.targetId ~= watched and h.rootSourceId ~= watched and h.sourceId ~= watched) then return end
+	local cur = emf.health(world, watched)
+	hits[#hits + 1] = string.format("%.1fs hit root %d src %d -> %d health %d flags 0x%x program %s (now %s)",
+		world:tick() / 60, h.rootSourceId, h.sourceId, h.targetId, h.healthChange, h.flags, tostring(h.programId),
+		tostring(cur))
+end, "server")
+
+emf.on_event("EntityDiedEvent", function(world, d)
+	if watched and d.deadEntityId == watched then
+		hits[#hits + 1] = string.format("%.1fs died", world:tick() / 60)
+	end
+end, "server")
+
+emf.command("hits", ": the hits recorded by model_viewer.watch", function(world, args)
+	emf.reply(#hits > 0 and table.concat(hits, " | ") or "no hits recorded")
+end)
