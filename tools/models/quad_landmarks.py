@@ -70,3 +70,19 @@ def fit_z(z, y, c, g):
     kb = (belly - g["ground_back"]) / (belly - base)
     t = min(1.0, max(0.0, (y - g["front"]) / ((g["back"] - g["front"]) or 1e-6)))
     return belly - (belly - zz) * (kf + (kb - kf) * t)
+
+
+def width_scale(c, g, mode="fit"):
+    """The x scale for a creature with landmarks `c` on the game body `g`.
+
+    "fit": to the game body's width (the creature's legs sit on the game's). "keep": the creature's own proportions,
+    the mean of its length scale (between the feet) and its height scale, for a creature that the fit stretches much
+    more in length and height than in width (fitted to the game body's width, it is thinner than designed).
+    A number: that scale."""
+    if mode == "fit":
+        return g["width"] / (c["width"] or 1e-6)
+    if mode == "keep":
+        length = (g["back"] - g["front"]) / ((c["back"] - c["front"]) or 1e-6)
+        height = (g["top"] - max(g["ground_front"], g["ground_back"])) / ((c["top"] - c["ground"]) or 1e-6)
+        return (length + height) / 2
+    return float(mode)

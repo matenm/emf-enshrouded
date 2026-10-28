@@ -91,5 +91,24 @@ class HeightTests(unittest.TestCase):
         self.assertAlmostEqual(ql.fit_z(0.0, 0.7, self.c, g), 0.0, delta=1e-6)
 
 
+class WidthTests(unittest.TestCase):
+    """A creature stretched to a bigger body keeps its own proportions with "keep" (scaled 2x in length and height but
+    1x in width, a creature is half as wide as designed)."""
+
+    def setUp(self):
+        self.c = ql.landmarks(quadruped())   # body 0.7 wide, feet 1.5 apart, 1.4 tall
+        big = [P(p.x * 1.2, p.y * 2.0, p.z * 2.0) for p in quadruped()]  # 2x long and tall, only 1.2x wide
+        self.g = ql.landmarks(big)
+
+    def test_fit_squeezes_the_width_to_the_game_body(self):
+        self.assertAlmostEqual(ql.width_scale(self.c, self.g, "fit"), 1.2, delta=1e-6)
+
+    def test_keep_scales_the_width_with_length_and_height(self):
+        self.assertAlmostEqual(ql.width_scale(self.c, self.g, "keep"), 2.0, delta=1e-6)
+
+    def test_a_number_is_used_as_it_is(self):
+        self.assertAlmostEqual(ql.width_scale(self.c, self.g, "1.5"), 1.5, delta=1e-6)
+
+
 if __name__ == "__main__":
     unittest.main()

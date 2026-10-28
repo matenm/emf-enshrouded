@@ -2,7 +2,7 @@
 exported by gamegltf.py, and bind it to that skeleton so it moves with the game's animations.
 
   blender --background --factory-startup --python fit_humanoid.py -- <game.glb> <creature.glb> <out.glb>
-      [--keep-uvs] [--material N] [--height-scale 1.0]
+      [--keep-uvs] [--material N] [--height-scale 1.0] [--skirt F]
 
 Steps:
  1. Import the game model (armature with jNNN bones + its body meshes) and the creature (any rig: it is dropped).
@@ -11,6 +11,12 @@ Steps:
  3. Bind it with Blender's automatic (heat) weights to the bones the game body is skinned to; a vertex the heat
     solve leaves out goes to its nearest such bone. At most 4 weights per vertex, normalised.
  4. Refuse (exit 2) when a vertex is still unweighted.
+    Only the main chains carry weight: pelvis to head (and what hangs below the head), chest to each palm (with the
+    fingers), pelvis to each foot (with the toes). When a chain cannot be built from the slot names, every bone the
+    game body is skinned to is kept, with a warning.
+    --skirt F: parts hanging loose of the shins (a robe: vertices farther than F x the height from the shin and foot
+    bones) follow the thigh (0.6) and the pelvis (0.4) instead, handed over gradually up to 3F, so a bent knee
+    neither folds the robe into a point nor tears it along a line.
  5. One material: with --keep-uvs the creature's own (its UVs and texture), renamed for the game's material slot.
  6. Export a skinned .glb that tools/models/make_mod.py reads.
 Blender axes after the glTF import: forward is -Y, up is +Z, width is X (the game's right hand at -X).
@@ -38,6 +44,9 @@ def opt(name, default=None, cast=str):
 keep_uvs = bool(opt("--keep-uvs", False))
 material_index = opt("--material", None, int)
 height_scale = opt("--height-scale", 1.0, float)
+skirt = opt("--skirt", None, float)
+if skirt is True:
+    raise SystemExit("fit_humanoid: --skirt needs a fraction of the height (e.g. 0.05)")
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
@@ -79,6 +88,57 @@ if top < head.z:
 used = {vg.name for m in game_meshes for vg in m.vertex_groups}
 if not used:
     raise SystemExit("fit_humanoid: the game meshes have no skin weights")
+
+
+def find_bone(suffix):
+    return next((b for b in arm.data.bones if b.name.endswith(suffix)), None)
+
+
+def chain_to(b, stop):
+    """The bones from below `stop` down to `b` (top first); empty when `stop` is not above `b`."""
+    out = []
+    while b is not None and b != stop:
+        out.append(b)
+        b = b.parent
+    return list(reversed(out)) if b == stop else []
+
+
+def subtree(b):
+    out = {b.name}
+    for c in b.children:
+        out |= subtree(c)
+    return out
+
+
+# Only the main chains carry the creature's weights: pelvis to head (and what hangs below the head), chest to each palm
+# (with the fingers), pelvis to each foot (with the toes, which hang from the ankle beside the foot). The game's bodies
+# also use helper bones (the skeleton mage's j074/j075 and the Vukah's j100 hang from the pelvis at knee height; cloth
+# anchors; the root) that do not bend with the limbs: legs bound to them poke out at the knees when the game's walk
+# bends them.
+pelvis_b, chest_b, head_b = find_bone("_Pelvis"), find_bone("_Chest"), find_bone("_Head")
+main, missing = set(), []
+for name, b in (("_Pelvis", pelvis_b), ("_Chest", chest_b), ("_Head", head_b)):
+    if b is None:
+        missing.append(name)
+if not missing:
+    spine = chain_to(head_b, pelvis_b)
+    if not spine:
+        missing.append("pelvis-to-head")
+    main = {pelvis_b.name} | {b.name for b in spine} | subtree(head_b)
+    for suffix, stop in (("_FootL", pelvis_b), ("_FootR", pelvis_b), ("_HandPalmL", chest_b), ("_HandPalmR", chest_b)):
+        end = find_bone(suffix)
+        chain = chain_to(end, stop) if end else []
+        if not chain:
+            missing.append(suffix)
+            continue
+        main |= {b.name for b in chain} | subtree(chain[-2] if len(chain) >= 2 else end)
+if missing:
+    print("fit_humanoid: main chains incomplete (%s): every bone the game body is skinned to is kept"
+          % ", ".join(missing))
+    main = set()
+helpers = used - main if main else set()
+if main and (used & main):
+    used &= main
 
 # the creature: rest pose, transforms applied, joined into one mesh, its own rig dropped
 creature = import_glb(creature_glb)
@@ -227,6 +287,39 @@ for v in body.data.vertices:
     body.vertex_groups[best].add([v.index], 1.0, "REPLACE")
     fixed += 1
 
+# --skirt: parts hanging loose of the shins follow the thigh and the pelvis, handed over gradually from F x height to 3F
+skirted = set()
+if skirt and pelvis_b:
+    for side in ("L", "R"):
+        f = find_bone("_Foot" + side)
+        chain = chain_to(f, pelvis_b) if f else []
+        if len(chain) < 3 or chain[0].name not in used or pelvis_b.name not in used:
+            continue
+        lower = subtree(chain[1]) & used
+        segs = [(mw @ b.head_local, mw @ b.tail_local) for b in chain[1:]]
+        for name in (chain[0].name, pelvis_b.name):
+            if name not in body.vertex_groups:
+                body.vertex_groups.new(name=name)
+        names = {g.index: g.name for g in body.vertex_groups}
+        start = skirt * height
+        for v in body.data.vertices:
+            low = [(names[g.group], g.weight) for g in v.groups if names.get(g.group) in lower and g.weight > 0]
+            if not low:
+                continue
+            p = body.matrix_world @ v.co
+            d = min((p - (h if t_ < 0 else t if t_ > 1 else q)).length
+                    for h, t in segs for q, t_ in [intersect_point_line(p, h, t)])
+            share = min(1.0, (d - start) / (2 * start)) if d > start else 0.0
+            if share <= 0:
+                continue
+            moved = 0.0
+            for n, w in low:
+                body.vertex_groups[n].add([v.index], w * (1 - share), "REPLACE")
+                moved += w * share
+            body.vertex_groups[chain[0].name].add([v.index], 0.6 * moved, "ADD")
+            body.vertex_groups[pelvis_b.name].add([v.index], 0.4 * moved, "ADD")
+            skirted.add(v.index)
+
 bpy.ops.object.select_all(action="DESELECT")
 body.select_set(True)
 bpy.context.view_layer.objects.active = body
@@ -250,5 +343,6 @@ for b in arm.data.bones:
 kw = dict(filepath=out_glb, export_format="GLB", export_skins=True, export_tangents=True, export_animations=False,
           export_yup=True, use_selection=False)
 bpy.ops.export_scene.gltf(**kw)
-print("FIT_HUMANOID game top %.3f, scale %.3f, height %.3f, verts %d, nearest-bone fixes %d (heat on the %s copy)"
-      % (top, s, (zmax - zmin) * s, len(body.data.vertices), fixed, how))
+print("FIT_HUMANOID game top %.3f, scale %.3f, height %.3f, verts %d, nearest-bone fixes %d (heat on the %s copy), "
+      "helper bones left out %d, skirt vertices %d"
+      % (top, s, (zmax - zmin) * s, len(body.data.vertices), fixed, how, len(helpers), len(skirted)))

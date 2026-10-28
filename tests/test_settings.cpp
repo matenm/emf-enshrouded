@@ -231,6 +231,31 @@ TEST_CASE("settings: a corrected ini value is written back, so mods reading thei
     CHECK(ini.values.count("m.absent") == 0);     // a missing value stays missing (the default applies)
 }
 
+TEST_CASE("settings: a hand-edited ini value that had to change (range, step, not a number) is named for the log") {
+    FakeIni ini;
+    ini.values["m.every"] = "1";      // a slider in steps of 5 from 0: becomes 0, which is "off"
+    ini.values["m.radius"] = "999";   // above the maximum
+    ini.values["m.bad"] = "abc";      // not a number: the default
+    ini.values["m.flag"] = "yes";     // the same meaning, written as 1: nothing to say
+    ini.values["m.sci"] = "1e1";      // the same number: nothing to say
+    SettingsStore s(&ini);
+    SettingDef every = def("every", SettingType::Int, "30", 0, 120, true);
+    every.step = 5;
+    std::string why;
+    REQUIRE(s.declare("m", every, &why));
+    CHECK(why.find("\"every\"") != std::string::npos);
+    CHECK(why.find("1 in the ini became 0") != std::string::npos);
+    CHECK(why.find("steps of 5") != std::string::npos);
+    REQUIRE(s.declare("m", def("radius", SettingType::Int, "10", 1, 50, true), &why));
+    CHECK(why.find("999 in the ini became 50") != std::string::npos);
+    REQUIRE(s.declare("m", def("bad", SettingType::Int, "10", 1, 50, true), &why));
+    CHECK(why.find("abc in the ini became 10") != std::string::npos);
+    REQUIRE(s.declare("m", def("flag", SettingType::Bool, "0"), &why));
+    CHECK(why.empty());
+    REQUIRE(s.declare("m", def("sci", SettingType::Int, "5", 1, 50, true), &why));
+    CHECK(why.empty());
+}
+
 TEST_CASE("settings: an enabled value other than 1/0 is written back as 1/0 (mods read it with GetPrivateProfileInt)") {
     FakeIni ini;
     ini.values["m.enabled"] = "true";

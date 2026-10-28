@@ -148,6 +148,16 @@ TEST_CASE("api v13: declare, read and change settings") {
     CHECK_FALSE(a->setting_declare("Bad Id", &d));
 }
 
+TEST_CASE("api v13: a hand-edited ini value that a setting_declare had to change is logged") {
+    Fixture fx;
+    fx.ini.values["mymod.radius"] = "999";  // above the maximum of 50
+    const EmfApi* a = api_table();
+    EmfSettingDef d = int_def("radius", "10", 1, 50);
+    REQUIRE(a->setting_declare("mymod", &d));
+    CHECK(a->setting_int("mymod", "radius", 0) == 50);
+    CHECK(any_log("999 in the ini became 50"));
+}
+
 TEST_CASE("api v13: change callbacks run once per change after a world step; others' mods are not told") {
     Fixture f;
     const EmfApi* a = api_table();

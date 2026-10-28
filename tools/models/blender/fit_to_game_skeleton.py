@@ -2,13 +2,16 @@
 
   blender --background --factory-startup --python fit_to_game_skeleton.py -- \
       <game.glb> <creature.glb> <out.glb> [--uv-from 1] [--material 1] [--size 1.0] [--vertex-colors]
+      [--width fit|keep|<scale>]
 
 Steps:
  1. Import the game model (armature with jNNN bones + its body meshes) and the creature (any rig; it is dropped).
  2. Fit the creature onto the game body with a piecewise-linear warp along the body (nose, front feet, back feet)
     and scales for height (top of the back between the legs) and width, so its legs sit on the game's leg bones.
     When the game's rest pose holds one pair of feet lower than the other (the sabretooth's front paws), the
-    creature's legs stretch below the belly to reach them (../quad_landmarks.py).
+    creature's legs stretch below the belly to reach them (../quad_landmarks.py). The width is fitted to the game
+    body's (--width fit, the default); --width keep keeps the creature's own proportions (the mean of its length and
+    height scales), for a creature stretched much more in length and height than in width.
  3. Copy bone weights from all game meshes (nearest surface) and UVs from one game mesh (--uv-from), so the creature
     can use that mesh's material and textures (--material, the game material index).
  4. --vertex-colors stores the creature's own material colours as vertex colours (COLOR_0).
@@ -22,7 +25,7 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from quad_landmarks import fit_z, landmarks  # noqa: E402
+from quad_landmarks import fit_z, landmarks, width_scale  # noqa: E402
 
 argv = sys.argv[sys.argv.index("--") + 1:]
 game_glb, creature_glb, out_glb = (os.path.abspath(p) for p in argv[:3])
@@ -42,6 +45,9 @@ size = opt("--size", 1.0, float)
 vertex_colors = bool(opt("--vertex-colors", False))
 keep_uvs = bool(opt("--keep-uvs", False))  # a textured creature (e.g. from Meshy) keeps its own UVs and material
 keep_head = bool(opt("--keep-head", False))  # don't stretch the head to the game creature's nose
+width_mode = opt("--width", "fit")  # fit (the game body's width), keep (the creature's proportions) or a scale
+if width_mode is True:
+    raise SystemExit("fit_to_game_skeleton: --width needs fit, keep or a number")
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
@@ -140,7 +146,7 @@ def warp_y(y):
     return g["front"] + (y - c["front"]) * slope
 
 
-sx = g["width"] / (c["width"] or 1e-6)
+sx = width_scale(c, g, width_mode)
 for v in body.data.vertices:
     p = v.co
     y = warp_y(p.y)

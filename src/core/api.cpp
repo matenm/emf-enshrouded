@@ -820,6 +820,7 @@ bool api_setting_declare(const char* mod, const EmfSettingDef* def) {
         core_log("setting_declare refused (" + text_of(mod) + "): " + why);
         return false;
     }
+    if (!why.empty()) core_log("setting_declare (" + text_of(mod) + "): " + why);  // declared, with a note
     return true;
 }
 
