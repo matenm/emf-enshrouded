@@ -15,6 +15,8 @@ local PLAYER_ALLY = 11
 --   model_viewer.stats <id>                           Health, DamageMod, Movement, Level storage and scale of one
 --   model_viewer.poke <id> <Component> <field> <v>    writes one field (experiments)
 --   model_viewer.push <id> <metres>                   teleports a creature that far along +x (leash tests)
+--   model_viewer.watch <id>                           records the hits to or from one creature (the first 40) and
+--   model_viewer.hits                                 its death; hits shows them
 emf.emits({"StartGuardingEvent", "AddThreatTargetEvent"})
 
 local spawned = {}
@@ -223,23 +225,25 @@ emf.command("clear", ": remove every ally and foe model_viewer spawned", functio
 end)
 
 -- Every hit to or from one creature, and its death: what hurt it, and who got the kill.
-local watched, hits = nil, {}
+local watched, watched_session, hits = nil, nil, {}
 emf.command("watch", "<id>: record every hit to or from this creature and its death (model_viewer.hits shows them)", function(world, args)
-	watched = tonumber(args[1] or "")
+	watched, watched_session = tonumber(args[1] or ""), emf.session()
 	hits = {}
 	emf.reply(watched and ("watching " .. watched) or "usage: model_viewer.watch <id>")
 end)
 
 emf.on_event("HitEvent", function(world, h)
-	if not watched or (h.targetId ~= watched and h.rootSourceId ~= watched and h.sourceId ~= watched) then return end
+	if not watched or watched_session ~= emf.session() then return end  -- an id from another session means nothing
+	if h.targetId ~= watched and h.rootSourceId ~= watched and h.sourceId ~= watched then return end
 	local cur = emf.health(world, watched)
+	if #hits >= 40 then return end  -- the first 40: enough to see what hurt it
 	hits[#hits + 1] = string.format("%.1fs hit root %d src %d -> %d health %d flags 0x%x program %s (now %s)",
 		world:tick() / 60, h.rootSourceId, h.sourceId, h.targetId, h.healthChange, h.flags, tostring(h.programId),
 		tostring(cur))
 end, "server")
 
 emf.on_event("EntityDiedEvent", function(world, d)
-	if watched and d.deadEntityId == watched then
+	if watched and watched_session == emf.session() and d.deadEntityId == watched then
 		hits[#hits + 1] = string.format("%.1fs died", world:tick() / 60)
 	end
 end, "server")

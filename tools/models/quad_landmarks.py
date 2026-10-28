@@ -77,7 +77,7 @@ def width_scale(c, g, mode="fit"):
 
     "fit": to the game body's width (the creature's legs sit on the game's). "keep": the creature's own proportions,
     the mean of its length scale (between the feet) and its height scale, for a creature that the fit stretches much
-    more in length and height than in width (Meshy's panther on the sabretooth came out half as wide as designed).
+    more in length and height than in width (fitted to the game body's width, it is thinner than designed).
     A number: that scale."""
     if mode == "fit":
         return g["width"] / (c["width"] or 1e-6)

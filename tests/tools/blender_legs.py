@@ -4,11 +4,12 @@
 
 Prints "HELPERS <weight>": the skin weight below the hips on bones off the skeleton's main chains (head-to-pelvis,
 chest-to-palms, pelvis-to-feet and what hangs below hands, feet and head; e.g. the helper bones the game's bodies hang
-from the pelvis at knee height, or the root). Then, per side, "LEGS <side> knee_offset <m> skirt_on_shin <n>": the
+from the pelvis at knee height, or the root). Then, per side, "LEGS <side> knee_offset <m> skirt_on_shin <n> seams <n>": the
 horizontal distance between the knee bone and
 the centroid of the vertices mostly weighted to that leg at knee height; and how many vertices farther than
 skirt_fraction x the height from the shin and foot bones (a robe hanging below the knee) still carry shin or foot
-weight. Bones are found by gamegltf.py's slot names (_Pelvis, _FootL, _FootR).
+weight; and how many edges below the knee the lower-leg weight jumps across by more than 0.5 (a seam a bent knee tears
+open). Bones are found by gamegltf.py's slot names (_Pelvis, _FootL, _FootR).
 """
 import sys
 
@@ -82,4 +83,11 @@ for side in ("L", "R"):
                 for h, t in segs for q, f in [intersect_point_line(p, h, t)])
         if d > skirt * height:
             on_shin += 1
-    print("LEGS %s knee_offset %.3f skirt_on_shin %d" % (side, offset, on_shin))
+    # seams: edges below the knee across which the lower-leg weight jumps by more than 0.5
+    lw = [sum(g.weight for g in v.groups if names.get(g.group) in lower) for v in mesh.data.vertices]
+    seams = 0
+    for e in mesh.data.edges:
+        a, b = e.vertices
+        if pts[a][1].z < knee.z and pts[b][1].z < knee.z and abs(lw[a] - lw[b]) > 0.5:
+            seams += 1
+    print("LEGS %s knee_offset %.3f skirt_on_shin %d seams %d" % (side, offset, on_shin, seams))

@@ -92,8 +92,8 @@ class HeightTests(unittest.TestCase):
 
 
 class WidthTests(unittest.TestCase):
-    """A creature stretched to a bigger body keeps its own proportions with "keep" (Meshy's panther, scaled 2x in length
-    and height onto the sabretooth, came out half as wide as designed: paper thin in game)."""
+    """A creature stretched to a bigger body keeps its own proportions with "keep" (scaled 2x in length and height but
+    1x in width, a creature is half as wide as designed)."""
 
     def setUp(self):
         self.c = ql.landmarks(quadruped())   # body 0.7 wide, feet 1.5 apart, 1.4 tall

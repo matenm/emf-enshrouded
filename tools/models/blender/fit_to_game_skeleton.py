@@ -44,8 +44,10 @@ material_index = opt("--material", None, int)  # default: the material of that g
 size = opt("--size", 1.0, float)
 vertex_colors = bool(opt("--vertex-colors", False))
 keep_uvs = bool(opt("--keep-uvs", False))  # a textured creature (e.g. from Meshy) keeps its own UVs and material
-keep_head = bool(opt("--keep-head", False))
-width_mode = opt("--width", "fit")  # don't stretch the head to the game creature's nose
+keep_head = bool(opt("--keep-head", False))  # don't stretch the head to the game creature's nose
+width_mode = opt("--width", "fit")  # fit (the game body's width), keep (the creature's proportions) or a scale
+if width_mode is True:
+    raise SystemExit("fit_to_game_skeleton: --width needs fit, keep or a number")
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
