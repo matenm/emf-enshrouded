@@ -310,6 +310,68 @@ TEST_CASE("enemy orders: an order ends when its enemy dies") {
     CHECK(f.rules_removed.size() == 1u);
 }
 
+// Issue #42: a refused order ends nothing. The docs say so; before the fix the old order was finished before the hit
+// rule was asked for, so an enemy whose new order was refused (all 64 shared hit rules in use, or hit rules off) was
+// left with no order at all.
+TEST_CASE("enemy orders: a refused order leaves the enemy's old order running (it ends nothing)") {
+    Fake f = world();
+    f.add<gen::CurrentTransform>(kOther);
+    EnemyOrders o(f.deps());
+    std::string why;
+    REQUIRE(o.add(W(), kEnemy, kDoor, 30, 0, 0, &why) != 0u);  // an order without damage: it needs no hit rule
+    f.rules_ok = false;  // the 64 shared hit rules are all in use, or hit rules are off on this build
+    CHECK(o.add(W(), kEnemy, kOther, 30, 50, 0, &why) == 0u);  // refused: no hit rule for its damage
+    CHECK(why.find("damage") != std::string::npos);
+    CHECK(o.count() == 1u);  // the old order still runs
+    CHECK(o.target_of(W(), kEnemy) == kDoor);
+    CHECK(pick(f) == kDoor);
+    CHECK(held(f));
+    CHECK(entry(f, kDoor) != nullptr);
+    CHECK(f.rules_removed.empty());  // nothing ended: no rule was added or removed
+    f.now += 31000;                  // and it still ends when its own time is up
+    o.step(W());
+    CHECK(o.count() == 0u);
+    CHECK_FALSE(held(f));
+}
+
+// Review I6: the 256 check comes before the hit rule, so a refused order never holds one of the shared rules for a
+// moment; a replacement needs no free slot, since the old order gives up its own.
+TEST_CASE("enemy orders: at 256 orders a new enemy is refused before its hit rule; a replacement still starts") {
+    Fake f = world();
+    const uint32_t slots = static_cast<uint32_t>(kEnemyOrdersMax);
+    for (uint32_t e = 1000; e < 1000 + slots; ++e) {
+        f.add<gen::DynamicAggro>(e).allowTargetSwitches = true;
+        f.add<gen::SelectedTargets>(e);
+        f.add<gen::Faction>(e).faction = static_cast<emf::gen::FactionType>(3);
+        f.add<gen::CurrentTransform>(e);
+    }
+    EnemyOrders o(f.deps());
+    std::string why;
+    for (uint32_t e = 1000; e < 1000 + slots; ++e) REQUIRE(o.add(W(), e, kDoor, 30, 0, 0, &why) != 0u);
+    CHECK(o.count() == kEnemyOrdersMax);
+    CHECK(f.rules_added.empty());
+
+    // a 257th enemy: refused before its rule is asked for, and nothing is given back
+    const uint32_t kLate = 4000, kLateTarget = 4001;
+    f.add<gen::DynamicAggro>(kLate).allowTargetSwitches = true;
+    f.add<gen::SelectedTargets>(kLate);
+    f.add<gen::Faction>(kLate).faction = static_cast<emf::gen::FactionType>(3);
+    f.add<gen::CurrentTransform>(kLate);
+    f.add<gen::CurrentTransform>(kLateTarget);
+    CHECK(o.add(W(), kLate, kLateTarget, 30, 50, 0, &why) == 0u);
+    CHECK(why.find("256") != std::string::npos);
+    CHECK(f.rules_added.empty());    // refused before the hit rule: it never held one
+    CHECK(f.rules_removed.empty());  // and there was nothing to give back
+    CHECK(o.count() == kEnemyOrdersMax);
+
+    // a replacement of one already held still starts, with damage: its old order gives up its own slot
+    const uint32_t replaced = 1000;
+    CHECK(o.add(W(), replaced, kLateTarget, 30, 50, 0, &why) != 0u);
+    CHECK(o.count() == kEnemyOrdersMax);  // replaced, not added
+    CHECK(o.target_of(W(), replaced) == kLateTarget);
+    CHECK(f.rules_added.size() == 1u);    // the new order's rule, and nothing else
+}
+
 // Review I5 (the spec: never a boss): a boss is refused; its leash and its own fight stay the game's.
 TEST_CASE("enemy orders: a boss (Boss or BossHealthBar) is refused") {
     for (int c = 0; c < 2; ++c) {
