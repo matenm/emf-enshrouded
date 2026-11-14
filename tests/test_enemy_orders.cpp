@@ -310,6 +310,30 @@ TEST_CASE("enemy orders: an order ends when its enemy dies") {
     CHECK(f.rules_removed.size() == 1u);
 }
 
+// Issue #42: a refused order ends nothing. The docs say so; before the fix the old order was finished before the hit
+// rule was asked for, so an enemy whose new order was refused (all 64 shared hit rules in use, or hit rules off) was
+// left with no order at all.
+TEST_CASE("enemy orders: a refused order leaves the enemy's old order running (it ends nothing)") {
+    Fake f = world();
+    f.add<gen::CurrentTransform>(kOther);
+    EnemyOrders o(f.deps());
+    std::string why;
+    REQUIRE(o.add(W(), kEnemy, kDoor, 30, 0, 0, &why) != 0u);  // an order without damage: it needs no hit rule
+    f.rules_ok = false;  // the 64 shared hit rules are all in use, or hit rules are off on this build
+    CHECK(o.add(W(), kEnemy, kOther, 30, 50, 0, &why) == 0u);  // refused: no hit rule for its damage
+    CHECK(why.find("damage") != std::string::npos);
+    CHECK(o.count() == 1u);  // the old order still runs
+    CHECK(o.target_of(W(), kEnemy) == kDoor);
+    CHECK(pick(f) == kDoor);
+    CHECK(held(f));
+    CHECK(entry(f, kDoor) != nullptr);
+    CHECK(f.rules_removed.empty());  // nothing ended: no rule was added or removed
+    f.now += 31000;                  // and it still ends when its own time is up
+    o.step(W());
+    CHECK(o.count() == 0u);
+    CHECK_FALSE(held(f));
+}
+
 // Review I5 (the spec: never a boss): a boss is refused; its leash and its own fight stay the game's.
 TEST_CASE("enemy orders: a boss (Boss or BossHealthBar) is refused") {
     for (int c = 0; c < 2; ++c) {
