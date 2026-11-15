@@ -63,6 +63,7 @@ constexpr uint32_t kPathQueryV37Size = EMF_FIELD_END(EmfPathQuery, max_nodes);
 constexpr uint32_t kApiV42Size = kApiV40Size;  // v42 (0.6.11): the version only (EmfPathResult.doors)
 constexpr uint32_t kPathResultV37Size = EMF_FIELD_END(EmfPathResult, length);  // before v42's doors
 constexpr uint32_t kApiV43Size = EMF_FIELD_END(EmfApi, player_permissions);
+constexpr uint32_t kBreakBlocksV44Size = EMF_FIELD_END(EmfBreakBlocks, why);
 constexpr uint32_t kUiWidgetV24Size = EMF_FIELD_END(EmfUiWidget, pad);  // 56: a v24/v25 mod's widget_size
 
 // The x64 layouts mods are built with. A field that moves breaks every built mod; appending one changes sizeof only:
@@ -156,6 +157,9 @@ static_assert(offsetof(EmfApi, enemy_move) == kApiV39Size && kApiV40Size == 1088
               "EmfApi layout (v40 appends enemy_move, enemy_move_cancel, enemy_moving)");
 static_assert(offsetof(EmfApi, player_permissions) == kApiV40Size && kApiV43Size == 1096 && sizeof(EmfApi) == kApiV43Size,
               "EmfApi layout (v43 appends player_permissions)");
+static_assert(kBreakBlocksV44Size == 160 && sizeof(EmfBreakBlocks) == 160 && offsetof(EmfBreakBlocks, damage) == 28 &&
+                  offsetof(EmfBreakBlocks, materials) == 56 && offsetof(EmfBreakBlocks, why) == 64,
+              "EmfBreakBlocks layout (v44)");
 static_assert(kMoveOrderV40Size == 128 && sizeof(EmfMoveOrder) == 136 && offsetof(EmfMoveOrder, stuck_seconds) == 128 &&
                   offsetof(EmfMoveOrder, points) == 16 &&
                   offsetof(EmfMoveOrder, arrive) == 24 && offsetof(EmfMoveOrder, why) == 32,

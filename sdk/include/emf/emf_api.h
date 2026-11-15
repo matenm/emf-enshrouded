@@ -808,6 +808,51 @@ typedef struct EmfMoveOrder {
     uint32_t pad2;
 } EmfMoveOrder;
 typedef void (*EmfMoveCallback)(EmfWorld* world, uint32_t id, uint32_t status, void* user);
+/* v44 blocks: player-built blocks (voxels with a building material) damaged or broken from a mod, on the server. EMF
+ * calls the game's own building-mining code with its own table, so it never touches terrain: the ground under a hole
+ * stays. A hole is a normal building change: saved with the world and sent to every player, like mining. Damage mode
+ * works like a pickaxe hit (the game's per-block health, cracks that heal 20 s after the last hit, the world's mining
+ * damage setting); the game's Unbreakable materials never break. */
+#define EMF_BLOCK_EMPTY 0u
+#define EMF_BLOCK_TERRAIN 1u
+#define EMF_BLOCK_BUILDING 2u
+#define EMF_BREAK_INSTANT 0x1u /* break at once: no health, no cracks */
+#define EMF_BREAK_DROPS 0x2u   /* removed blocks drop what a pickaxe would give (each material's item, so many blocks
+                                  per item), at the hole */
+#define EMF_BREAK_DONE 0u
+#define EMF_BREAK_CANCELLED 1u /* the world ended first */
+#define EMF_BREAK_FAILED 2u    /* a game call faulted: breaking is off until a restart */
+/* EmfBreakBlocks.damage when all five are 0: about a T4 pickaxe (Soft, SlightlyHard, ModeratelyHard, Hard, VeryHard) */
+#define EMF_BREAK_DEFAULT_DAMAGE {83, 79, 72, 60, 48}
+typedef struct EmfBreakBlocks {
+    uint32_t size;            /* sizeof(EmfBreakBlocks) */
+    uint32_t flags;           /* EMF_BREAK_INSTANT, EMF_BREAK_DROPS */
+    float x, y, z;            /* metres: the centre of the (lowest) sphere */
+    float radius;             /* metres, 0.25..3.5; 0 = 1 */
+    float height;             /* metres, 0..4: more spheres up to this far above the centre (a column; at most 8) */
+    int32_t damage[5];        /* damage mode: per hardness class Soft..VeryHard, 0..100000; all 0 = the default */
+    uint32_t material_count;  /* 0 = every building material that can break */
+    const uint8_t* materials; /* building material ids 0..127 (EmfBlockInfo.material), material_count of them */
+    char why[96];             /* out: why it was refused (NUL-terminated) */
+} EmfBreakBlocks;
+typedef struct EmfBreakResult {
+    uint32_t size;    /* sizeof(EmfBreakResult) */
+    uint32_t status;  /* EMF_BREAK_* */
+    uint32_t damaged; /* blocks that took damage (a block inside two spheres of a column counts twice) */
+    uint32_t removed; /* blocks that went */
+    uint32_t dropped; /* items dropped (EMF_BREAK_DROPS) */
+} EmfBreakResult;
+typedef void (*EmfBreakCallback)(EmfWorld* world, uint32_t id, const EmfBreakResult* result, void* user);
+typedef struct EmfBlockInfo {
+    uint32_t size;     /* sizeof(EmfBlockInfo) */
+    uint32_t kind;     /* EMF_BLOCK_* */
+    uint32_t material; /* building 0..127, terrain 1..127 */
+    uint32_t fill;     /* 0..255 */
+    uint32_t hardness; /* building: 0 Soft .. 4 VeryHard, 5 Unbreakable; terrain: 0 */
+    int32_t health;    /* building: the material's health points; 0 unknown */
+    int32_t damage;    /* building: the damage so far, 0..255 (it heals 20 s after the last hit); -1 unknown */
+    float x, y, z;     /* the block's centre, metres */
+} EmfBlockInfo;
 
 typedef struct EmfHitRule {
     uint32_t size;             /* sizeof(EmfHitRule) */

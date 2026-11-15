@@ -158,6 +158,7 @@ add_library(emf_core_lib STATIC
   src/core/doors.cpp
   src/core/enemy_orders.cpp
   src/core/move_orders.cpp
+  src/core/block_rules.cpp
   src/core/save_events.cpp
   src/core/fault_report.cpp
   src/core/world_jobs.cpp
@@ -488,6 +489,7 @@ add_executable(emf_tests
   tests/test_path_grid.cpp
   tests/test_doors.cpp
   tests/test_move_orders.cpp
+  tests/test_block_rules.cpp
   tests/test_enemy_orders.cpp
   tests/test_teleport.cpp
   tests/test_api_teleport.cpp

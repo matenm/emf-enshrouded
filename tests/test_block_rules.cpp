@@ -1,0 +1,205 @@
+// Breaking blocks (API v44): the rules before the game is called (hits per material, never terrain, hole spheres,
+// request checks, drops with a remainder).
+#include <doctest.h>
+
+#include <cmath>
+#include <cstring>
+#include <limits>
+#include <vector>
+
+#include "core/api_sizes.h"
+#include "core/block_rules.h"
+#include "emf/emf_api.h"
+
+using namespace emf::core;
+
+namespace {
+
+// Straw (id 2, Soft, 100), wood logs (id 4, ModeratelyHard, 250), stone (id 7, VeryHard, 1000), id 11 Unbreakable.
+struct Facts {
+    MaterialFacts f[128] = {};
+    Facts() {
+        f[2] = {true, 0, 100, 4, {}};
+        f[4] = {true, 2, 250, 2, {}};
+        f[7] = {true, 4, 1000, 8, {}};
+        f[11] = {true, 5, 1000, 1, {}};
+        f[2].item_guid[0] = 0x22;
+        f[7].item_guid[0] = 0x77;
+    }
+};
+
+BreakSpec damage_spec() {
+    BreakSpec s;
+    s.instant = false;
+    for (int i = 0; i < 5; ++i) s.damage[i] = kDefaultBreakDamage[i];
+    return s;
+}
+
+EmfBreakBlocks good_request() {
+    EmfBreakBlocks r{};
+    r.size = sizeof r;
+    r.x = 10;
+    r.y = 20;
+    r.z = 30;
+    r.radius = 1;
+    return r;
+}
+
+}  // namespace
+
+TEST_CASE("block rules: damage table: hits = health / (damage x mining factor), per hardness class") {
+    Facts facts;
+    float t[256];
+    build_break_table(facts.f, damage_spec(), 1.0f, t);
+    CHECK(t[128 + 7] == doctest::Approx(1000.0 / 48));
+    CHECK(t[128 + 2] == doctest::Approx(100.0 / 83));
+    CHECK(t[128 + 4] == doctest::Approx(250.0 / 72));
+    build_break_table(facts.f, damage_spec(), 1.5f, t);
+    CHECK(t[128 + 7] == doctest::Approx(1000.0 / 72));
+}
+
+TEST_CASE("block rules: terrain entries are always 0") {
+    MaterialFacts all[128];
+    for (auto& m : all) m = {true, 0, 100, 1, {}};
+    float t[256];
+    BreakSpec s = damage_spec();
+    build_break_table(all, s, 1.0f, t);
+    for (int m = 0; m < 128; ++m) CHECK(t[m] == 0.0f);
+    s.instant = true;
+    build_break_table(all, s, 1.0f, t);
+    for (int m = 0; m < 128; ++m) CHECK(t[m] == 0.0f);
+    for (int m = 128; m < 256; ++m) CHECK(t[m] == 1.0f);
+}
+
+TEST_CASE("block rules: Unbreakable and unknown materials never break, in either mode") {
+    Facts facts;
+    float t[256];
+    BreakSpec s = damage_spec();
+    build_break_table(facts.f, s, 1.0f, t);
+    CHECK(t[128 + 11] == 0.0f);
+    CHECK(t[128 + 3] == 0.0f);  // no config
+    s.instant = true;
+    build_break_table(facts.f, s, 1.0f, t);
+    CHECK(t[128 + 11] == 0.0f);
+    CHECK(t[128 + 3] == 0.0f);
+}
+
+TEST_CASE("block rules: a materials list limits the table") {
+    Facts facts;
+    float t[256];
+    BreakSpec s = damage_spec();
+    s.materials = {7};
+    build_break_table(facts.f, s, 1.0f, t);
+    CHECK(t[128 + 7] > 0.0f);
+    CHECK(t[128 + 2] == 0.0f);
+    CHECK(t[128 + 4] == 0.0f);
+}
+
+TEST_CASE("block rules: break mode = 1 per breakable material; a zero damage class is immune in damage mode") {
+    Facts facts;
+    float t[256];
+    BreakSpec s = damage_spec();
+    s.instant = true;
+    build_break_table(facts.f, s, 1.0f, t);
+    CHECK(t[128 + 2] == 1.0f);
+    CHECK(t[128 + 4] == 1.0f);
+    CHECK(t[128 + 7] == 1.0f);
+    s.instant = false;
+    s.damage[4] = 0;  // VeryHard
+    build_break_table(facts.f, s, 1.0f, t);
+    CHECK(t[128 + 7] == 0.0f);
+    CHECK(t[128 + 2] > 0.0f);
+}
+
+TEST_CASE("block rules: hole spheres") {
+    const auto two = hole_spheres(0, 0.75f, 0, 1.0f, 0.7f);
+    REQUIRE(two.size() == 2);
+    CHECK(two[0].y == doctest::Approx(0.75));
+    CHECK(two[1].y == doctest::Approx(1.45));
+    CHECK(two[0].r == doctest::Approx(1.0));
+    CHECK(hole_spheres(1, 2, 3, 1.75f, 0).size() == 1);
+    const auto five = hole_spheres(0, 0, 0, 1.0f, 4.0f);
+    REQUIRE(five.size() == 5);
+    CHECK(five[4].y == doctest::Approx(4.0));
+    CHECK(five[2].y == doctest::Approx(2.0));
+}
+
+TEST_CASE("block rules: break_check refusals") {
+    CHECK(break_check(good_request()).empty());
+    auto bad = [](auto change) {
+        EmfBreakBlocks r = good_request();
+        change(r);
+        return break_check(r);
+    };
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.radius = 3.6f; }).empty());
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.radius = 0.2f; }).empty());
+    CHECK(bad([](EmfBreakBlocks& r) { r.radius = 0; }).empty());  // 0 = 1 m
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.height = 4.1f; }).empty());
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.height = -0.1f; }).empty());
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) {
+                    r.radius = 0.5f;
+                    r.height = 4.0f;  // 9 spheres
+                }).empty());
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.damage[0] = -1; }).empty());
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.damage[4] = 100001; }).empty());
+    static const uint8_t k128[1] = {128};
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) {
+                    r.material_count = 1;
+                    r.materials = k128;
+                }).empty());
+    static uint8_t many[129] = {};
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) {
+                    r.material_count = 129;
+                    r.materials = many;
+                }).empty());
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.material_count = 1; }).empty());  // no list
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.flags = 0x4; }).empty());
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.x = std::numeric_limits<float>::quiet_NaN(); }).empty());
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.z = std::numeric_limits<float>::infinity(); }).empty());
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.size = kBreakBlocksV44Size - 1; }).empty());
+}
+
+TEST_CASE("block rules: the spec a request makes (defaults: 1 m, about a T4 pickaxe)") {
+    EmfBreakBlocks r = good_request();
+    r.radius = 0;
+    BreakSpec s = break_spec(r);
+    CHECK_FALSE(s.instant);
+    for (int i = 0; i < 5; ++i) CHECK(s.damage[i] == kDefaultBreakDamage[i]);
+    CHECK(s.materials.empty());
+    CHECK(request_radius(r) == doctest::Approx(1.0));
+    static const uint8_t list[2] = {7, 4};
+    r.flags = EMF_BREAK_INSTANT;
+    r.damage[2] = 5;
+    r.material_count = 2;
+    r.materials = list;
+    s = break_spec(r);
+    CHECK(s.instant);
+    CHECK(s.damage[0] == 0);
+    CHECK(s.damage[2] == 5);
+    CHECK(s.materials == std::vector<uint8_t>{7, 4});
+}
+
+TEST_CASE("block rules: drops keep the remainder per material") {
+    Facts facts;
+    float carry[128] = {};
+    float removed[256] = {};
+    removed[128 + 2] = 10;  // straw: 4 blocks per item
+    auto d = break_drops(removed, facts.f, carry);
+    REQUIRE(d.size() == 1);
+    CHECK(d[0].building_id == 2);
+    CHECK(d[0].count == 2);
+    CHECK(carry[2] == doctest::Approx(2.0));
+    removed[128 + 2] = 2;
+    d = break_drops(removed, facts.f, carry);
+    REQUIRE(d.size() == 1);
+    CHECK(d[0].count == 1);
+    CHECK(carry[2] == doctest::Approx(0.0));
+    std::memset(removed, 0, sizeof removed);
+    removed[128 + 4] = 9;  // wood logs: rate 2, but no item GUID: nothing
+    CHECK(break_drops(removed, facts.f, carry).empty());
+    facts.f[7].loot_rate = 0;  // rate 0: nothing
+    removed[128 + 7] = 50;
+    CHECK(break_drops(removed, facts.f, carry).empty());
+    removed[0] = 100;  // terrain counts never drop
+    CHECK(break_drops(removed, facts.f, carry).empty());
+}
