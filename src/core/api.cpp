@@ -1730,6 +1730,16 @@ std::optional<PlayerInfo> player_info_of(EmfWorld* w, uint32_t player, uint8_t* 
     return read_player_info(entry, player);
 }
 
+// v43: the PlayerPermissions byte of the player's BasicPlayerInfos entry (server world).
+bool api_player_permissions(EmfWorld* w, uint32_t player, uint32_t* perms) {
+    if (perms) *perms = 0;
+    if (!perms || !w || WorldView(raw(w)).kind() != EMF_WORLD_SERVER) return false;
+    uint8_t entry[kPlayerInfoSize];
+    if (!player_info_of(w, player, entry)) return false;
+    *perms = entry[kPlayerInfoPermissions] & 0x3Fu;
+    return true;
+}
+
 // chat_tell on the server world's thread: the host's notify, or the outbox for the receive loop. How many lines went.
 size_t chat_tell_now(EmfWorld* w, uint32_t player, const std::vector<std::string>& lines, bool system) {
     const std::string what = "chat_tell(" + std::to_string(player) + ")";
@@ -2583,6 +2593,7 @@ const EmfApi kApi = {
     api_enemy_move,  // v40
     api_enemy_move_cancel,
     api_enemy_moving,
+    api_player_permissions,
 };
 
 bool guarded_chat_call(EmfChatCallback cb, EmfWorld* w, uint64_t account, uint32_t entity, const char* text, void* user) {

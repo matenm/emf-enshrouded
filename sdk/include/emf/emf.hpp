@@ -1052,6 +1052,20 @@ inline bool has_v40() { return api() && api()->size >= offsetof(EmfApi, enemy_mo
 inline bool has_v41() { return has_v40() && api()->version >= 41; }
 // v42 (0.6.11, the version only): EmfPathResult.doors (the door entity of each door point); check result->size too
 inline bool has_v42() { return has_v40() && api()->version >= 42; }
+// v43: player_permissions (the game's own permissions of a player)
+inline bool has_v43() { return api() && api()->size >= offsetof(EmfApi, player_permissions) + sizeof(api()->player_permissions); }
+// The player's permissions as the game keeps them (EMF_PERM_*), on the server world; nothing for a non-player, on a
+// client world or an older core. Read it when you need it (a host can change it; a reconnect is a new entity).
+inline std::optional<uint32_t> player_permissions(World w, uint32_t player) {
+    uint32_t perms = 0;
+    if (!has_v43() || !api()->player_permissions || !api()->player_permissions(w.raw(), player, &perms)) return std::nullopt;
+    return perms;
+}
+// The game counts the player as an admin (EMF_PERM_KICK_BAN: a dedicated server's Admin group, a host's admins).
+inline bool game_admin(World w, uint32_t player) {
+    const auto p = player_permissions(w, player);
+    return p && (*p & EMF_PERM_KICK_BAN);
+}
 // v25: E prompts (offer_add, offer_remove); v26: pictures in windows (offer_active ends it); v27: mod messages
 inline bool has_v25() { return api() && api()->size >= offsetof(EmfApi, offer_remove) + sizeof(api()->offer_remove); }
 inline bool has_v26() { return api() && api()->size >= offsetof(EmfApi, offer_active) + sizeof(api()->offer_active); }

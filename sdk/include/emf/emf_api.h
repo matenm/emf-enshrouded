@@ -1,4 +1,4 @@
-/* EMF (Enshrouded Modding Framework) C API, version 42 (see EMF_API_VERSION).
+/* EMF (Enshrouded Modding Framework) C API, version 43 (see EMF_API_VERSION).
  *
  * A mod is a DLL in <game>/emf/mods/ that exports:
  *     extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api);
@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define EMF_API_VERSION 42
+#define EMF_API_VERSION 43
 
 /* World kinds (the byte at the entity storage + 8: world+0xE15DC8 on build 1273043, world+0xE179C8 on 1283531). */
 #define EMF_WORLD_SERVER 0
@@ -1575,9 +1575,25 @@ typedef struct EmfApi {
     bool (*enemy_move_cancel)(uint32_t id);
     /* The id of `enemy`'s move, 0 = it is not moving. */
     uint32_t (*enemy_moving)(EmfWorld* world, uint32_t enemy);
+
+    /* ---- v43: the game's own permissions of a player ---- */
+    /* *perms = the player's permissions as the game keeps them (EMF_PERM_*: what the server's user groups, or the host,
+     * gave them; EMF_PERM_KICK_BAN is the game's admin). Read it when you need it: it changes when a host changes a
+     * player's group, and a player who reconnects is a new entity. False (*perms = 0) for an entity that is no player
+     * here, or on a client world. Server world (a game you host or the dedicated server); same thread rules as
+     * get_component. EMF's own chat admins ([chat] admins) are another list: EmfNetFrom.admin and command senders. */
+    bool (*player_permissions)(EmfWorld* world, uint32_t player, uint32_t* perms);
 } EmfApi;
 
 #define EMF_ITEM_NAME_GAME_TEXT 1u /* v29 item_name: the player's language even where EMF's screens cannot draw it */
+/* v43 player_permissions: the game's own permissions of a player (its PlayerPermissions) */
+#define EMF_PERM_KICK_BAN          0x01u /* the game's admin: on a dedicated server the Admin user group (its password);
+                                            in a game someone hosts, the host and the players the host made admins */
+#define EMF_PERM_ACCESS_INVENTORIES 0x02u
+#define EMF_PERM_EDIT_BASE          0x04u
+#define EMF_PERM_EDIT_WORLD         0x08u
+#define EMF_PERM_EXTEND_BASE        0x10u
+#define EMF_PERM_RECEIVE_EXP        0x20u
 #define EMF_CHAT_SYSTEM 1u         /* v30 chat_tell_ex / chat_broadcast_ex: a line without a speaker's name */
 
 typedef bool (*EmfModLoadFn)(const EmfApi* api);

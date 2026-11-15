@@ -246,6 +246,9 @@ constexpr size_t kPlayerInfoCount = 0x3ff;  // entities 1..1023 are players
 // handle (0x40 for the first player: the handle their chat lines carry), +8 the account hash.
 constexpr size_t kPlayerInfoHandle = 4;
 constexpr size_t kPlayerInfoAccount = 8;
+// +0x9D the player's PlayerPermissions mask (bit 0 CanKickBan = the game's admin): the server copies it from its user
+// group list; the game's own isAdmin reads bit 0 there (API v43 player_permissions).
+constexpr size_t kPlayerInfoPermissions = 0x9D;
 struct PlayerInfo {
     uint32_t entity = 0;
     uint32_t handle = 0;

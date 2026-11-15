@@ -577,3 +577,32 @@ TEST_CASE("emf.hpp v30 helpers: tell and broadcast with system, character_name, 
     REQUIRE(name.has_value());
     CHECK(*name == "Character 2");
 }
+
+// ---- v43: player_permissions ----
+TEST_CASE("player_permissions (v43): the game's PlayerPermissions byte of the player's entry; false on a client world or without an entry") {
+    Fixture f;
+    f.player(2, 0x40, 0xAABBull);
+    f.infos[(2 - 1) * kPlayerInfoSize + kPlayerInfoPermissions] = 0x3F;  // the host, or the Admin group: every bit
+    f.player(3, 0x41, 0xCCDDull);
+    f.infos[(3 - 1) * kPlayerInfoSize + kPlayerInfoPermissions] = 0x04 | 0x20;  // a friend: edit base, receive XP
+    f.player(4, 0x42, 0xEEFFull);
+    f.infos[(4 - 1) * kPlayerInfoSize + kPlayerInfoPermissions] = 0xFF;  // bits the game does not name are masked off
+    const EmfApi* api = api_table();
+    CHECK(EMF_API_VERSION >= 43);
+    REQUIRE(api->size >= offsetof(EmfApi, player_permissions) + sizeof(api->player_permissions));
+    REQUIRE(api->player_permissions);
+    uint32_t perms = 99;
+    CHECK(api->player_permissions(f.w(), 2, &perms));
+    CHECK(perms == (EMF_PERM_KICK_BAN | EMF_PERM_ACCESS_INVENTORIES | EMF_PERM_EDIT_BASE | EMF_PERM_EDIT_WORLD |
+                    EMF_PERM_EXTEND_BASE | EMF_PERM_RECEIVE_EXP));
+    CHECK(api->player_permissions(f.w(), 3, &perms));
+    CHECK(perms == (EMF_PERM_EDIT_BASE | EMF_PERM_RECEIVE_EXP));
+    CHECK(api->player_permissions(f.w(), 4, &perms));
+    CHECK(perms == 0x3Fu);
+    perms = 99;
+    CHECK_FALSE(api->player_permissions(f.w(), 5, &perms));  // no entry of its own (its id is not 5)
+    CHECK(perms == 0u);
+    CHECK_FALSE(api->player_permissions(f.w(), 0, &perms));
+    CHECK_FALSE(api->player_permissions(f.c(), 2, &perms));  // a client world
+    CHECK_FALSE(api->player_permissions(f.w(), 2, nullptr));
+}

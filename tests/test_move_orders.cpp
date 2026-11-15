@@ -324,10 +324,11 @@ TEST_CASE("move orders: refused: no enemy AI, a player, a boss, no points, too m
     CHECK(d.calls == 0);
 }
 
-TEST_CASE("api table (v40): the three move functions at the end") {
+TEST_CASE("api table (v40): the three move functions (at the end until v43 appended player_permissions)") {
     const EmfApi* api = emf::core::api_table();
-    CHECK(api->version >= 40u);  // the newest version is checked by its own test (v41, below)
-    CHECK(api->size == kApiV40Size);
+    CHECK(api->version >= 40u);  // the newest version is checked by its own test (v43, below)
+    CHECK(api->size >= kApiV40Size);
+    CHECK(offsetof(EmfApi, enemy_moving) + sizeof(api->enemy_moving) == kApiV40Size);
     CHECK(api->enemy_move != nullptr);
     CHECK(api->enemy_move_cancel != nullptr);
     CHECK(api->enemy_moving != nullptr);
@@ -782,19 +783,29 @@ TEST_CASE("move orders (review I1): no Guard nudge while it has a pick; at most 
     CHECK(ai.state == emf::gen::enemy01::State::Guard);
 }
 
-TEST_CASE("api table (v41): version 41 or newer (0.6.10's move options: stuck_seconds, EMF_MOVE_PEACEFUL_ALL); the table did not grow") {
+TEST_CASE("api table (v41): version 41 or newer (0.6.10's move options: stuck_seconds, EMF_MOVE_PEACEFUL_ALL); v41 itself did not grow the table") {
     const EmfApi* api = emf::core::api_table();
     CHECK(api->version >= 41u);
-    CHECK(api->size == kApiV40Size);
+    CHECK(kApiV41Size == kApiV40Size);
+    CHECK(api->size >= kApiV40Size);
 }
 
-TEST_CASE("api table (v42): version 42 (0.6.11: EmfPathResult.doors); the table did not grow") {
+TEST_CASE("api table (v42): version 42 or newer (0.6.11: EmfPathResult.doors); v42 itself did not grow the table") {
     const EmfApi* api = emf::core::api_table();
-    CHECK(api->version == 42u);
-    CHECK(api->size == kApiV40Size);
-    CHECK(EMF_API_VERSION == 42);
+    CHECK(api->version >= 42u);
+    CHECK(kApiV42Size == kApiV40Size);
+    CHECK(api->size >= kApiV40Size);
+    CHECK(EMF_API_VERSION >= 42);
     CHECK(kPathResultV37Size == 20u);
     CHECK(sizeof(EmfPathResult) > kPathResultV37Size);
+}
+
+TEST_CASE("api table (v43): version 43 appends player_permissions") {
+    const EmfApi* api = emf::core::api_table();
+    CHECK(api->version == 43u);
+    CHECK(EMF_API_VERSION == 43);
+    CHECK(api->size == kApiV43Size);
+    CHECK(offsetof(EmfApi, player_permissions) == kApiV40Size);
 }
 
 // A modder's raids (0.6.11) and a live check (2026-11-15): two creatures standing on one spot, each with a move, never
