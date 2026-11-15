@@ -67,6 +67,9 @@ enum class Sig : size_t {
     // table (PG_RegisterInteraction's start), metres to cells and nodes, a cell's node block and strides, and the cell
     // list (a loop inside PG_RegisterInteraction)
     PathGridRegister, PathGridBoxToCells, PathGridNodePos, PathGridCellList,
+    // breaking blocks (API v44), both exes: the building-mining kernel, the voxel region read, the building config
+    // lookup and the damage store's get (private research wall_damage_2026-11-15.md section 13)
+    BlockKernel, VoxelRegionRead, BuildingConfigFind, VoxelDamageGet,
     _Count
 };
 constexpr size_t kSigCount = static_cast<size_t>(Sig::_Count);

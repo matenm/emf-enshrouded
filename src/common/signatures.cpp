@@ -271,6 +271,10 @@ constexpr SigDef kSignatures[] = {
     // (+0x20, +0x28), its state (+0x2c, dirtied to 2), the next cell (+8); the alignment filler after the null check is
     // a wildcard (review M6).
     {Sig::PathGridCellList, "PathGridCellList", "49 8B 96 B8 00 00 00 48 85 D2 74 ?? ?? ?? F2 0F 10 42 20 8B 4A 28 F2 0F 11 44 24 20 44 8B 44 24 20 45 3B C5 72 ?? 48 8B 44 24 20 48 C1 E8 20 41 3B C2 72 ?? 41 3B CF 72 ?? 44 3B C5 77 ?? 41 3B C4 77 ?? 41 3B C9 77 ?? 0F B6 4A 2C 83 E9 01 74 ?? 83 E9 02 74 ?? 83 E9 01 74 ?? 83 F9 02 75 ?? C6 42 2C 02 48 8B 52 08 48 85 D2 75 ??", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x9e2d92u, 0x67ed32u}, false},
+    {Sig::BlockKernel, "BlockKernel", "48 89 5C 24 10 4C 89 4C 24 20 48 89 4C 24 08 55 56 57 41 54 41 55 41 56 41 57 48 8D AC 24 B0 C6", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x4966e0u, 0x22dc40u}, false},
+    {Sig::VoxelRegionRead, "VoxelRegionRead", "48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 60 48 8B 71 08 48", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x10b20e0u, 0x836910u}, false},
+    {Sig::BuildingConfigFind, "BuildingConfigFind", "48 8B 41 38 48 85 C0 74 3A 44 8B 50 0C 33 C9 4D 85 D2 74 2F 4C 63 48 08 4C 8D 58 08 45 33 C0 90 45 85 C9 75 04 33 C0 EB 04 4B 8D 04 0B 49 03 C0 38 10 74 11", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0xe8c9b0u, 0x933af0u}, false},
+    {Sig::VoxelDamageGet, "VoxelDamageGet", "48 89 5C 24 08 57 48 83 EC 30 F2 0F 10 02 48 8B FA 44 8B 4A", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x4a9cf0u, 0x2426c0u}, false},
 };
 static_assert(std::size(kSignatures) == kSigCount, "one entry per Sig");
 }  // namespace
