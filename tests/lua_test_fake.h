@@ -128,6 +128,7 @@ struct Fake {
     std::vector<uint32_t> tell_flags, broadcast_flags;  // v30 chat_tell_ex / chat_broadcast_ex: their flags
     std::map<uint32_t, std::string> names;  // player entity -> name (absent: player_name answers false)
     std::map<uint32_t, std::string> character_names;  // v30 player_character_name
+    std::map<uint32_t, uint32_t> permissions;         // v43 player_permissions
     std::vector<std::pair<EmfChatCallback, void*>> chat_cbs;
     std::vector<std::pair<EmfPlayerCallback, void*>> player_cbs;  // v28 on_player listeners
     std::vector<std::pair<EmfHitCallback, void*>> hit_cbs;        // v31 on_hit listeners
@@ -782,6 +783,13 @@ bool f_player_character_name(EmfWorld*, uint32_t player, char* buf, uint32_t siz
     std::snprintf(buf, size, "%s", it->second.c_str());
     return true;
 }
+bool f_player_permissions(EmfWorld*, uint32_t player, uint32_t* perms) {
+    if (perms) *perms = 0;
+    auto it = g->permissions.find(player);
+    if (it == g->permissions.end() || !perms) return false;
+    *perms = it->second;
+    return true;
+}
 bool f_on_chat(EmfChatCallback cb, void* user) {
     if (!g->chat_ok || !cb) return false;
     g->chat_cbs.emplace_back(cb, user);
@@ -1036,6 +1044,7 @@ EmfApi fake_api() {
     a.item_name = f_item_name;
     a.game_language = f_game_language;
     a.player_character_name = f_player_character_name;  // v30
+    a.player_permissions = f_player_permissions;        // v43
     a.chat_tell_ex = f_chat_tell_ex;
     a.chat_broadcast_ex = f_chat_broadcast_ex;
     a.on_hit = f_on_hit;  // v31

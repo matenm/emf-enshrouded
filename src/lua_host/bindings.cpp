@@ -1354,6 +1354,39 @@ int w_character_name(lua_State* L) {
     return 1;
 }
 
+bool has_v43(const EmfApi* a) {
+    return a && a->size >= offsetof(EmfApi, player_permissions) + sizeof(a->player_permissions);
+}
+
+// world:permissions(id) (lua 1.36, API v43): the player's own game permissions, {admin, access_inventories, edit_base,
+// edit_world, extend_base, receive_exp, mask}; admin = the game's admin (a dedicated server's Admin group, a host's
+// admins). nil for anything but a player of this server world, on a client world or an older core.
+int w_permissions(lua_State* L) {
+    WorldUD* w = check_world(L, 1);
+    const lua_Integer id = luaL_checkinteger(L, 2);
+    const EmfApi* a = w->script->host->api;
+    uint32_t perms = 0;
+    if (id < 1 || id > 0xFFFFFFFF || !has_v43(a) || !a->player_permissions ||
+        !a->player_permissions(w->world, static_cast<uint32_t>(id), &perms)) {
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_createtable(L, 0, 7);
+    const struct {
+        const char* name;
+        uint32_t bit;
+    } bits[] = {{"admin", EMF_PERM_KICK_BAN},       {"access_inventories", EMF_PERM_ACCESS_INVENTORIES},
+                {"edit_base", EMF_PERM_EDIT_BASE},  {"edit_world", EMF_PERM_EDIT_WORLD},
+                {"extend_base", EMF_PERM_EXTEND_BASE}, {"receive_exp", EMF_PERM_RECEIVE_EXP}};
+    for (const auto& b : bits) {
+        lua_pushboolean(L, (perms & b.bit) != 0);
+        lua_setfield(L, -2, b.name);
+    }
+    lua_pushinteger(L, static_cast<lua_Integer>(perms));
+    lua_setfield(L, -2, "mask");
+    return 1;
+}
+
 void chat_cb_body(EmfWorld* w, uint64_t account, uint32_t entity, const char* text, void* user) {
     auto* h = static_cast<Host::Impl*>(user);
     char hex[24];
@@ -3220,6 +3253,7 @@ void open_bindings(lua_State* L, Script&) {
         static const luaL_Reg methods[] = {{"is_server", w_is_server}, {"is_client", w_is_client}, {"tick", w_tick},
                                            {"get", w_get},             {"entities", w_entities},   {"position", w_position},
                                            {"account", w_account},     {"name", w_name}, {"character_name", w_character_name},
+                                           {"permissions", w_permissions},
                                            {"template", w_template},   {nullptr, nullptr}};
         luaL_newlib(L, methods);
         lua_setfield(L, -2, "__index");

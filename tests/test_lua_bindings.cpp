@@ -1436,6 +1436,32 @@ TEST_CASE("lua 1.22: world:character_name gives the character's name or nil; nil
     CHECK(replied("cn nil nil nil"));
 }
 
+TEST_CASE("lua 1.36: world:permissions gives the game's permissions of a player as booleans and a mask, or nil; nil on an older core") {
+    Rig r(L"permissions");
+    r.fake.permissions[3] = 0x3F;         // the host, or a dedicated server's Admin group
+    r.fake.permissions[4] = 0x04 | 0x20;  // a friend: edit base, receive XP
+    add_script(r.dir, "pm",
+               "emf.command('go', '', function(w)\n"
+               "  local a, f = w:permissions(3), w:permissions(4)\n"
+               "  emf.reply(string.format('a %s %s %s %d', tostring(a.admin), tostring(a.edit_world), "
+               "tostring(a.receive_exp), a.mask))\n"
+               "  emf.reply(string.format('f %s %s %s %s %d', tostring(f.admin), tostring(f.edit_base), "
+               "tostring(f.access_inventories), tostring(f.extend_base), f.mask))\n"
+               "  emf.reply('none ' .. tostring(w:permissions(5)) .. ' ' .. tostring(w:permissions(0)))\n"
+               "end)\n"
+               "emf.command('old', '', function(w) emf.reply('old ' .. tostring(w:permissions(3))) end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("pm.go");
+    CHECK(replied("a true true true 63"));
+    CHECK(replied("f false true false false 36"));
+    CHECK(replied("none nil nil"));
+    r.api.size = offsetof(EmfApi, player_permissions);  // a v42 core
+    r.fake.replies.clear();
+    r.run_command("pm.old");
+    CHECK(replied("old nil"));
+}
+
 TEST_CASE("lua 1.22: emf.tell and emf.broadcast with {system = true} send lines without a speaker; an unknown option is an error") {
     Rig r(L"tell_system");
     add_script(r.dir, "ts",
