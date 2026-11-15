@@ -268,8 +268,8 @@ wrote. `mods/write_test/` is the developer check.
 | `emf::has_v17()` | — | true when the core has it. On an older core `add_command` with flags adds the command for the admins only (logged). |
 
 `EmfCommandSender.admin` (v17, the old padding's first byte, so the struct keeps its size): 1 when the sender may run
-every command (the console, `emf\commands.txt`, the host's own chat, an account in `[chat] admins` or everyone with
-`everyone=1`), 0 for a player who may run only the commands for players. A command for players can branch on it (more
+every command (the console, `emf\commands.txt`, the host's own chat, an account in `[chat] admins`, everyone with
+`everyone=1`, the game's own admins with `game_admins=1`), 0 for a player who may run only the commands for players. A command for players can branch on it (more
 for admins). A core older than v17 leaves it 0: read it only when `emf::has_v17()`. The server owner can take a command
 for players away from players who are no admins with `[chat] deny=<names>` ([server.md](server.md)).
 
@@ -982,7 +982,7 @@ Players can act on the game's world map, and a server mod can find the ground un
 `x`, `z` (world metres).
 
 `EmfMapDone` (`size`, then): `player` (their entity in the server world), `admin` (1 = the host's own game, or an account
-in `[chat] admins`; also 1 for everyone when `everyone=1`; it is the server's own view, never taken from the message),
+in `[chat] admins`, or a game admin with `game_admins=1`; also 1 for everyone when `everyone=1`; it is the server's own view, never taken from the message),
 `x`, `z` (inside the world), `action` (the id; valid during the callback).
 
 `EmfGround` (`size`, then): `status`, `x`, `y`, `z`, `hop_y`, `why` (valid during the callback), `fog`, `deadly`. `status` is

@@ -69,7 +69,7 @@ Who may: nobody until you say so, in `emf\emf_core.ini` of the server folder:
 admins=0x0123456789abcdef, 0xfedcba9876543210
 ; everyone=1 lets every player run them (only on a server for friends)
 everyone=0
-; game_admins=1 lets the game's own admins run them too (whoever joined with the Admin group's password)
+; game_admins=1 lets the game's own admins run them too (whoever joined with the password of a group that may kick and ban)
 game_admins=0
 ```
 
@@ -77,7 +77,8 @@ These are EMF's own admins, for its commands. The game's own admins (who joined 
 `enshrouded_server.json`; in a game you host, the players you made admins in the game) are not on this list by
 themselves: `game_admins=1` (EMF.exe's Server tab: "The game's admins may use EMF commands") lets them run every EMF
 command and makes them admins for mods too (a mod message's or map action's admin flag). It is off by default because
-everyone who has the Admin password then gets `give`, `spawn`, `tp` and the rest. A mod can also read the game's role
+everyone who has the Admin password then gets `give`, `spawn`, `tp` and the rest; and when a group that may kick and
+ban has no password, everyone who joins does (EMF.exe warns about that). A mod can also read the game's role
 itself (API v43 `player_permissions`, Lua `world:permissions`): Villager Jobs lets the game's admins give jobs whatever
 `game_admins` says.
 

@@ -170,7 +170,8 @@ typedef struct EmfCommandSender {
     uint64_t account;   /* the player's account hash as the game knows it (chat), else 0 */
     uint8_t from_chat;  /* 1: a player typed it in the game's chat; 0: the console, emf/commands.txt, the overlay */
     uint8_t admin;      /* v17: 1 = the sender may run every command (the console, commands.txt, the host's own chat, an
-                           account in [chat] admins or everyone=1); 0 = a player who may run only commands for players.
+                           account in [chat] admins, everyone=1, or a game admin with [chat] game_admins=1); 0 = a player
+                           who may run only commands for players.
                            A core older than v17 leaves it 0: read it only when emf::has_v17() */
     uint8_t pad[6];
 } EmfCommandSender;
@@ -404,7 +405,7 @@ typedef struct EmfNetFrom {
     uint64_t account;       /* server: the sender's account from the server's own records (never from the message);
                                0 in process */
     uint32_t peer_version;  /* the channel version the other side has */
-    uint8_t admin;          /* server: 1 = the host's own game (or a [chat] admin) */
+    uint8_t admin;          /* server: 1 = the host's own game (or a [chat] admin; a game admin with game_admins=1) */
     uint8_t local;          /* 1 = the same process (the host's own game, an offline game) */
     uint8_t pad[2];
 } EmfNetFrom;
@@ -596,7 +597,8 @@ typedef void (*EmfMapClickCallback)(const EmfMapClick* click, void* user);
 typedef struct EmfMapDone {
     uint32_t size;      /* sizeof(EmfMapDone) of the core */
     uint32_t player;    /* their entity in the server world */
-    uint8_t admin;      /* 1 = the host's own game, or an account in [chat] admins (everyone=1 too) */
+    uint8_t admin;      /* 1 = the host's own game, or an account in [chat] admins (everyone=1 too; a game admin with
+                           game_admins=1) */
     uint8_t pad[7];
     double x, z;        /* the spot, world metres, inside the world */
     const char* action; /* the action's id; valid during the callback */
@@ -1173,7 +1175,8 @@ typedef struct EmfApi {
 
     /* ---- v17: commands any player may run ---- */
     /* register_command with options (EmfCommandDef). With EMF_COMMAND_PLAYERS every player may run the command from the
-     * game's chat; without it, only the accounts in [chat] admins (or everyone with [chat] everyone=1), as for
+     * game's chat; without it, only the accounts in [chat] admins (or everyone with [chat] everyone=1, and the game's
+     * admins with [chat] game_admins=1), as for
      * register_command. The console, emf/commands.txt and the host's own chat run every command. Registering a name that
      * exists again with the same cb and user updates its help and flags (a script host re-declaring a command after a
      * reload); any other duplicate is refused. False (logged) for a bad definition, unknown flags or a taken name. */

@@ -1717,6 +1717,7 @@ function renderServerPage() {
   // ---- EMF chat commands ----
   const everyone = srv.everyone === null ? !!chat.everyone : srv.everyone;
   const gameAdmins = srv.gameAdmins === null ? !!chat.game_admins : srv.gameAdmins;
+  const openAdminGroup = groups.some((g) => g.can_kick_ban && !g.password_set);  // anyone can join as the game's admin
   const refused = t.refused || [];
   const chatCard = el('div', { class: 'card account', id: 'srv-chat' },
     !s.emf_installed ? el('p', { class: 'sheet-warn' }, 'EMF is not installed in this server folder yet (below): these settings wait for it.') : null,
@@ -1734,7 +1735,9 @@ function renderServerPage() {
         'aria-label': 'The game’s admins may use EMF commands', onclick: () => { srv.gameAdmins = !gameAdmins; renderServerPage(); },
       }),
       el('span', {}, 'The game’s admins may use EMF commands'),
-      el('span', { class: 'muted small' }, 'players who joined with the Admin group’s password')),
+      el('span', { class: 'muted small' }, 'players who joined with the password of a group that may kick and ban'),
+      gameAdmins && openAdminGroup ? el('span', { class: 'badge warn', id: 'srv-game-admins-open' },
+        'a group that may kick and ban has no password: everyone who joins could use every EMF command') : null),
     el('label', { class: 'srv-label', for: 'srv-admins' }, 'Admins: account hashes, one per line'),
     adminsBox,
     el('p', { class: 'muted small' }, 'To find your account hash, type any EMF command (/help) into the chat: EMF answers that you may not, and the server log says “chat command refused from account 0x...”. Put that value here, or click Add as admin below, then restart the server. A Steam64 id (17 digits) is not an account hash.'),
