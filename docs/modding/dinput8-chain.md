@@ -76,7 +76,7 @@ work in `DirectInput8Create` must move it to `DllMain` or a thread it starts.
 |---|---|---|
 | EMF | yes (also lines before any section) | `[EMF]` (DLLs its installer renamed) |
 | ShroudForge | yes (it wants each entry inside `mods\<folder>\` and reports the others) | |
-| Kiln | yes (also `[EMF]`, for DLLs EMF's older installers renamed) | none: its own list is `kiln\chain.ini` (quoted names and a comment after a name: planned) |
+| Kiln | yes (also lines before any section, quoted names and a comment after a name since 0.2.0-dev.27, and, as an exception to the section rule, `[EMF]`, for DLLs EMF's older installers renamed) | none: its own list is `kiln\chain.ini` |
 | XHL-Core, Auto Loot Plus | yes | |
 
 Tell us when your tool reads the file, or reads it differently, and we will update the table.
