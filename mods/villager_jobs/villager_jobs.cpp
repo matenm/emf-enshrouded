@@ -32,6 +32,7 @@
 #include <string>
 #include <vector>
 
+#include "emf/aim.hpp"
 #include "emf/emf.hpp"
 #include "emf/generated/components.hpp"
 #include "game_data.h"
@@ -1027,6 +1028,28 @@ void cmd_recall(emf::World w, const std::vector<std::string>& a) {
               to->y, to->z, chest ? "its job's chest" : altar ? "its flame altar" : "you");
 }
 
+// job.look [player entity]: where a player looks (their camera in the server world) and what the jobs key picks there;
+// for a player who joined, the entity from chat.players (the jobs key of a joined player picks the same way).
+void cmd_look(emf::World w, const std::vector<std::string>& a) {
+    const uint32_t player = a.size() > 1 ? static_cast<uint32_t>(std::strtoul(a[1].c_str(), nullptr, 10)) : emf::local_player();
+    const auto pp = player ? position(w, player) : std::nullopt;
+    const auto ray = player ? emf::aim::camera_ray(w, player) : std::nullopt;
+    if (!pp || !ray) {
+        EMF_REPLY("job.look: no player %u with a camera in this world (job.look <player entity>; chat.players lists them)",
+                  player);
+        return;
+    }
+    auto* input = w.get<gen::ecs::PlayerInput>(player);
+    const auto& cam = input->fromClient.camera;
+    const jobs::Vec3 cp{cam.position.x / kFixed, cam.position.y / kFixed, cam.position.z / kFixed};
+    const jobs::Quat q{cam.orientation.x, cam.orientation.y, cam.orientation.z, cam.orientation.w};
+    const auto target = jobs::pick_target(cp, q, *pp, candidates(w, *pp, player));
+    EMF_REPLY("player %u at (%.1f, %.1f, %.1f); camera (%.1f, %.1f, %.1f) looking (%.2f, %.2f, %.2f); the jobs key picks %s",
+              player, pp->x, pp->y, pp->z, ray->origin.x, ray->origin.y, ray->origin.z, ray->dir.x, ray->dir.y, ray->dir.z,
+              target ? format("%s %u", target->kind == jobs::Kind::Villager ? "villager" : "chest", target->id).c_str()
+                     : "nothing (a villager or chest within 8 m, near the crosshair)");
+}
+
 void cmd_recipes(emf::World w, const std::vector<std::string>& a) {
     if (a.size() != 2 && a.size() != 3) {
         EMF_REPLY("usage: job.recipes <villager> [chest]");
@@ -1109,6 +1132,7 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
     emf::add_command("job.recall", "[villager]: unstick a villager (host)",
                      cmd_recall);
     emf::add_command("job.recipes", "<villager> [chest]: what the villager can make (from the chest)", cmd_recipes);
+    emf::add_command("job.look", "[player entity]: where a player looks and what the jobs key picks there", cmd_look);
     emf::add_command("job.farm", "<villager> <chest>: farm the crops around the chest (host)",
                      [](emf::World w, const std::vector<std::string>& a) { cmd_work(w, a, jobs::JobKind::Farm); });
     emf::add_command("job.tend", "<villager> <chest>: tend the animals around the chest (host)",

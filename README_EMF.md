@@ -644,7 +644,8 @@ wild pickables around a chest.
 
 **Players who joined** (a dedicated server, or someone else's hosted game) use K the same way when their own game has
 Villager Jobs 1.5 or newer turned on (their own key setting counts): their game sends the key press to the server's
-Villager Jobs, which picks what that player looks at and shows its notes and wheels on their screen. Only admins give,
+Villager Jobs, which picks what that player looks at and shows its notes and wheels on their screen (`job.look
+<player entity>` in the server's console shows where a player looks and what K picks there). Only admins give,
 change and stop jobs: the host, and the accounts in `[chat] admins` of the server's `emf\emf_core.ini` (the same
 admins as for EMF's chat commands). For anyone else, K at a working villager says what it does. Notes of running jobs
 (a chest gone, out of materials) go to the host and to every player who joined with the mod. When the server has no
@@ -679,7 +680,8 @@ Console: `jobs` lists the jobs with what they did, `job <villager> <chest> <reci
 `job.haul <villager> <from chest> <to chest>`,
 `job.stop <villager>` ends one, `job.recipes <villager> [chest]` lists what the villager can make (from the chest, or
 everything it knows), `job.recall [villager]` brings a stuck villager back beside its job's chest (else its flame
-altar; look at it or name its id; API v20 teleport with the game's ground search). Recipes that need a crafting station's props are not offered; a recipe the game refuses for
+altar; look at it or name its id; API v20 teleport with the game's ground search), `job.look [player entity]` says
+where a player looks and what K picks there. Recipes that need a crafting station's props are not offered; a recipe the game refuses for
 another reason (not unlocked, no room in the chest for the product) makes the job wait with a note. Only the recipe's
 own product, arriving in the chest, counts as made. The test world's villagers know the 57 hand-crafting recipes
 (workshop 0); villagers with a trade in a base have their own lists.
