@@ -547,6 +547,7 @@ From the mods in the EMF zip (only while that mod runs):
 - job.stop <villager>: end a villager's job [villager_jobs]
 - job.recall [villager]: unstick a villager (host) [villager_jobs]
 - job.recipes <villager> [chest]: what the villager can make (from the chest) [villager_jobs]
+- job.look [player entity]: where a player looks and what the jobs key picks there [villager_jobs]
 - job.farm <villager> <chest>: farm the crops around the chest (host) [villager_jobs]
 - job.tend <villager> <chest>: tend the animals around the chest (host) [villager_jobs]
 - job.haul <villager> <from chest> <to chest>: carry items between two chests (host) [villager_jobs]
