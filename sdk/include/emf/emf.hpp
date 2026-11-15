@@ -1066,6 +1066,33 @@ inline bool game_admin(World w, uint32_t player) {
     const auto p = player_permissions(w, player);
     return p && (*p & EMF_PERM_KICK_BAN);
 }
+// v44: breaking player-built blocks, never terrain (break_blocks, block_at, find_wall)
+inline bool has_v44() { return api() && api()->size >= offsetof(EmfApi, find_wall) + sizeof(api()->find_wall); }
+// Queues the break (req.size is set here): its id, or 0 with req.why. cb gets the counts after the server step.
+inline uint32_t break_blocks(World w, EmfBreakBlocks& req, EmfBreakCallback cb = nullptr, void* user = nullptr) {
+    req.size = sizeof req;
+    if (!has_v44() || !api()->break_blocks) {
+        const char* text = "this EMF core is too old (break_blocks needs API v44)";
+        std::strncpy(req.why, text, sizeof req.why - 1);
+        req.why[sizeof req.why - 1] = 0;
+        return 0;
+    }
+    return api()->break_blocks(w.raw(), &req, cb, user);
+}
+// What is at a point (inside a world callback on the server world); nothing when refused or on an older core.
+inline std::optional<EmfBlockInfo> block_at(World w, float x, float y, float z) {
+    EmfBlockInfo b{};
+    b.size = sizeof b;
+    if (!has_v44() || !api()->block_at || !api()->block_at(w.raw(), x, y, z, &b)) return std::nullopt;
+    return b;
+}
+// The first building block on the line (at most 64 m of it); nothing when the line is clear or when refused.
+inline std::optional<EmfBlockInfo> find_wall(World w, const float from[3], const float to[3]) {
+    EmfBlockInfo b{};
+    b.size = sizeof b;
+    if (!has_v44() || !api()->find_wall || !api()->find_wall(w.raw(), from, to, &b)) return std::nullopt;
+    return b;
+}
 // v25: E prompts (offer_add, offer_remove); v26: pictures in windows (offer_active ends it); v27: mod messages
 inline bool has_v25() { return api() && api()->size >= offsetof(EmfApi, offer_remove) + sizeof(api()->offer_remove); }
 inline bool has_v26() { return api() && api()->size >= offsetof(EmfApi, offer_active) + sizeof(api()->offer_active); }

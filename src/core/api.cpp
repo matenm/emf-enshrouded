@@ -35,6 +35,7 @@
 #include "path_glue.h"
 #include "remove_building.h"
 #include "spawn.h"
+#include "block_glue.h"
 #include "teleport.h"
 #include "component_service.h"
 #include "offers.h"
@@ -1730,6 +1731,67 @@ std::optional<PlayerInfo> player_info_of(EmfWorld* w, uint32_t player, uint8_t* 
     return read_player_info(entry, player);
 }
 
+// v44: breaking blocks (block_glue.h: the emf_blocks program; the reads after a step).
+uint32_t api_break_blocks(EmfWorld* w, EmfBreakBlocks* req, EmfBreakCallback cb, void* user) {
+    auto refuse = [&](const std::string& why) -> uint32_t {
+        if (req && req->size >= kBreakBlocksV44Size) {
+            const size_t n = (std::min)(why.size(), sizeof req->why - 1);
+            std::memcpy(req->why, why.data(), n);
+            req->why[n] = 0;
+        }
+        std::string line = "break_blocks refused: " + why;
+        if (g_state) {  // a mod retrying every step: the same line once per 10 s
+            std::lock_guard<std::mutex> l(g_state->put_refusals_lock);
+            line = g_state->put_refusals.pass(line, now());
+        }
+        if (!line.empty()) core_log(line);
+        return 0u;
+    };
+    if (!req) return refuse("no request");
+    if (req->size < kBreakBlocksV44Size) return refuse("the request's size is too small (set size = sizeof(EmfBreakBlocks))");
+    if (!w || WorldView(raw(w)).kind() != EMF_WORLD_SERVER)
+        return refuse("not a server world (a joined game cannot break blocks: do it on the host or the dedicated server)");
+    EmfBreakBlocks copy{};  // what v44 knows of a later version's larger struct
+    std::memcpy(&copy, req, (std::min)(static_cast<size_t>(req->size), sizeof copy));
+    copy.size = sizeof copy;
+    std::string why;
+    const uint32_t id = blocks_request(copy, cb, user, &why);
+    if (!id) return refuse(why);
+    req->why[0] = 0;
+    return id;
+}
+
+// Copies a block's facts into the caller's struct, keeping its size field.
+void put_block_info(EmfBlockInfo* out, const EmfBlockInfo& info) {
+    const uint32_t size = out->size;
+    std::memcpy(out, &info, (std::min)(static_cast<size_t>(size), sizeof info));
+    out->size = size;
+}
+
+bool api_block_at(EmfWorld* w, float x, float y, float z, EmfBlockInfo* out) {
+    if (!out || out->size < kBlockInfoV44Size || !world_call_allowed(w, "block_at")) return false;
+    EmfBlockInfo info{};
+    std::string why;
+    if (!blocks_block_at(w, x, y, z, &info, &why)) {
+        log_once("block_at refused: " + why);
+        return false;
+    }
+    put_block_info(out, info);
+    return true;
+}
+
+bool api_find_wall(EmfWorld* w, const float from[3], const float to[3], EmfBlockInfo* out) {
+    if (!out || !from || !to || out->size < kBlockInfoV44Size || !world_call_allowed(w, "find_wall")) return false;
+    EmfBlockInfo info{};
+    std::string why;
+    if (!blocks_find_wall(w, from, to, &info, &why)) {
+        if (!why.empty()) log_once("find_wall refused: " + why);
+        return false;
+    }
+    put_block_info(out, info);
+    return true;
+}
+
 // v43: the PlayerPermissions byte of the player's BasicPlayerInfos entry (server world).
 bool api_player_permissions(EmfWorld* w, uint32_t player, uint32_t* perms) {
     if (perms) *perms = 0;
@@ -2594,6 +2656,9 @@ const EmfApi kApi = {
     api_enemy_move_cancel,
     api_enemy_moving,
     api_player_permissions,
+    api_break_blocks,  // v44
+    api_block_at,
+    api_find_wall,
 };
 
 bool guarded_chat_call(EmfChatCallback cb, EmfWorld* w, uint64_t account, uint32_t entity, const char* text, void* user) {

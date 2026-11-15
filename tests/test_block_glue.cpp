@@ -4,11 +4,16 @@
 
 #include <cstring>
 #include <functional>
+#include <map>
+#include <tuple>
 #include <string>
 #include <vector>
 
 #include "common/offsets.h"
+#include "core/api.h"
+#include "core/api_sizes.h"
 #include "core/block_glue.h"
+#include "core/dispatcher.h"
 #include "core/system_programs.h"
 #include "emf/emf_api.h"
 #include "fake_world.h"
@@ -113,6 +118,38 @@ bool f_kernel(void* op, void* undo, void* stats, const void* table, const float*
     return true;
 }
 
+// the voxel region read (1x1x1 requests) over a map of cells, and the damage store's get
+std::map<std::tuple<int, int, int>, uint16_t> g_voxels;
+void* g_editor_seen = nullptr;
+struct Req {
+    uint16_t* buf;
+    uint64_t cap;
+    uint32_t sx, sy, sz, level;
+    int32_t x, y, z, pad;
+};
+static_assert(sizeof(Req) == 0x30, "the game's request stride");
+bool f_region(const void* slice, void* editor) {
+    struct S {
+        const Req* data;
+        uint64_t count;
+    };
+    const auto* sl = static_cast<const S*>(slice);
+    CHECK(sl->count == 1);
+    const Req& r = sl->data[0];
+    CHECK(r.sx == 1);
+    CHECK(r.sy == 1);
+    CHECK(r.sz == 1);
+    CHECK(r.level == 6);
+    g_editor_seen = editor;
+    const auto it = g_voxels.find({r.x, r.y, r.z});
+    r.buf[0] = it == g_voxels.end() ? 0 : it->second;
+    return true;
+}
+uint8_t f_damage_get(void* store, const uint32_t cell[3]) {
+    CHECK(store == g_damage);
+    return cell[0] == 20 ? 34 : 0;
+}
+
 std::vector<std::string> g_log;
 struct Drop {
     uint8_t guid0;
@@ -135,7 +172,7 @@ struct Fixture {
     SystemPrograms programs;
     std::vector<std::function<void(EmfWorld*)>> after;
     FakeProgramCtx ctx;
-    explicit Fixture(bool with_kernel = true) : ctx(w.p()) {
+    explicit Fixture(bool with_kernel = true, bool with_region = true) : ctx(w.p()) {
         programs.reset();
         g_calls.clear();
         g_log.clear();
@@ -147,6 +184,8 @@ struct Fixture {
         g_removed = 2;
         g_removed_straw = 0;
         g_now = 1000;
+        g_voxels.clear();
+        g_editor_seen = nullptr;
         set_cfg(7, 4, 1000, 8, 0x77);
         set_cfg(2, 0, 100, 4, 0x22);
         void* gs = g_settings;
@@ -167,6 +206,8 @@ struct Fixture {
         BlockGlueDeps d;
         d.fns.kernel = with_kernel ? f_kernel : nullptr;
         d.fns.config_find = f_config;
+        d.fns.region_read = with_region ? f_region : nullptr;
+        d.fns.damage_get = f_damage_get;
         d.log = [](const std::string& s) { g_log.push_back(s); };
         d.after_step = [this](std::function<void(EmfWorld*)> fn) { after.push_back(std::move(fn)); };
         d.now_ms = [] { return g_now; };
@@ -369,4 +410,106 @@ TEST_CASE("block glue: a new world answers waiting requests CANCELLED") {
     f.after[0](f.world());
     REQUIRE(g_answers.size() == 1);
     CHECK(g_answers[0].r.status == EMF_BREAK_CANCELLED);
+}
+
+namespace {
+// Runs fn as a server world callback (block_at and find_wall are refused anywhere else).
+struct InCallback {
+    std::function<void(EmfWorld*)> fn;
+};
+void run_in_callback(EmfWorld* w, uint8_t kind, std::function<void(EmfWorld*)> fn) {
+    Dispatcher d;
+    InCallback c{std::move(fn)};
+    d.post(kind, [](EmfWorld* world, void* u) { static_cast<InCallback*>(u)->fn(world); }, &c);
+    d.run(w, kind, [](const std::string&) {});
+}
+}  // namespace
+
+TEST_CASE("api block_at (v44): a server world callback only; the voxel decoded with its material facts and damage") {
+    Fixture f;
+    g_voxels[{20, 40, 60}] = 0xFF87;  // stone at 10..10.5, 20..20.5, 30..30.5 m
+    const EmfApi* api = api_table();
+    EmfBlockInfo out{};
+    out.size = sizeof out;
+    CHECK_FALSE(api->block_at(f.world(), 10.2f, 20.2f, 30.2f, &out));  // not inside a world callback
+    bool ok = false;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->block_at(w, 10.2f, 20.2f, 30.2f, &out); });
+    REQUIRE(ok);
+    CHECK(out.kind == EMF_BLOCK_BUILDING);
+    CHECK(out.material == 7);
+    CHECK(out.fill == 255);
+    CHECK(out.hardness == 4);
+    CHECK(out.health == 1000);
+    CHECK(out.damage == 34);
+    CHECK(out.x == doctest::Approx(10.25));
+    CHECK(out.y == doctest::Approx(20.25));
+    CHECK(out.z == doctest::Approx(30.25));
+    CHECK(g_editor_seen == g_editor);
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->block_at(w, 1.2f, 2.2f, 3.2f, &out); });
+    REQUIRE(ok);
+    CHECK(out.kind == EMF_BLOCK_EMPTY);
+}
+
+TEST_CASE("api find_wall (v44): the first building block on the line; refused off the server world") {
+    Fixture f;
+    g_voxels[{20, 40, 60}] = 0xFF87;
+    const float from[3] = {8.1f, 20.2f, 30.2f}, to[3] = {12.1f, 20.2f, 30.2f};
+    EmfBlockInfo out{};
+    out.size = sizeof out;
+    bool ok = false;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->find_wall(w, from, to, &out); });
+    REQUIRE(ok);
+    CHECK(out.material == 7);
+    CHECK(out.x == doctest::Approx(10.25));
+    CHECK(out.damage == 34);
+    const float clear[3] = {8.1f, 25.2f, 30.2f}, clear_to[3] = {12.1f, 25.2f, 30.2f};
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->find_wall(w, clear, clear_to, &out); });
+    CHECK_FALSE(ok);
+    f.w.put<uint8_t>(off::kKind, EMF_WORLD_CLIENT);
+    run_in_callback(f.world(), EMF_WORLD_CLIENT, [&](EmfWorld* w) { ok = api_table()->find_wall(w, from, to, &out); });
+    CHECK_FALSE(ok);
+}
+
+TEST_CASE("api find_wall (v44): without the region read signature nothing is read") {
+    Fixture f(/*with_kernel=*/true, /*with_region=*/false);
+    g_voxels[{20, 40, 60}] = 0xFF87;
+    const float from[3] = {8.1f, 20.2f, 30.2f}, to[3] = {12.1f, 20.2f, 30.2f};
+    EmfBlockInfo out{};
+    out.size = sizeof out;
+    bool ok = true;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->find_wall(w, from, to, &out); });
+    CHECK_FALSE(ok);
+}
+
+TEST_CASE("api break_blocks (v44): queued on a server world; refused on a client world with the reason written") {
+    Fixture f;
+    const EmfApi* api = api_table();
+    EmfBreakBlocks r{};
+    r.size = sizeof r;
+    r.x = 1;
+    r.y = 2;
+    r.z = 3;
+    CHECK(api->break_blocks(f.world(), &r, on_done, nullptr) != 0);
+    CHECK(r.why[0] == 0);
+    r.radius = 9;
+    CHECK(api->break_blocks(f.world(), &r, on_done, nullptr) == 0);
+    CHECK(std::string(r.why).find("radius") != std::string::npos);
+    r.radius = 1;
+    f.w.put<uint8_t>(off::kKind, EMF_WORLD_CLIENT);
+    CHECK(api->break_blocks(f.world(), &r, on_done, nullptr) == 0);
+    CHECK(std::string(r.why).find("server") != std::string::npos);
+    CHECK(api->break_blocks(f.world(), nullptr, on_done, nullptr) == 0);
+}
+
+TEST_CASE("api table (v44): break_blocks, block_at and find_wall appended; version 44") {
+    const EmfApi* api = api_table();
+    CHECK(api->version == 44u);
+    CHECK(EMF_API_VERSION == 44);
+    CHECK(api->size == kApiV44Size);
+    CHECK(offsetof(EmfApi, break_blocks) == kApiV43Size);
+    CHECK(api->break_blocks != nullptr);
+    CHECK(api->block_at != nullptr);
+    CHECK(api->find_wall != nullptr);
+    CHECK(kBlockInfoV44Size == sizeof(EmfBlockInfo));
+    CHECK(kBreakResultV44Size == sizeof(EmfBreakResult));
 }

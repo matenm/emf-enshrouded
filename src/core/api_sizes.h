@@ -64,6 +64,9 @@ constexpr uint32_t kApiV42Size = kApiV40Size;  // v42 (0.6.11): the version only
 constexpr uint32_t kPathResultV37Size = EMF_FIELD_END(EmfPathResult, length);  // before v42's doors
 constexpr uint32_t kApiV43Size = EMF_FIELD_END(EmfApi, player_permissions);
 constexpr uint32_t kBreakBlocksV44Size = EMF_FIELD_END(EmfBreakBlocks, why);
+constexpr uint32_t kBreakResultV44Size = EMF_FIELD_END(EmfBreakResult, dropped);
+constexpr uint32_t kBlockInfoV44Size = EMF_FIELD_END(EmfBlockInfo, z);
+constexpr uint32_t kApiV44Size = EMF_FIELD_END(EmfApi, find_wall);
 constexpr uint32_t kUiWidgetV24Size = EMF_FIELD_END(EmfUiWidget, pad);  // 56: a v24/v25 mod's widget_size
 
 // The x64 layouts mods are built with. A field that moves breaks every built mod; appending one changes sizeof only:
@@ -155,8 +158,14 @@ static_assert(offsetof(EmfApi, enemy_order) == kApiV38Size && kApiV39Size == 106
               "EmfApi layout (v39 appends enemy_order, enemy_order_cancel, enemy_target)");
 static_assert(offsetof(EmfApi, enemy_move) == kApiV39Size && kApiV40Size == 1088,
               "EmfApi layout (v40 appends enemy_move, enemy_move_cancel, enemy_moving)");
-static_assert(offsetof(EmfApi, player_permissions) == kApiV40Size && kApiV43Size == 1096 && sizeof(EmfApi) == kApiV43Size,
+static_assert(offsetof(EmfApi, player_permissions) == kApiV40Size && kApiV43Size == 1096,
               "EmfApi layout (v43 appends player_permissions)");
+static_assert(offsetof(EmfApi, break_blocks) == kApiV43Size && kApiV44Size == 1120 && sizeof(EmfApi) == kApiV44Size,
+              "EmfApi layout (v44 appends break_blocks, block_at, find_wall)");
+static_assert(kBreakResultV44Size == 20 && sizeof(EmfBreakResult) == 20, "EmfBreakResult layout (v44)");
+static_assert(kBlockInfoV44Size == 40 && sizeof(EmfBlockInfo) == 40 && offsetof(EmfBlockInfo, damage) == 24 &&
+                  offsetof(EmfBlockInfo, x) == 28,
+              "EmfBlockInfo layout (v44)");
 static_assert(kBreakBlocksV44Size == 160 && sizeof(EmfBreakBlocks) == 160 && offsetof(EmfBreakBlocks, damage) == 28 &&
                   offsetof(EmfBreakBlocks, materials) == 56 && offsetof(EmfBreakBlocks, why) == 64,
               "EmfBreakBlocks layout (v44)");

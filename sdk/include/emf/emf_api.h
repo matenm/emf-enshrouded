@@ -1,4 +1,4 @@
-/* EMF (Enshrouded Modding Framework) C API, version 43 (see EMF_API_VERSION).
+/* EMF (Enshrouded Modding Framework) C API, version 44 (see EMF_API_VERSION).
  *
  * A mod is a DLL in <game>/emf/mods/ that exports:
  *     extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api);
@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define EMF_API_VERSION 43
+#define EMF_API_VERSION 44
 
 /* World kinds (the byte at the entity storage + 8: world+0xE15DC8 on build 1273043, world+0xE179C8 on 1283531). */
 #define EMF_WORLD_SERVER 0
@@ -1631,6 +1631,20 @@ typedef struct EmfApi {
      * here, or on a client world. Server world (a game you host or the dedicated server); same thread rules as
      * get_component. EMF's own chat admins ([chat] admins) are another list: EmfNetFrom.admin and command senders. */
     bool (*player_permissions)(EmfWorld* world, uint32_t player, uint32_t* perms);
+
+    /* ---- v44: breaking player-built blocks (EmfBreakBlocks, EmfBlockInfo); never terrain ---- */
+    /* Queues a break of the building blocks in a sphere (or a column of spheres) for the next server step. Returns its
+     * id (from 1), or 0 with req->why: not the server world (a joined game cannot break blocks), not available on this
+     * game version (or off after a fault), bad numbers, 64 breaks waiting. cb (may be NULL) gets the result once: after
+     * the step that ran it, on the server world's thread, or EMF_BREAK_CANCELLED when the world ends first. Any thread.
+     * At most 8 spheres run per step (all mods together); the rest wait their turn. */
+    uint32_t (*break_blocks)(EmfWorld* world, EmfBreakBlocks* req, EmfBreakCallback cb, void* user);
+    /* What is at a point (metres): *out (out->size = sizeof(EmfBlockInfo)). False: not inside a world callback on the
+     * server world, not available on this game version, or the place is not loaded. */
+    bool (*block_at)(EmfWorld* world, float x, float y, float z, EmfBlockInfo* out);
+    /* The first building block on the line from `from` to `to` (metres; at most 64 m of it), with its centre. False
+     * when the line is clear, or for the reasons block_at gives. */
+    bool (*find_wall)(EmfWorld* world, const float from[3], const float to[3], EmfBlockInfo* out);
 } EmfApi;
 
 #define EMF_ITEM_NAME_GAME_TEXT 1u /* v29 item_name: the player's language even where EMF's screens cannot draw it */

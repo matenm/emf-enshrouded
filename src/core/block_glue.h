@@ -70,6 +70,11 @@ void blocks_server_tick(uint64_t now_ms);
 // blocks_unavailable_why() says from then on.
 void blocks_stop(const std::string& why = "off (the emf_blocks program could not be added)");
 
+// block_at / find_wall (API v44), on the server world's thread between steps (inside a world callback): the voxel at a
+// point, the first building block on a line. False and *why when refused ("" with false: find_wall's line is clear).
+bool blocks_block_at(EmfWorld* w, float x, float y, float z, EmfBlockInfo* out, std::string* why);
+bool blocks_find_wall(EmfWorld* w, const float from[3], const float to[3], EmfBlockInfo* out, std::string* why);
+
 // The material facts of every building id through the config lookup (false: the lookup is missing or faulted).
 bool blocks_read_facts(void* efficiency_registry, MaterialFacts out[128]);
 

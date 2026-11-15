@@ -13,6 +13,7 @@
 
 #include "common/seh.h"
 #include "common/world_view.h"
+#include "core/voxel_read.h"
 
 namespace emf::core {
 
@@ -215,7 +216,124 @@ void blocks_program(void* ctx, void*) {
     deliver(std::move(done), std::move(drops));
 }
 
+// ---- the reads (block_at, find_wall) ----
+struct ReadReq {
+    uint16_t* buf;
+    uint64_t cap;
+    uint32_t sx, sy, sz, level;
+    int32_t x, y, z, pad;
+};
+static_assert(sizeof(ReadReq) == 0x30, "the region read's request stride");
+struct ReadSlice {
+    const ReadReq* data;
+    uint64_t count;
+};
+constexpr uint32_t kReadLevel = 6;  // the level every VoxelWorld caller reads (the full 0.5 m cells)
+
+bool call_region(decltype(BlockFns::region_read) fn, const ReadSlice* s, void* editor, bool* ok) {
+    __try {
+        *ok = fn(s, editor);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+bool call_damage(decltype(BlockFns::damage_get) fn, void* store, const uint32_t cell[3], uint8_t* out) {
+    __try {
+        *out = fn(store, cell);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+std::atomic<bool> g_reads_off{false};
+
+struct Reads {
+    void* editor = nullptr;
+    void* damage_store = nullptr;
+    MaterialFacts facts[128] = {};
+};
+
+bool reads_for(EmfWorld* w, Reads& r, std::string* why) {
+    auto refuse = [&](const char* text) {
+        if (why) *why = text;
+        return false;
+    };
+    if (!w || WorldView(reinterpret_cast<uint8_t*>(w)).kind() != EMF_WORLD_SERVER)
+        return refuse("not a server world (a joined game has no blocks to read: ask on the host or the dedicated server)");
+    if (!g_deps.fns.region_read || g_reads_off.load()) return refuse("not available on this game version");
+    const WorldView view(reinterpret_cast<uint8_t*>(w));
+    const auto* vw = static_cast<const uint8_t*>(view.singleton("VoxelWorld"));
+    if (!vw || !seh_read(vw + 8, &r.editor, 8) || !r.editor) return refuse("the world has no voxel editor yet");
+    blocks_read_facts(view.singleton("TerraformingEfficiencyRegistry"), r.facts);  // unknown facts: 0 health
+    r.damage_store = view.singleton("ServerVoxelDamageSystem");
+    return true;
+}
+
+VoxelReader reader_of(const Reads& r) {
+    return [&r](int32_t x, int32_t y, int32_t z, uint16_t* v) -> bool {
+        *v = 0;
+        const ReadReq q{v, 1, 1, 1, 1, kReadLevel, x, y, z, 0};
+        const ReadSlice s{&q, 1};
+        bool ok = false;
+        if (!call_region(g_deps.fns.region_read, &s, r.editor, &ok)) {
+            if (!g_reads_off.exchange(true)) say("block reads off (the game's voxel region read faulted)");
+            return false;
+        }
+        return ok;
+    };
+}
+
+void fill_damage(const Reads& r, EmfBlockInfo& b) {
+    b.damage = -1;
+    if (b.kind != EMF_BLOCK_BUILDING || !g_deps.fns.damage_get || !r.damage_store) return;
+    const uint32_t cell[3] = {static_cast<uint32_t>(std::floor(b.x * 2.0f)), static_cast<uint32_t>(std::floor(b.y * 2.0f)),
+                              static_cast<uint32_t>(std::floor(b.z * 2.0f))};
+    uint8_t d = 0;
+    if (call_damage(g_deps.fns.damage_get, r.damage_store, cell, &d)) b.damage = d;
+}
+
 }  // namespace
+
+bool blocks_block_at(EmfWorld* w, float x, float y, float z, EmfBlockInfo* out, std::string* why) {
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+        if (why) *why = "the point is not a number";
+        return false;
+    }
+    auto r = std::make_unique<Reads>();
+    if (!reads_for(w, *r, why)) return false;
+    const auto cx = static_cast<int32_t>(std::floor(x * 2.0f)), cy = static_cast<int32_t>(std::floor(y * 2.0f)),
+               cz = static_cast<int32_t>(std::floor(z * 2.0f));
+    uint16_t v = 0;
+    if (!reader_of(*r)(cx, cy, cz, &v)) {
+        if (why) *why = "that place is not loaded";
+        return false;
+    }
+    EmfBlockInfo b = decode_voxel(v, r->facts);
+    b.x = (static_cast<float>(cx) + 0.5f) / 2.0f;
+    b.y = (static_cast<float>(cy) + 0.5f) / 2.0f;
+    b.z = (static_cast<float>(cz) + 0.5f) / 2.0f;
+    fill_damage(*r, b);
+    *out = b;
+    return true;
+}
+
+bool blocks_find_wall(EmfWorld* w, const float from[3], const float to[3], EmfBlockInfo* out, std::string* why) {
+    if (why) why->clear();
+    for (int a = 0; a < 3; ++a)
+        if (!std::isfinite(from[a]) || !std::isfinite(to[a])) {
+            if (why) *why = "a point is not a number";
+            return false;
+        }
+    auto r = std::make_unique<Reads>();
+    if (!reads_for(w, *r, why)) return false;
+    const auto hit = first_building_on_line(from, to, reader_of(*r), r->facts);
+    if (!hit) return false;
+    EmfBlockInfo b = *hit;
+    fill_damage(*r, b);
+    *out = b;
+    return true;
+}
 
 void fill_block_op(uint8_t op[kBlockOpBytes], const BlockHandles& h, bool instant) {
     std::memset(op, 0, kBlockOpBytes);
@@ -255,6 +373,7 @@ ProgramSpec blocks_setup(BlockGlueDeps deps) {
     g_service = std::make_unique<BlockService>();
     g_drops.clear();
     g_watchdog_said = g_cb_fault_said = g_kernel_said = g_factor_said = false;
+    g_reads_off = false;
     g_last_run_ms = now();
     const bool usable = g_deps.fns.kernel && g_deps.fns.config_find;
     {

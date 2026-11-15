@@ -161,6 +161,7 @@ add_library(emf_core_lib STATIC
   src/core/block_rules.cpp
   src/core/block_service.cpp
   src/core/block_glue.cpp
+  src/core/voxel_read.cpp
   src/core/save_events.cpp
   src/core/fault_report.cpp
   src/core/world_jobs.cpp
@@ -494,6 +495,7 @@ add_executable(emf_tests
   tests/test_block_rules.cpp
   tests/test_block_service.cpp
   tests/test_block_glue.cpp
+  tests/test_voxel_read.cpp
   tests/test_enemy_orders.cpp
   tests/test_teleport.cpp
   tests/test_api_teleport.cpp

@@ -800,11 +800,12 @@ TEST_CASE("api table (v42): version 42 or newer (0.6.11: EmfPathResult.doors); v
     CHECK(sizeof(EmfPathResult) > kPathResultV37Size);
 }
 
-TEST_CASE("api table (v43): version 43 appends player_permissions") {
+TEST_CASE("api table (v43): version 43 appended player_permissions") {
     const EmfApi* api = emf::core::api_table();
-    CHECK(api->version == 43u);
-    CHECK(EMF_API_VERSION == 43);
-    CHECK(api->size == kApiV43Size);
+    CHECK(api->version >= 43u);
+    CHECK(EMF_API_VERSION >= 43);
+    CHECK(api->size >= kApiV43Size);
+    CHECK(offsetof(EmfApi, player_permissions) + sizeof(api->player_permissions) == kApiV43Size);
     CHECK(offsetof(EmfApi, player_permissions) == kApiV40Size);
 }
 
