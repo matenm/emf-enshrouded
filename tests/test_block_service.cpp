@@ -220,5 +220,5 @@ TEST_CASE("block service: instant requests use table 1.0, damage requests health
     CHECK(f.instants[0]);
     CHECK(f.stone_entries[0] == 1.0f);
     CHECK_FALSE(f.instants[1]);
-    CHECK(f.stone_entries[1] == doctest::Approx(1000.0 / (48 * 2)));
+    CHECK(f.stone_entries[1] == doctest::Approx(1000.0 / (50 * 2)));
 }

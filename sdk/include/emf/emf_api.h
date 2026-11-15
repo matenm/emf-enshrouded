@@ -822,8 +822,8 @@ typedef void (*EmfMoveCallback)(EmfWorld* world, uint32_t id, uint32_t status, v
 #define EMF_BREAK_DONE 0u
 #define EMF_BREAK_CANCELLED 1u /* the world ended first */
 #define EMF_BREAK_FAILED 2u    /* a game call faulted: breaking is off until a restart */
-/* EmfBreakBlocks.damage when all five are 0: about a T4 pickaxe (Soft, SlightlyHard, ModeratelyHard, Hard, VeryHard) */
-#define EMF_BREAK_DEFAULT_DAMAGE {83, 79, 72, 60, 48}
+/* EmfBreakBlocks.damage when all five are 0: the game's T4 pickaxe (Soft, SlightlyHard, ModeratelyHard, Hard, VeryHard) */
+#define EMF_BREAK_DEFAULT_DAMAGE {100, 100, 95, 60, 50}
 typedef struct EmfBreakBlocks {
     uint32_t size;            /* sizeof(EmfBreakBlocks) */
     uint32_t flags;           /* EMF_BREAK_INSTANT, EMF_BREAK_DROPS */

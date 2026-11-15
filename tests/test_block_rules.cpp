@@ -51,11 +51,11 @@ TEST_CASE("block rules: damage table: hits = health / (damage x mining factor), 
     Facts facts;
     float t[256];
     build_break_table(facts.f, damage_spec(), 1.0f, t);
-    CHECK(t[128 + 7] == doctest::Approx(1000.0 / 48));
-    CHECK(t[128 + 2] == doctest::Approx(100.0 / 83));
-    CHECK(t[128 + 4] == doctest::Approx(250.0 / 72));
+    CHECK(t[128 + 7] == doctest::Approx(1000.0 / 50));  // the game's T4 pickaxe: 100/100/95/60/50
+    CHECK(t[128 + 2] == doctest::Approx(100.0 / 100));
+    CHECK(t[128 + 4] == doctest::Approx(250.0 / 95));
     build_break_table(facts.f, damage_spec(), 1.5f, t);
-    CHECK(t[128 + 7] == doctest::Approx(1000.0 / 72));
+    CHECK(t[128 + 7] == doctest::Approx(1000.0 / 75));
 }
 
 TEST_CASE("block rules: terrain entries are always 0") {
