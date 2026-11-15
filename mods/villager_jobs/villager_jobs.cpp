@@ -1,4 +1,6 @@
-// villager_jobs: an EMF mod. Villagers work for you at a chest, through the game's own systems (host only).
+// villager_jobs: an EMF mod. Villagers work for you at a chest, through the game's own systems. The host's key is read
+// here; players who joined (a dedicated server, someone else's game) send theirs over villager_jobs/ui (remote_logic.h),
+// and only admins (the host, [chat] admins) give, change and stop jobs.
 //   Look at a villager and press the jobs key (default K): it is chosen. Look at a chest and hold the key: a wheel asks
 //   what to do there: farm the crops near the chest (harvest into it; the plants grow again; planted trees and fruit
 //   trees are left alone), tend the animals near it
@@ -21,8 +23,11 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -31,6 +36,7 @@
 #include "emf/generated/components.hpp"
 #include "game_data.h"
 #include "jobs_logic.h"
+#include "remote_logic.h"
 
 namespace gen = emf::gen;
 
@@ -60,6 +66,27 @@ jobs::WorkConfig g_work;
 jobs::JobBook g_book;  // server thread
 jobs::Assigner* g_assigner = nullptr;
 bool g_key_down = false;
+
+// Players who joined (remote_logic.h): the channel, the server's state per player, the player's game's state.
+namespace remote = jobs::remote;
+constexpr uint32_t kClientSteps = 180;  // the client world stepping this often without a server step: someone else's game
+bool g_net = false;                     // the villager_jobs/ui channel is open (EMF API v27)
+std::atomic<uint32_t> g_client_steps{0};
+bool g_client_key_down = false;         // the player's game (client world thread)
+remote::ClientGate g_gate;              // the player's game (client world thread)
+uint64_t g_no_server_said = 0;          // the player's game: when "the server does not answer" was last shown
+
+// Who pressed the jobs key: the host (its own screen) or a player who joined (their game shows the notes and wheels).
+struct Asker {
+    uint32_t player = 0;   // their entity in the server world
+    uint64_t account = 0;  // a joined player's account (the host: 0)
+    bool remote = false;
+    bool admin = true;     // may give, change and stop jobs
+    std::string key_name;  // the key the notes name (a joined player's own)
+};
+using WheelPick = std::function<void(emf::World, int)>;
+remote::WheelDesk<WheelPick> g_desk;                                            // server thread
+std::map<uint64_t, std::pair<std::string, jobs::Assigner>> g_remote_assigners;  // server thread: account -> key, choice
 uint64_t g_last_tick_ms = 0;
 uint32_t g_session = 0;
 std::atomic<uint16_t> g_slot{0};             // world slot of the loaded save (0 = none yet)
@@ -90,6 +117,58 @@ struct WheelContext {
     std::vector<uint64_t> intervals;
     std::vector<jobs::Timing> timings;
 };
+
+Asker host_asker() {
+    Asker a;
+    a.player = emf::local_player();
+    a.key_name = g_cfg.key_name;
+    return a;
+}
+
+std::string format(const char* f, ...) {
+    char b[512];
+    va_list v;
+    va_start(v, f);
+    vsnprintf(b, sizeof(b), f, v);
+    va_end(v);
+    return b;
+}
+
+jobs::Assigner& assigner_of(const Asker& a) {
+    if (!a.remote) return *g_assigner;
+    auto it = g_remote_assigners.find(a.account);
+    if (it == g_remote_assigners.end() || it->second.first != a.key_name)  // a new key name: notes name it from now on
+        it = g_remote_assigners.insert_or_assign(a.account, std::make_pair(a.key_name, jobs::Assigner(a.key_name))).first;
+    return it->second.second;
+}
+
+// A note: on the host's screen, or on a joined player's game.
+void tell(emf::World w, const Asker& a, const std::string& text) {
+    if (!a.remote) {
+        emf::api()->notify("%s", text.c_str());
+        return;
+    }
+    const std::string m = remote::encode_note(text);
+    emf::api()->net_to_player(w.raw(), a.player, remote::kChannel, m.data(), static_cast<uint32_t>(m.size()));
+}
+
+// A note of a running job: the host, and every player who joined with the channel (the host's own game drops the copy
+// it gets in process).
+void tell_everyone(emf::World w, const std::string& text) {
+    emf::api()->notify("%s", text.c_str());
+    if (!g_net) return;
+    const std::string m = remote::encode_note(text);
+    emf::api()->net_to_players(w.raw(), remote::kChannel, m.data(), static_cast<uint32_t>(m.size()));
+}
+
+// A wheel: the host's opens at once (held with the jobs key); a joined player's goes to their game, and its pick comes
+// back as a message (remote::WheelDesk). False when it could not open or be sent.
+bool ask_wheel(emf::World w, const Asker& a, const std::string& title, const std::vector<std::string>& labels, WheelPick pick) {
+    if (!a.remote) return emf::wheel(title.c_str(), labels, g_cfg.key_vk, EMF_WORLD_SERVER, std::move(pick));
+    const uint32_t seq = g_desk.open(a.account, std::move(pick), GetTickCount64());
+    const std::string m = remote::encode_wheel(seq, title, labels);
+    return emf::api()->net_to_player(w.raw(), a.player, remote::kChannel, m.data(), static_cast<uint32_t>(m.size()));
+}
 
 std::optional<jobs::Vec3> position(emf::World w, uint32_t id) {
     auto* t = w.get<gen::ecs::CurrentTransform>(id);
@@ -423,18 +502,18 @@ std::string job_label(emf::World w, const jobs::JobStatus& s) {
     return b;
 }
 
-void assign_work(emf::World w, uint32_t villager, uint32_t chest, jobs::JobKind kind, uint32_t chest2 = 0) {
+void assign_work(emf::World w, const Asker& a, uint32_t villager, uint32_t chest, jobs::JobKind kind, uint32_t chest2 = 0) {
     jobs::Job j{villager, chest, 0};
     j.kind = kind;
     j.chest2 = chest2;
     j = with_identity(w, j);
     if (!g_book.assign(j, GetTickCount64(), g_cfg.interval_ms)) {
-        emf::api()->notify("That job could not be given (the same chest twice?)");
+        tell(w, a, "That job could not be given (the same chest twice?)");
         return;
     }
     const auto* s = g_book.find(villager);
-    emf::api()->notify("Villager %u %s", villager, s ? job_label(w, *s).c_str() : "has a job");
-    if (g_assigner) g_assigner->reset();
+    tell(w, a, format("Villager %u %s", villager, s ? job_label(w, *s).c_str() : "has a job"));
+    if (g_assigner) assigner_of(a).reset();
 }
 
 // Villagers and chests within reach of the player, with the point the crosshair should be near.
@@ -491,7 +570,7 @@ void load_jobs(emf::World w, uint64_t now) {
     if (!saved.empty()) EMF_LOG(kMod, "%zu job(s) loaded for world slot %04x", saved.size(), slot);
 }
 
-void open_recipe_wheel(emf::World w, uint32_t villager, uint32_t chest) {
+void open_recipe_wheel(emf::World w, const Asker& a, uint32_t villager, uint32_t chest) {
     const auto contents = contents_of(w, chest);
     std::vector<std::string> labels;
     WheelContext ctx{villager, chest, {}, {}, {}};
@@ -504,23 +583,23 @@ void open_recipe_wheel(emf::World w, uint32_t villager, uint32_t chest) {
         if (labels.size() >= 64) break;
     }
     if (labels.empty()) {
-        emf::api()->notify("Villager %u can make nothing from chest %u yet: put materials in it", villager, chest);
+        tell(w, a, format("Villager %u can make nothing from chest %u yet: put materials in it", villager, chest));
         return;
     }
     const std::string title = "Villager " + std::to_string(villager) + ": make what?";
-    const bool ok = emf::wheel(title.c_str(), labels, g_cfg.key_vk, EMF_WORLD_SERVER, [ctx](emf::World w, int choice) {
+    const bool ok = ask_wheel(w, a, title, labels, [ctx, a](emf::World w, int choice) {
         if (choice < 0 || static_cast<size_t>(choice) >= ctx.recipes.size()) return;
         const jobs::Job j = with_identity(w, {ctx.villager, ctx.chest, ctx.recipes[choice]});
         g_book.assign(j, GetTickCount64(), ctx.intervals[choice], ctx.timings[choice]);
-        emf::api()->notify("Villager %u will make %s from chest %u", j.villager,
-                           recipe_name(w, j.villager, j.recipe).c_str(), j.chest);
-        if (g_assigner) g_assigner->reset();
+        tell(w, a, format("Villager %u will make %s from chest %u", j.villager, recipe_name(w, j.villager, j.recipe).c_str(),
+                          j.chest));
+        if (g_assigner) assigner_of(a).reset();
     });
-    if (!ok) emf::api()->notify("The wheel could not open (the console may be open; the log says why)");
+    if (!ok) tell(w, a, "The wheel could not open (the console may be open; the log says why)");
 }
 
 // The first wheel at a chest: which kind of job (the counts help the choice).
-void open_job_wheel(emf::World w, uint32_t villager, uint32_t chest) {
+void open_job_wheel(emf::World w, const Asker& a, uint32_t villager, uint32_t chest) {
     const auto c = position(w, chest);
     if (!c) return;
     const Scan s = scan_world(w);
@@ -542,25 +621,24 @@ void open_job_wheel(emf::World w, uint32_t villager, uint32_t chest) {
     snprintf(craft, sizeof(craft), "Craft (%zu recipes)", craftable);
     snprintf(gather, sizeof(gather), "Gather around here (%zu pickables)", pickables);
     const std::string title = "Villager " + std::to_string(villager);
-    const bool ok = emf::wheel(title.c_str(), {farm, tend, "Haul to another chest", craft, gather}, g_cfg.key_vk, EMF_WORLD_SERVER,
-                               [villager, chest](emf::World w, int choice) {
-                                   switch (choice) {
-                                       case 0: assign_work(w, villager, chest, jobs::JobKind::Farm); break;
-                                       case 1: assign_work(w, villager, chest, jobs::JobKind::Tend); break;
-                                       case 2:
-                                           if (g_assigner) g_assigner->want_haul_target(villager, chest, GetTickCount64());
-                                           emf::api()->notify("Look at the chest to haul to and press %s",
-                                                              g_cfg.key_name.c_str());
-                                           break;
-                                       case 3: open_recipe_wheel(w, villager, chest); break;
-                                       case 4: assign_work(w, villager, chest, jobs::JobKind::Gather); break;
-                                       default: break;
-                                   }
-                               });
-    if (!ok) emf::api()->notify("The wheel could not open (the console may be open; the log says why)");
+    const bool ok = ask_wheel(w, a, title, {farm, tend, "Haul to another chest", craft, gather},
+                              [a, villager, chest](emf::World w, int choice) {
+                                  switch (choice) {
+                                      case 0: assign_work(w, a, villager, chest, jobs::JobKind::Farm); break;
+                                      case 1: assign_work(w, a, villager, chest, jobs::JobKind::Tend); break;
+                                      case 2:
+                                          if (g_assigner) assigner_of(a).want_haul_target(villager, chest, GetTickCount64());
+                                          tell(w, a, "Look at the chest to haul to and press " + a.key_name);
+                                          break;
+                                      case 3: open_recipe_wheel(w, a, villager, chest); break;
+                                      case 4: assign_work(w, a, villager, chest, jobs::JobKind::Gather); break;
+                                      default: break;
+                                  }
+                              });
+    if (!ok) tell(w, a, "The wheel could not open (the console may be open; the log says why)");
 }
 
-void open_stop_wheel(emf::World w, uint32_t villager) {
+void open_stop_wheel(emf::World w, const Asker& a, uint32_t villager) {
     const auto* s = g_book.find(villager);
     if (!s) return;
     // The centre circle is small: the title is just the villager, the job goes on the "Stop working" slice.
@@ -577,35 +655,112 @@ void open_stop_wheel(emf::World w, uint32_t villager) {
         case jobs::JobKind::Haul: snprintf(stop, sizeof(stop), "Stop hauling (%u items moved)", s->work.done); break;
         case jobs::JobKind::Gather: snprintf(stop, sizeof(stop), "Stop gathering (%u brought in)", s->work.done); break;
     }
-    const bool ok = emf::wheel(title, {stop, "Keep working"}, g_cfg.key_vk, EMF_WORLD_SERVER,
-                               [villager](emf::World, int choice) {
-                                   if (choice != 0) return;
-                                   g_book.stop(villager);
-                                   emf::api()->notify("Villager %u stopped working", villager);
-                               });
-    if (!ok) emf::api()->notify("The wheel could not open (the console may be open; the log says why)");
+    const bool ok = ask_wheel(w, a, title, {stop, "Keep working"}, [a, villager](emf::World w, int choice) {
+        if (choice != 0) return;
+        g_book.stop(villager);
+        tell(w, a, format("Villager %u stopped working", villager));
+    });
+    if (!ok) tell(w, a, "The wheel could not open (the console may be open; the log says why)");
 }
 
-void on_key(emf::World w) {
-    const uint32_t player = emf::local_player();
-    auto* input = w.get<gen::ecs::PlayerInput>(player);
-    const auto pp = position(w, player);
+// The jobs key of the host or of a joined player: what they look at (their camera in the server world: a joined
+// player's game sends no position or id), then the assignment flow.
+void on_key(emf::World w, const Asker& a) {
+    const uint32_t player = a.player;
+    auto* input = player ? w.get<gen::ecs::PlayerInput>(player) : nullptr;
+    const auto pp = player ? position(w, player) : std::nullopt;
     if (!input || !pp) return;
     const auto& cam = input->fromClient.camera;
     const jobs::Vec3 cp{cam.position.x / kFixed, cam.position.y / kFixed, cam.position.z / kFixed};
     const jobs::Quat q{cam.orientation.x, cam.orientation.y, cam.orientation.z, cam.orientation.w};
     const auto target = jobs::pick_target(cp, q, *pp, candidates(w, *pp, player));
-    const bool has_job = target && target->kind == jobs::Kind::Villager && g_book.find(target->id);
-    const auto r = g_assigner->press(target, has_job, GetTickCount64());
-    EMF_LOG(kMod, "key: target %s %u -> %d", target ? (target->kind == jobs::Kind::Villager ? "villager" : "chest") : "none",
-            target ? target->id : 0, static_cast<int>(r.kind));
+    const auto* job = target && target->kind == jobs::Kind::Villager ? g_book.find(target->id) : nullptr;
+    if (!a.admin) {  // they may look, not give: a working villager's job, else why nothing happens
+        const std::string label = job ? job_label(w, *job) : std::string();
+        tell(w, a, remote::refused_press(target, job ? &label : nullptr));
+        EMF_LOG(kMod, "key of player 0x%016llx (no admin): target %u", static_cast<unsigned long long>(a.account),
+                target ? target->id : 0);
+        return;
+    }
+    const auto r = assigner_of(a).press(target, job != nullptr, GetTickCount64());
+    EMF_LOG(kMod, "key%s: target %s %u -> %d", a.remote ? " of a joined player" : "",
+            target ? (target->kind == jobs::Kind::Villager ? "villager" : "chest") : "none", target ? target->id : 0,
+            static_cast<int>(r.kind));
     switch (r.kind) {
-        case jobs::Assigner::Result::Notice: emf::api()->notify("%s", r.text.c_str()); break;
-        case jobs::Assigner::Result::OpenJobWheel: open_job_wheel(w, r.villager, r.chest); break;
-        case jobs::Assigner::Result::AssignHaul: assign_work(w, r.villager, r.chest, jobs::JobKind::Haul, r.chest2); break;
-        case jobs::Assigner::Result::OpenStopWheel: open_stop_wheel(w, r.villager); break;
+        case jobs::Assigner::Result::Notice: tell(w, a, r.text); break;
+        case jobs::Assigner::Result::OpenJobWheel: open_job_wheel(w, a, r.villager, r.chest); break;
+        case jobs::Assigner::Result::AssignHaul: assign_work(w, a, r.villager, r.chest, jobs::JobKind::Haul, r.chest2); break;
+        case jobs::Assigner::Result::OpenStopWheel: open_stop_wheel(w, a, r.villager); break;
         default: break;
     }
+}
+
+// ---- the villager_jobs/ui channel ----
+
+// The server: a joined player's key press or wheel pick (the server world's thread, after its step).
+void on_server_message(EmfWorld* raw, const EmfNetFrom* from, const void* data, uint32_t size, void*) {
+    if (!from || from->local || !from->player) return;  // the host's own keys are read on the server tick
+    const auto m = remote::decode(std::string(static_cast<const char*>(data), size));
+    static std::atomic<int> bad{0};
+    if (!m || (m->kind != remote::Msg::Key && m->kind != remote::Msg::Pick)) {
+        if (bad++ < 8)
+            EMF_LOG(kMod, "a broken message from player 0x%016llx: dropped", static_cast<unsigned long long>(from->account));
+        return;
+    }
+    emf::World w(raw);
+    if (m->kind == remote::Msg::Pick) {
+        if (auto pick = g_desk.take(from->account, m->seq, GetTickCount64())) (*pick)(w, m->choice);
+        return;
+    }
+    Asker a;
+    a.player = from->player;
+    a.account = from->account;
+    a.remote = true;
+    a.admin = from->admin != 0;
+    a.key_name = m->text;
+    on_key(w, a);
+}
+
+// A joined player's game: the server's notes and wheels (the client world's thread, after its step).
+void on_player_message(EmfWorld*, const EmfNetFrom* from, const void* data, uint32_t size, void*) {
+    if (from && from->local) return;  // the host's own game: its notes are on its screen already
+    const auto m = remote::decode(std::string(static_cast<const char*>(data), size));
+    if (!m) return;
+    if (m->kind == remote::Msg::Note) {
+        emf::api()->notify("%s", m->text.c_str());
+        return;
+    }
+    if (m->kind != remote::Msg::Wheel || !g_gate.take_wheel(GetTickCount64())) return;
+    const uint32_t seq = m->seq;
+    const bool ok = emf::wheel(m->text.c_str(), m->labels, g_cfg.key_vk, EMF_WORLD_CLIENT, [seq](emf::World, int choice) {
+        const std::string pick = remote::encode_pick(seq, choice);
+        if (emf::api()->net_to_server(remote::kChannel, pick.data(), static_cast<uint32_t>(pick.size())) && choice >= 0)
+            g_gate.picked(GetTickCount64());
+    });
+    if (!ok) emf::api()->notify("The wheel could not open (the console may be open; the log says why)");
+}
+
+// A joined player's game, each client world step: the jobs key goes to the server's Villager Jobs.
+void client_tick(emf::World) {
+    if (++g_client_steps <= kClientSteps) {  // the host's own game: its server tick reads the key
+        g_client_key_down = false;
+        return;
+    }
+    const bool down = emf::keys::down(g_cfg.key_vk);  // only with the game window in front
+    const bool pressed = down && !g_client_key_down;
+    g_client_key_down = down;
+    if (!pressed || !g_net) return;
+    const uint64_t now = GetTickCount64();
+    if (emf::api()->net_peer(nullptr, 0, remote::kChannel) != remote::kVersion) {
+        if (!g_no_server_said || now - g_no_server_said > 10000) {
+            g_no_server_said = now;
+            emf::api()->notify("Villager Jobs: this server does not run Villager Jobs 1.5 or newer, so %s does nothing here",
+                               g_cfg.key_name.c_str());
+        }
+        return;
+    }
+    const std::string m = remote::encode_key(g_cfg.key_name);
+    if (emf::api()->net_to_server(remote::kChannel, m.data(), static_cast<uint32_t>(m.size()))) g_gate.asked(now);
 }
 
 void run_jobs(emf::World w, uint64_t now) {
@@ -650,7 +805,7 @@ void run_jobs(emf::World w, uint64_t now) {
                 break;
             }
             case jobs::ActionKind::Notice:
-            case jobs::ActionKind::Dropped: emf::api()->notify("%s", a.text.c_str()); break;
+            case jobs::ActionKind::Dropped: tell_everyone(w, a.text); break;
             case jobs::ActionKind::GoToPos: send_npc_to(w, a.job.villager, a.pos); break;
             case jobs::ActionKind::Harvest:
             case jobs::ActionKind::Collect:
@@ -667,12 +822,18 @@ void run_jobs(emf::World w, uint64_t now) {
 }
 
 void on_tick(emf::World w) {
-    if (!w.is_server()) return;
+    if (!w.is_server()) {
+        if (w.is_client()) client_tick(w);
+        return;
+    }
+    g_client_steps = 0;
     const uint64_t now = GetTickCount64();
     const uint32_t session = emf::server_session();
     if (session != g_session) {  // a new hosted session: forget the old one's jobs until its save loads
         g_session = session;
         if (g_assigner) g_assigner->reset();
+        g_desk.clear();
+        g_remote_assigners.clear();
         for (const auto& j : g_book.jobs()) g_book.stop(j.villager);
         g_book.changed();
         if (g_loaded_session != session) g_slot = 0;  // jobs given before this session's save loads are not saved
@@ -686,7 +847,7 @@ void on_tick(emf::World w) {
         load_jobs(w, now);
     }
     const bool down = emf::keys::down(g_cfg.key_vk);  // only with the game window in front
-    if (down && !g_key_down) on_key(w);
+    if (down && !g_key_down && emf::local_player()) on_key(w, host_asker());
     g_key_down = down;
     if (now - g_last_tick_ms >= 500) {
         g_last_tick_ms = now;
@@ -762,7 +923,7 @@ void cmd_work(emf::World w, const std::vector<std::string>& a, jobs::JobKind kin
         EMF_REPLY("%u is not a villager, or a chest id is not a chest", v);
         return;
     }
-    assign_work(w, v, c, kind, c2);
+    assign_work(w, host_asker(), v, c, kind, c2);
     if (const auto* s = g_book.find(v)) EMF_REPLY("villager %u %s", v, job_label(w, *s).c_str());
     if (kind == jobs::JobKind::Gather)
         if (const auto at = position(w, c))
@@ -930,6 +1091,18 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         g_slot = slot;
         g_loaded_session = emf::server_session();
     }, nullptr);
+    if (emf::has_v27() && api->net_channel) {  // the jobs key for players who joined (remote_logic.h)
+        EmfNetChannel ch{};
+        ch.size = sizeof(ch);
+        ch.version = remote::kVersion;
+        ch.name = remote::kChannel;
+        ch.flags = EMF_NET_TO_SERVER | EMF_NET_TO_PLAYERS;
+        ch.max_size = remote::kMaxMessage;
+        ch.on_server = on_server_message;
+        ch.on_player = on_player_message;
+        g_net = api->net_channel(&ch);
+    }
+    if (!g_net) EMF_LOG(kMod, "the jobs key works for the host only (players who joined need EMF API v27 on both sides)");
     emf::add_command("jobs", ": the villagers' jobs", cmd_jobs);
     emf::add_command("job", "<villager> <chest> <recipe id hex>: give a villager a job (host)", cmd_job);
     emf::add_command("job.stop", "<villager>: end a villager's job", cmd_stop);

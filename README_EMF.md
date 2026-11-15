@@ -642,6 +642,14 @@ wild pickables around a chest.
 4. K on a working villager opens a wheel with "Stop farming (12 harvests)" (or the job it has: "Stop tending (3
    collected, 20 fed)", "Stop hauling (40 items moved)", "Stop gathering (5 brought in)") and "Keep working".
 
+**Players who joined** (a dedicated server, or someone else's hosted game) use K the same way when their own game has
+Villager Jobs 1.5 or newer turned on (their own key setting counts): their game sends the key press to the server's
+Villager Jobs, which picks what that player looks at and shows its notes and wheels on their screen. Only admins give,
+change and stop jobs: the host, and the accounts in `[chat] admins` of the server's `emf\emf_core.ini` (the same
+admins as for EMF's chat commands). For anyone else, K at a working villager says what it does. Notes of running jobs
+(a chest gone, out of materials) go to the host and to every player who joined with the mod. When the server has no
+Villager Jobs 1.5, K says so.
+
 How the work moves: a walk order makes the villager roam near its target, so it acts within 6 m of it; the order is
 repeated every 5 s, and a target it cannot get close to within 60 s is left alone for 2 minutes (noted once: villagers
 stay near their home area). Every item move is the game's own all-or-nothing transaction; a feed or haul whose target
