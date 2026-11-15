@@ -95,6 +95,8 @@ struct ChatSettings {
     bool everyone = false;  // every player may run commands
     std::vector<std::string> admins;  // account hashes as written, trimmed, in order
     bool has_players_key = false;     // the file has a players line (kept when saving)
+    bool game_admins = false;         // the game's own admins (the Admin group, a host's admins) may run every command
+    bool has_game_admins_key = false; // the file has a game_admins line (kept when saving)
 };
 ChatSettings parse_chat_settings(const std::string& ini_text);  // [chat], as the core reads it (GetPrivateProfile*)
 // The value of `key` in the first [section] of an ini text, as GetPrivateProfileString gives it (spaces and one pair of
@@ -115,7 +117,7 @@ struct AdminList {
 };
 // Admins as the page's box gives them: one per line (commas and spaces separate too); the same account once.
 AdminList parse_admin_lines(const std::string& text);
-// Writes admins, everyone (and players when it is on or the file has it) into emf\emf_core.ini, keeping its other keys,
+// Writes admins, everyone (and players and game_admins when on or the file has them) into emf\emf_core.ini, keeping its other keys,
 // its comments and its encoding (UTF-16 stays UTF-16). The file is made when it is missing.
 Change save_chat_settings(const std::wstring& folder, const ChatSettings& s);
 // ---- the mod check on join ([net] mods_check, mods_required, mods_info; src/core/mods_policy.h reads them the same way) ----

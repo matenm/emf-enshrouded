@@ -286,7 +286,17 @@ TEST_CASE("app server bridge: chat settings are checked and saved; a refused acc
     CHECK(text(*res, "text").find("next start") != std::string::npos);
     const ChatSettings saved = read_chat_settings(w.server.dir);
     CHECK(saved.everyone);
+    CHECK_FALSE(saved.game_admins);
     CHECK(saved.admins == std::vector<std::string>{"0x0123456789abcdef", "0xfedcba9876543210"});
+    res = last_of(b.handle(R"({"cmd":"server_chat_save","everyone":false,"game_admins":true,"admins":"0x0123456789abcdef"})"), "result");
+    CHECK(flag(*res, "ok"));
+    CHECK(read_chat_settings(w.server.dir).game_admins);
+    const auto st = last_of(b.handle(R"({"cmd":"state"})"), "state");
+    REQUIRE(st);
+    CHECK(flag(*st->get("server_tab")->get("chat"), "game_admins"));  // the page's switch shows it
+    res = last_of(b.handle(R"({"cmd":"server_chat_save","everyone":true,"admins":"0x0123456789abcdef\r\n0xfedcba9876543210\n"})"), "result");
+    CHECK(flag(*res, "ok"));
+    CHECK(read_chat_settings(w.server.dir).game_admins);  // a save without the switch leaves it as it is
 
     res = last_of(b.handle(R"({"cmd":"server_admin_add","account":"0x1111222233334444"})"), "result");
     CHECK(flag(*res, "ok"));

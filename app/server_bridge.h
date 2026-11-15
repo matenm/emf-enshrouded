@@ -3,7 +3,7 @@
 // "folder_*" and "server_*" command and adds its fields to the state message.
 //
 // Page -> host: {cmd: "folder_switch" {path} | "folder_add" {path} | "folder_pick_server" | "folder_forget" {path}
-//                | "server_detect" | "server_chat_save" {everyone, admins, players} | "server_admin_add" {account}
+//                | "server_detect" | "server_chat_save" {everyone, game_admins, admins, players} | "server_admin_add" {account}
 //                | "server_mods_save" {refuse, required, info}
 //                | "server_start" | "server_stop" {shared_ok} | "server_kill" | "server_on_close" {stop} | "server_logs"
 //                | "server_install_emf"}

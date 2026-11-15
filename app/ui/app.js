@@ -1423,6 +1423,7 @@ const srv = {
   stop: null,      // the last server_stop progress message
   found: null,     // the server folders Steam has (the add sheet)
   everyone: null,  // the switch while it differs from what is saved (null: as saved)
+  gameAdmins: null, // the game's admins switch while it differs from what is saved (null: as saved)
   dirty: false,    // the admins box has changes that are not saved
   refuse: null,    // the players' mods choice while it differs from what is saved (null: as saved)
   modsDirty: false, // the mods boxes have changes that are not saved
@@ -1502,6 +1503,7 @@ function onServerMessage(m) {
     if (m.cmd === 'server_chat_save' && m.ok) {
       srv.dirty = false;
       srv.everyone = null;
+      srv.gameAdmins = null;
     }
     if (m.cmd === 'server_mods_save' && m.ok) {
       srv.modsDirty = false;
@@ -1537,6 +1539,7 @@ function renderServers() {
     srv.game = s.game;
     srv.dirty = false;
     srv.everyone = null;
+    srv.gameAdmins = null;
     srv.modsDirty = false;
     srv.refuse = null;
     srv.stop = null;
@@ -1656,7 +1659,7 @@ function renderServerPage() {
   const mods = t.mods || { required: [] };
   if (!srv.modsDirty && document.activeElement !== modsBox) modsBox.value = (mods.required || []).join('\n');
   if (!srv.modsDirty && document.activeElement !== modsInfoBox) modsInfoBox.value = mods.info || '';
-  const drawnNow = JSON.stringify([t, s.emf_installed, s.emf_version, s.game, srv.everyone, srv.logWhich, srv.stop, srv.dirty, srv.refuse, srv.modsDirty]);
+  const drawnNow = JSON.stringify([t, s.emf_installed, s.emf_version, s.game, srv.everyone, srv.gameAdmins, srv.logWhich, srv.stop, srv.dirty, srv.refuse, srv.modsDirty]);
   if (drawnNow === srv.drawn && page.childElementCount) {
     renderServerLog();
     return;
@@ -1713,6 +1716,7 @@ function renderServerPage() {
 
   // ---- EMF chat commands ----
   const everyone = srv.everyone === null ? !!chat.everyone : srv.everyone;
+  const gameAdmins = srv.gameAdmins === null ? !!chat.game_admins : srv.gameAdmins;
   const refused = t.refused || [];
   const chatCard = el('div', { class: 'card account', id: 'srv-chat' },
     !s.emf_installed ? el('p', { class: 'sheet-warn' }, 'EMF is not installed in this server folder yet (below): these settings wait for it.') : null,
@@ -1724,6 +1728,13 @@ function renderServerPage() {
       }),
       el('span', {}, 'Every player may use EMF commands'),
       everyone ? el('span', { class: 'badge warn' }, 'only on a server for friends') : null),
+    el('div', { class: 'acct-line' },
+      el('button', {
+        class: 'switch', type: 'button', role: 'switch', id: 'srv-game-admins', 'aria-checked': String(gameAdmins),
+        'aria-label': 'The game’s admins may use EMF commands', onclick: () => { srv.gameAdmins = !gameAdmins; renderServerPage(); },
+      }),
+      el('span', {}, 'The game’s admins may use EMF commands'),
+      el('span', { class: 'muted small' }, 'players who joined with the Admin group’s password')),
     el('label', { class: 'srv-label', for: 'srv-admins' }, 'Admins: account hashes, one per line'),
     adminsBox,
     el('p', { class: 'muted small' }, 'To find your account hash, type any EMF command (/help) into the chat: EMF answers that you may not, and the server log says “chat command refused from account 0x...”. Put that value here, or click Add as admin below, then restart the server. A Steam64 id (17 digits) is not an account hash.'),
@@ -1733,8 +1744,8 @@ function renderServerPage() {
         el('span', { class: 'muted small srv-typed' }, a.time + ' typed /', el('bdi', {}, a.command)),
         el('button', { class: 'ghost small', type: 'button', 'data-account': a.account, onclick: () => send({ cmd: 'server_admin_add', account: a.account }) }, 'Add as admin')))) : null,
     el('div', { class: 'row' },
-      el('button', { class: 'primary', type: 'button', id: 'srv-chat-save', onclick: () => send({ cmd: 'server_chat_save', everyone, admins: adminsBox.value }) }, 'Save'),
-      el('span', { class: 'muted small', id: 'srv-chat-note' }, srv.dirty || srv.everyone !== null ? 'Not saved yet.'
+      el('button', { class: 'primary', type: 'button', id: 'srv-chat-save', onclick: () => send({ cmd: 'server_chat_save', everyone, game_admins: gameAdmins, admins: adminsBox.value }) }, 'Save'),
+      el('span', { class: 'muted small', id: 'srv-chat-note' }, srv.dirty || srv.everyone !== null || srv.gameAdmins !== null ? 'Not saved yet.'
         : 'In emf\\emf_core.ini ([chat]); the server reads it when it starts.')));
 
   // ---- the mod check on join ----

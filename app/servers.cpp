@@ -502,6 +502,9 @@ ChatSettings parse_chat_settings(const std::string& ini_text) {
             s.has_players_key = true;
         } else if (k == "everyone") {
             s.everyone = ini_int(value) != 0;
+        } else if (k == "game_admins") {
+            s.game_admins = ini_int(value) != 0;
+            s.has_game_admins_key = true;
         } else if (k == "admins") {
             size_t from = 0;
             while (from <= value.size()) {
@@ -624,6 +627,8 @@ Change save_chat_settings(const std::wstring& folder_in, const ChatSettings& s) 
     ini.text = set_ini_value(ini.text, "chat", "admins", admins_value(s.admins));
     ini.text = set_ini_value(ini.text, "chat", "everyone", s.everyone ? "1" : "0");
     if (s.players || before.has_players_key) ini.text = set_ini_value(ini.text, "chat", "players", s.players ? "1" : "0");
+    if (s.game_admins || before.has_game_admins_key)
+        ini.text = set_ini_value(ini.text, "chat", "game_admins", s.game_admins ? "1" : "0");
     std::error_code ec;
     std::filesystem::create_directories(std::filesystem::path(folder + L"\\emf"), ec);
     return write_file_whole(path, encode_ini(ini), "emf\\emf_core.ini");

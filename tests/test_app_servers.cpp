@@ -871,3 +871,21 @@ TEST_CASE("mods check settings: a non-ASCII text turns the file into UTF-16, so 
     REQUIRE(save_mods_check_settings(srv.dir, s).ok);
     CHECK(srv.read(L"emf\\emf_core.ini").substr(0, 5) == "[net]");
 }
+
+TEST_CASE("app servers: [chat] game_admins is read, and saved only when it is on or the file has it") {
+    CHECK(parse_chat_settings("[chat]\r\ngame_admins=1\r\n").game_admins);
+    CHECK_FALSE(parse_chat_settings("[chat]\r\nadmins=0x1\r\n").game_admins);
+    TempGame srv(L"chat_game_admins", false);
+    srv.write(L"enshrouded_server.exe", "fake");
+    ChatSettings s;
+    s.admins = {"0x1"};
+    REQUIRE(save_chat_settings(srv.dir, s).ok);
+    CHECK(srv.read(L"emf\\emf_core.ini") == "[chat]\r\nadmins=0x1\r\neveryone=0\r\n");  // off and not there: not written
+    s.game_admins = true;
+    REQUIRE(save_chat_settings(srv.dir, s).ok);
+    CHECK(srv.read(L"emf\\emf_core.ini") == "[chat]\r\nadmins=0x1\r\neveryone=0\r\ngame_admins=1\r\n");
+    s.game_admins = false;  // switched off again: the line stays, set to 0
+    REQUIRE(save_chat_settings(srv.dir, s).ok);
+    CHECK(srv.read(L"emf\\emf_core.ini") == "[chat]\r\nadmins=0x1\r\neveryone=0\r\ngame_admins=0\r\n");
+    CHECK_FALSE(read_chat_settings(srv.dir).game_admins);
+}

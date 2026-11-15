@@ -247,7 +247,7 @@ std::string ServerDesk::state_fields(const FolderState& folder) {
             mods.push_back(Obj().str("id", m.id).str("name", m.name).str("side", m.side).boolean("on", m.on).text());
         Obj o;
         o.raw("config", server_config_json(sn.cfg));
-        o.raw("chat", Obj().boolean("players", sn.chat.players).boolean("everyone", sn.chat.everyone).strs("admins", sn.chat.admins).text());
+        o.raw("chat", Obj().boolean("players", sn.chat.players).boolean("everyone", sn.chat.everyone).boolean("game_admins", sn.chat.game_admins).strs("admins", sn.chat.admins).text());
         o.raw("mods", Obj().boolean("refuse", sn.mods.refuse).strs("required", sn.mods.required).str("info", sn.mods.info).text());
         o.raw("refused", json_list(refused));
         o.raw("process", Obj().boolean("running", pid != 0).num("pid", pid).boolean("started_here", pid && host_.server_started_here(pid)).text());
@@ -366,6 +366,7 @@ ServerDesk::Reply ServerDesk::handle(const std::string& cmd, const core::json::V
             if (admins_value(admins.ok).size() > kAdminsMaxChars) return say(false, "Not saved: " + too_long(admins.ok.size()));
             s.admins = admins.ok;
             if (const auto e = bool_of(m, "everyone")) s.everyone = *e;
+            if (const auto g = bool_of(m, "game_admins")) s.game_admins = *g;
             if (const auto p = bool_of(m, "players")) s.players = *p;
         } else {
             const std::string account = text_of(m, "account");
