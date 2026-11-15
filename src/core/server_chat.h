@@ -24,6 +24,10 @@ namespace emf::core {
 struct ChatPolicy {
     bool everyone = false;         // everyone=1: any player
     std::vector<uint64_t> admins;  // admins=0x...,0x...: these accounts
+    // game_admins=1: the game's own admins too (CanKickBan: a dedicated server's Admin group, a host's admins), as
+    // is_game_admin tells (empty or false: not one)
+    bool game_admins = false;
+    std::function<bool(uint64_t account)> is_game_admin;
     bool allows(uint64_t account) const;
 };
 // `admins`: comma-separated account hashes in hex ("0x" optional); anything else is skipped and, when `skipped` is

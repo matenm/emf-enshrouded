@@ -437,3 +437,18 @@ TEST_CASE("chat.players: a player's game role from the permissions byte of their
     CHECK(game_role_text(0x06) == "no game admin (permissions 0x06)");
     CHECK(game_role_text(0xC6) == "no game admin (permissions 0x06)");  // bits the game does not name are left out
 }
+
+TEST_CASE("chat policy: [chat] game_admins=1 makes the game's own admins EMF admins too; off by default") {
+    ChatPolicy p = parse_chat_policy("0xaa", false);
+    CHECK_FALSE(p.game_admins);  // off unless the server owner says so
+    const uint64_t game_admin = 0xbb;
+    p.is_game_admin = [&](uint64_t a) { return a == game_admin; };
+    CHECK(p.allows(0xaa));
+    CHECK_FALSE(p.allows(0xbb));  // the game's admin, but the switch is off
+    p.game_admins = true;
+    CHECK(p.allows(0xbb));
+    CHECK_FALSE(p.allows(0xcc));  // no admin anywhere
+    CHECK(p.allows(0xaa));
+    p.is_game_admin = nullptr;  // no way to tell (no connection records): no
+    CHECK_FALSE(p.allows(0xbb));
+}

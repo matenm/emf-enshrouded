@@ -13,7 +13,7 @@ bool ChatPolicy::allows(uint64_t account) const {
     if (everyone) return true;
     for (uint64_t a : admins)
         if (a == account) return true;
-    return false;
+    return game_admins && is_game_admin && is_game_admin(account);
 }
 
 ChatPolicy parse_chat_policy(std::string_view admins, bool everyone, std::vector<std::string>* skipped) {

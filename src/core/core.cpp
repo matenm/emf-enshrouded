@@ -310,6 +310,17 @@ bool net_is_local(uint32_t, uint64_t account) {
 
 emf::core::ChatPolicy g_net_policy;  // [chat] admins / everyone: who is an admin for a message's sender
 
+// The game counts this connected player as an admin (CanKickBan in their connection record: a dedicated server's Admin
+// group, or a host's admins). Any thread (a guarded copy of the server's records); false when not connected.
+bool game_admin_account(uint64_t account) {
+    uint8_t* const server = emf::core::chat_server();
+    std::vector<uint8_t> records(
+        static_cast<size_t>(emf::core::server_layout::kConnectionSize) * emf::core::server_layout::kConnectionCount, 0);
+    if (!server || !emf::seh_read(server + emf::core::server_layout::kConnections, records.data(), records.size()))
+        return false;
+    return emf::core::connection_is_admin(records.data(), account).value_or(false);
+}
+
 // Switches the chat transport on (the chat hooks are in place): the server end everywhere (a game that hosts, the
 // dedicated server), the client end on a game exe, with the client's outbox flush and chatClientSend when the build has
 // them. Mod messages to and from a joined game or the server need that; in process they never did.
@@ -2026,14 +2037,7 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
                     // the game's CanKickBan (its kick skips them anyway), or an account in [chat] admins
                     for (uint64_t a : g_net_policy.admins)
                         if (a == account) return true;
-                    uint8_t* const server = emf::core::chat_server();
-                    std::vector<uint8_t> records(static_cast<size_t>(emf::core::server_layout::kConnectionSize) *
-                                                     emf::core::server_layout::kConnectionCount,
-                                                 0);
-                    if (!server || !emf::seh_read(server + emf::core::server_layout::kConnections, records.data(),
-                                                  records.size()))
-                        return false;
-                    return emf::core::connection_is_admin(records.data(), account).value_or(false);
+                    return game_admin_account(account);
                 },
                 [](uint32_t entity, uint64_t account, const std::string& text) {
                     const auto c = net_connection_of(entity);
@@ -2288,6 +2292,12 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
             std::vector<std::string> skipped_admins;
             sc.policy = emf::core::parse_chat_policy(utf8(admins), everyone, &skipped_admins);
             for (const auto& entry : skipped_admins) emf::logf("%s", emf::core::skipped_admin_warning(entry).c_str());
+            // [chat] game_admins=1: the game's own admins are EMF admins too (commands, mods' admin checks)
+            sc.policy.game_admins = GetPrivateProfileIntW(L"chat", L"game_admins", 0, ini.c_str()) != 0;
+            sc.policy.is_game_admin = game_admin_account;
+            if (sc.policy.game_admins)
+                emf::logf("players' chat commands: [chat] game_admins=1: the game's own admins (a dedicated server's Admin "
+                          "group, a host's admins) may run every EMF command");
             g_net_policy = sc.policy;
             if (players) {  // [chat] players=1 (always on the dedicated server): players' /commands and on_chat
                 sc.is_command = [](std::string_view word) {
