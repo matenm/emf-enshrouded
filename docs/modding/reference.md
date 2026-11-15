@@ -1331,6 +1331,21 @@ if (!api()->enemy_move(world, &o, on_moved, nullptr)) EMF_LOG(mod, "no move: %s"
 Console: `move <enemy> <x> <y> <z> [peaceful]`, `move <enemy> <entity | me> [peaceful]` and `move.stop <id>` (never a
 tamed beast); the console says later how the move ended.
 
+## v43: the game's own permissions of a player
+
+| C | What |
+|---|---|
+| `player_permissions(world, player, uint32_t* perms)` | `*perms` = the player's permissions as the game keeps them: `EMF_PERM_KICK_BAN` (the game's admin), `EMF_PERM_ACCESS_INVENTORIES`, `EMF_PERM_EDIT_BASE`, `EMF_PERM_EDIT_WORLD`, `EMF_PERM_EXTEND_BASE`, `EMF_PERM_RECEIVE_EXP`. False (`*perms` = 0) for an entity that is no player here, or on a client world. Server world (a game you host or the dedicated server); same thread rules as `get_component`. C++: `emf::player_permissions(w, player)` (a `std::optional`), `emf::game_admin(w, player)`. |
+
+Where they come from: on a dedicated server, the user group whose password the player joined with
+(`enshrouded_server.json`'s `userGroups`: the Admin group has every right; the game ignores a group change there); in a
+game someone hosts, the host has every right and the host can change a player's group in the game. Read it when you
+need it: a host can change it, and a player who reconnects is a new entity.
+
+EMF's own admins are another list: the host and `[chat] admins` (server.md "Chat commands"), which `EmfNetFrom.admin`
+and command senders report. A mod that wants "an admin" in the game's sense checks both: Villager Jobs gives jobs to
+`EmfNetFrom.admin` or `EMF_PERM_KICK_BAN`.
+
 ## SDK headers (header-only C++, no ABI)
 
 | Header | What |

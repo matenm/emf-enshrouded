@@ -100,6 +100,7 @@ version the additions need (empty: the v20 the `lua` mod needs is enough). Range
 | 1.33 | move orders (`emf.enemy_move`, `emf.enemy_move_cancel`, `emf.enemy_moving`) | v40 |
 | 1.34 | the move options `stuck` and `peaceful = "all"` | v41, from EMF 0.6.10 |
 | 1.35 | `door` on a path's door points | v42, from EMF 0.6.11 |
+| 1.36 | `world:permissions` | v43 |
 
 ## What happens when a script fails
 
@@ -774,6 +775,7 @@ Callbacks get a `world` (valid only during that callback):
 | `world:get(component, id)` | the entity's component, or nil |
 | `world:template(component, id)` | (1.8) the entity's template half of a component: the data every entity of its template shares (for example `world:template("ModelResource", id).model`, the model GUID as text). Read-only: writing a field is an error. nil when the entity has none |
 | `world:name(id)` | (1.6) a player's name, the one the game's chat shows (their platform name, not the character's), or nil (then say `"player #" .. id`); where players' chat is on, server world only |
+| `world:permissions(id)` | (1.36) the player's own game permissions: a table with `admin` (the game's admin: on a dedicated server the Admin group, in a game someone hosts the host and the players the host made admins), `access_inventories`, `edit_base`, `edit_world`, `extend_base`, `receive_exp` (booleans) and `mask` (EMF_PERM_* bits); nil for anything but a player of this server world, on a client world or an older core. Read it when you need it: a host can change it. EMF's own admins (`[chat] admins`) are another list (`from.admin` of a mod message, a command's sender) |
 | `world:character_name(id)` | (1.22) the player's character name (the Social tab's), or nil when not known: it may already be there in `on_player_joined` or come a few seconds later, and it can change during a session, so read it when you need it and never keep it. Text a player's game set, not an identity: key data by `p.account`. Server world only; players' chat need not be on |
 | `world:account(id)` | a player entity's account as text ("0x" + 16 hex digits, as `emf.sender()` gives it), or nil: a key that stays the same for that player across sessions (entity ids do not); server world only |
 

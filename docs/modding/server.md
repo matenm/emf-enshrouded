@@ -71,6 +71,10 @@ admins=0x0123456789abcdef, 0xfedcba9876543210
 everyone=0
 ```
 
+These are EMF's own admins, for its commands. The game's own admins (who joined with the Admin group's password of
+`enshrouded_server.json`) are not on this list by themselves; a mod can read the game's role (API v43
+`player_permissions`, Lua `world:permissions`): Villager Jobs lets both give jobs.
+
 To find your account hash, type an EMF command for admins (`/pos`) into the chat: EMF answers that you may not, and
 the server log says `chat command refused from account 0x...`. Put that value into `admins`, then restart the server.
 Or write `chat.players` into `emf\commands.txt` while you are on the server: the log lists every player with their
