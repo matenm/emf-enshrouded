@@ -1342,7 +1342,7 @@ Where they come from: on a dedicated server, the user group whose password the p
 game someone hosts, the host has every right and the host can change a player's group in the game. Read it when you
 need it: a host can change it, and a player who reconnects is a new entity.
 
-EMF's own admins are another list: the host and `[chat] admins` (server.md "Chat commands"), which `EmfNetFrom.admin`
+EMF's own admins are another list: the host and `[chat] admins` (with `[chat] game_admins=1` also the game's admins; server.md "Chat commands"), which `EmfNetFrom.admin`
 and command senders report. A mod that wants "an admin" in the game's sense checks both: Villager Jobs gives jobs to
 `EmfNetFrom.admin` or `EMF_PERM_KICK_BAN`.
 

@@ -69,11 +69,17 @@ Who may: nobody until you say so, in `emf\emf_core.ini` of the server folder:
 admins=0x0123456789abcdef, 0xfedcba9876543210
 ; everyone=1 lets every player run them (only on a server for friends)
 everyone=0
+; game_admins=1 lets the game's own admins run them too (whoever joined with the Admin group's password)
+game_admins=0
 ```
 
 These are EMF's own admins, for its commands. The game's own admins (who joined with the Admin group's password of
-`enshrouded_server.json`) are not on this list by themselves; a mod can read the game's role (API v43
-`player_permissions`, Lua `world:permissions`): Villager Jobs lets both give jobs.
+`enshrouded_server.json`; in a game you host, the players you made admins in the game) are not on this list by
+themselves: `game_admins=1` (EMF.exe's Server tab: "The game's admins may use EMF commands") lets them run every EMF
+command and makes them admins for mods too (a mod message's or map action's admin flag). It is off by default because
+everyone who has the Admin password then gets `give`, `spawn`, `tp` and the rest. A mod can also read the game's role
+itself (API v43 `player_permissions`, Lua `world:permissions`): Villager Jobs lets the game's admins give jobs whatever
+`game_admins` says.
 
 To find your account hash, type an EMF command for admins (`/pos`) into the chat: EMF answers that you may not, and
 the server log says `chat command refused from account 0x...`. Put that value into `admins`, then restart the server.
