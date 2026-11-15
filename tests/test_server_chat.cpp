@@ -429,3 +429,10 @@ TEST_CASE("ChatOutbox v30: a line's system flag survives add, add_everyone, take
     CHECK(items[0].system);
     CHECK(items[2].system);
 }
+
+TEST_CASE("chat.players: a player's game role from the permissions byte of their entry") {
+    CHECK(game_role_text(0x17) == "game admin (permissions 0x17)");  // a dedicated server's Admin group
+    CHECK(game_role_text(0x3F) == "game admin (permissions 0x3f)");  // the host
+    CHECK(game_role_text(0x06) == "no game admin (permissions 0x06)");  // a friend
+    CHECK(game_role_text(0xC6) == "no game admin (permissions 0x06)");  // bits the game does not name are left out
+}

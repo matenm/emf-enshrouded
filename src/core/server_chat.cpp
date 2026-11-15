@@ -291,6 +291,13 @@ std::optional<PlayerInfo> read_player_info(const uint8_t* entry, uint32_t entity
     return p;
 }
 
+std::string game_role_text(uint8_t permissions) {
+    const unsigned p = permissions & 0x3Fu;
+    char b[48];
+    std::snprintf(b, sizeof b, "%s (permissions 0x%02x)", (p & 1u) ? "game admin" : "no game admin", p);
+    return b;
+}
+
 std::optional<size_t> connection_record_offset(uint32_t handle) {
     using namespace server_layout;
     const uint32_t index = handle & 0x3F;

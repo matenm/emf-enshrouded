@@ -449,10 +449,10 @@ void cmd_chat_players(EmfWorld* w, int argc, const char* const* argv, void*) {
             else conn = "no connection record (the host's own game, or not connected)";
         }
         const auto name = have_records ? connection_name(records.data(), info->handle, info->account, read) : std::nullopt;
-        char line[256];
-        std::snprintf(line, sizeof line, "player %u: account %s, handle 0x%x, %s, name %s", id,
+        char line[320];
+        std::snprintf(line, sizeof line, "player %u: account %s, handle 0x%x, %s, name %s, %s", id,
                       account_text(info->account).c_str(), info->handle, conn.c_str(),
-                      name ? printable(*name).c_str() : "(not known)");
+                      name ? printable(*name).c_str() : "(not known)", game_role_text(e[kPlayerInfoPermissions]).c_str());
         api->command_reply("%s", line);
     }
     if (!count) api->command_reply("no players in this world's player list");
@@ -2342,7 +2342,7 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
     }
     if (!g_state->commands.add("chat.players",
                                ": the players of this world with their account hashes (for [chat] admins), "
-                               "connection and name",
+                               "connection, name and game role",
                                cmd_chat_players, nullptr, nullptr))
         emf::logf("commands: \"chat.players\" could not be added");
     if (debug_bridge) {  // after the overlay (its key hooks), before the mods (game events need the first world)
