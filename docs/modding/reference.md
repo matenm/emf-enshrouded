@@ -1306,7 +1306,9 @@ world's thread, inside `enemy_move_cancel`, inside the `enemy_move` or `enemy_or
 the world closes. A waiting guard order of an ended move is dropped; a waypoint that vanishes is placed again up to 3 times.
 Two creatures on one spot, both with a move, block each other and neither walks (seen live): after 2 s without a metre
 closer the creature of the later move is moved 1 m aside with the game's teleport (since 0.6.12; at most twice per move,
-3 s apart). `EMF_MOVE_PEACEFUL`
+3 s apart). Put a point in front of a closed door or gate, not on it: a modder saw a fresh move to a point on a shut
+gate fail its first try for 18 of 28 creatures (Guard, then Idle and Roaming for about 3 s, a few metres off, then
+Guard again and on to the gate), and 0 of 12 with the point 3 m in front of it. `EMF_MOVE_PEACEFUL`
 clears its fights against players each step (`EMF_MOVE_PEACEFUL_ALL`, API v41: every fight, animals and players'
 beasts too; a v40 core refuses the flag: check `emf::has_v41()`, which goes by the version number since the table did
 not grow) (a creature left in `Combat` with nothing to fight goes to `Idle`); without
