@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "emf/emf_api.h"
 #include "jobs_logic.h"
 
 namespace jobs::remote {
@@ -182,6 +183,10 @@ public:
 private:
     std::map<uint64_t, uint64_t> last_;
 };
+
+// Who gives, changes and stops jobs: EMF's admins (`emf_admin`: the host, [chat] admins) and the game's own admins
+// (`game_perms` has EMF_PERM_KICK_BAN: a dedicated server's Admin group, the players a host made admins; API v43).
+inline bool may_give_jobs(bool emf_admin, uint32_t game_perms) { return emf_admin || (game_perms & EMF_PERM_KICK_BAN) != 0; }
 
 // What a press does for a player who may not give jobs: a working villager's job, and that only admins give them.
 inline std::string refused_press(const std::optional<Candidate>& target, const std::string* job_text) {

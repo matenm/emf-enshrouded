@@ -646,8 +646,9 @@ wild pickables around a chest.
 Villager Jobs 1.5 or newer turned on (their own key setting counts): their game sends the key press to the server's
 Villager Jobs, which picks what that player looks at and shows its notes and wheels on their screen (`job.look
 <player entity>` in the server's console shows where a player looks and what K picks there). Only admins give,
-change and stop jobs: the host, and the accounts in `[chat] admins` of the server's `emf\emf_core.ini` (the same
-admins as for EMF's chat commands). For anyone else, K at a working villager says what it does. Notes of running jobs
+change and stop jobs: the host, the game's own admins (on a dedicated server whoever joined with the Admin group's
+password; in a game someone hosts, the players the host made admins), and the accounts in `[chat] admins` of the
+server's `emf\emf_core.ini`. For anyone else, K at a working villager says what it does. Notes of running jobs
 (a chest gone, out of materials) go to the host and to every player who joined with the mod. A joined player's wheel
 waits 30 s for a pick (after that, K again). When the server has no Villager Jobs 1.5, K says so.
 

@@ -1396,3 +1396,12 @@ TEST_CASE("jobs remote: a player who may not give jobs sees what a working villa
     CHECK(refused_press(chest, nullptr).find("Only the server's admins") == 0);
     CHECK(refused_press(std::nullopt, nullptr).find("Only the server's admins") == 0);
 }
+
+TEST_CASE("jobs remote: jobs are given by EMF's admins and by the game's own admins, no one else") {
+    using namespace jobs::remote;
+    CHECK(may_give_jobs(true, 0));                    // the host, or an account in [chat] admins
+    CHECK(may_give_jobs(false, EMF_PERM_KICK_BAN));   // the game's admin: a dedicated server's Admin group, a host's admins
+    CHECK(may_give_jobs(false, 0x3F));
+    CHECK_FALSE(may_give_jobs(false, EMF_PERM_EDIT_BASE | EMF_PERM_RECEIVE_EXP));  // a friend
+    CHECK_FALSE(may_give_jobs(false, 0));
+}

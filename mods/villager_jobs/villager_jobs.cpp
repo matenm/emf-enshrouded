@@ -1,6 +1,6 @@
 // villager_jobs: an EMF mod. Villagers work for you at a chest, through the game's own systems. The host's key is read
 // here; players who joined (a dedicated server, someone else's game) send theirs over villager_jobs/ui (remote_logic.h),
-// and only admins (the host, [chat] admins) give, change and stop jobs.
+// and only admins (the host, the game's own admins, [chat] admins) give, change and stop jobs.
 //   Look at a villager and press the jobs key (default K): it is chosen. Look at a chest and hold the key: a wheel asks
 //   what to do there: farm the crops near the chest (harvest into it; the plants grow again; planted trees and fruit
 //   trees are left alone), tend the animals near it
@@ -731,7 +731,7 @@ void on_server_message(EmfWorld* raw, const EmfNetFrom* from, const void* data, 
     a.player = from->player;
     a.account = from->account;
     a.remote = true;
-    a.admin = from->admin != 0;
+    a.admin = remote::may_give_jobs(from->admin != 0, emf::player_permissions(w, from->player).value_or(0));
     const uint64_t now = GetTickCount64();
     if (m->kind == remote::Msg::Pick) {
         if (auto pick = g_desk.take(from->account, m->seq, now))
