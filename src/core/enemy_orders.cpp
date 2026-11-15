@@ -45,14 +45,11 @@ uint32_t EnemyOrders::add(EmfWorld* world, uint32_t enemy, uint32_t target, doub
     if (!has(d_, world, gen::CurrentTransform::kHash, target)) return no("no such target (or it has no position)");
     if (d_.dead && d_.dead(world, target)) return no("the target is dead");
     std::lock_guard<std::mutex> l(m_);
-    // a new order on the same enemy ends its old one
-    for (size_t i = 0; i < orders_.size(); ++i)
-        if (orders_[i].enemy == enemy && orders_[i].world == world) {
-            finish(orders_[i], true);
-            orders_.erase(orders_.begin() + static_cast<std::ptrdiff_t>(i));
-            break;
-        }
-    if (orders_.size() >= kEnemyOrdersMax) return no("too many orders (256)");
+    // a new order on the same enemy ends its old one, but only once nothing can refuse the new one (issue #42): the
+    // old order's slot is its own, so a replacement needs no free one, and every refusal comes before anything changes
+    const auto old = std::find_if(orders_.begin(), orders_.end(),
+                                  [&](const Order& x) { return x.enemy == enemy && x.world == world; });
+    if (old == orders_.end() && orders_.size() >= kEnemyOrdersMax) return no("too many orders (256)");
     Order o;
     o.enemy = enemy;
     o.target = target;
@@ -63,6 +60,10 @@ uint32_t EnemyOrders::add(EmfWorld* world, uint32_t enemy, uint32_t target, doub
         o.rule = d_.add_rule ? d_.add_rule(enemy, target, damage) : 0;
         if (!o.rule)  // the 64 hit rules every mod shares (hits.h), or the hit hook not usable on this build
             return no("no hit rule for its damage: all 64 shared ones are in use, or hit rules are off on this build");
+    }
+    if (old != orders_.end()) {
+        finish(*old, true);
+        orders_.erase(old);
     }
     o.id = next_id_++;
     write(world, o);

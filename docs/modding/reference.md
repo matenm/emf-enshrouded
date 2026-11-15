@@ -1260,7 +1260,9 @@ same entity, `flags` has a bit this core does not know, the enemy has no enemy A
 `BossHealthBar`: its fight and leash stay the game's), a player's ally without `EMF_ORDER_ALLIES`, the target has no
 position or is dead, `seconds` or `damage` is out of range, 256 orders are held, or `damage` is asked and gets no hit
 rule: all 64 hit rules, shared by every mod (`hit_rule_add`, other orders with `damage`), are in use, or hit rules are
-off on this build. Nothing is saved.
+off on this build. A new order with `damage` needs a free hit rule even when it replaces one with `damage`: its rule is
+asked for while the old order still holds its own, so a mod that re-targets its own raiders at the limit is refused
+(the old order keeps running). Nothing is saved.
 
 ```cpp
 EmfEnemyOrder o{};
