@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "../mods/villager_jobs/jobs_logic.h"
+#include "../mods/villager_jobs/remote_logic.h"
 #include "core/manifest.h"
 
 using namespace jobs;
@@ -1288,4 +1289,98 @@ TEST_CASE("farm: only a crop's harvest stage is farmed, not a grown tree, a plan
     no_loot.destroy_on_loot = true;
     CHECK_FALSE(harvestable_stage(no_loot));
     CHECK_FALSE(harvestable_stage(StageParts{}));
+}
+
+// ---- players who joined (remote_logic.h): the villager_jobs/ui messages, pending wheels, the client's wait ----
+
+TEST_CASE("jobs remote: each message reads back as it was written; labels lose their line breaks") {
+    using namespace jobs::remote;
+    auto k = decode(encode_key("F2"));
+    REQUIRE(k);
+    CHECK(k->kind == Msg::Key);
+    CHECK(k->text == "F2");
+    auto p = decode(encode_pick(7, 3));
+    REQUIRE(p);
+    CHECK(p->kind == Msg::Pick);
+    CHECK(p->seq == 7);
+    CHECK(p->choice == 3);
+    auto c = decode(encode_pick(8, -1));  // cancelled
+    REQUIRE(c);
+    CHECK(c->choice == -1);
+    auto n = decode(encode_note("Villager 12 chosen: look at a chest and press K"));
+    REQUIRE(n);
+    CHECK(n->kind == Msg::Note);
+    CHECK(n->text == "Villager 12 chosen: look at a chest and press K");
+    auto w = decode(encode_wheel(9, "Villager 12", {"Farm the crops here (3 plants, 1 ripe)", "Haul\nto another chest"}));
+    REQUIRE(w);
+    CHECK(w->kind == Msg::Wheel);
+    CHECK(w->seq == 9);
+    CHECK(w->text == "Villager 12");
+    CHECK(w->labels == std::vector<std::string>{"Farm the crops here (3 plants, 1 ripe)", "Haul to another chest"});
+}
+
+TEST_CASE("jobs remote: broken messages are refused") {
+    using namespace jobs::remote;
+    CHECK_FALSE(decode(""));
+    CHECK_FALSE(decode("dance\n1"));
+    CHECK_FALSE(decode("pick\nx\n1"));
+    CHECK_FALSE(decode("pick\n1"));
+    CHECK_FALSE(decode("pick\n1\n64"));   // at most 64 entries: 0..63
+    CHECK_FALSE(decode("pick\n1\n-2"));
+    CHECK_FALSE(decode("pick\n99999999999\n1"));
+    CHECK_FALSE(decode("wheel\n1\ntitle"));  // no entries
+    std::string many = "wheel\n1\ntitle";
+    for (int i = 0; i < 65; ++i) many += "\nx";
+    CHECK_FALSE(decode(many));
+    CHECK_FALSE(decode("key\n" + std::string(40, 'K')));  // a key's name is short
+    CHECK_FALSE(decode("note\n" + std::string(600, 'n')));
+    CHECK(decode("key\nK"));
+}
+
+TEST_CASE("jobs remote: a pending wheel is taken once, by its own player and number, within 30 s") {
+    using namespace jobs::remote;
+    WheelDesk<int> desk;
+    const uint32_t a = desk.open(0xA, 100, 1000);
+    const uint32_t b = desk.open(0xB, 200, 1000);
+    CHECK(a != b);
+    CHECK_FALSE(desk.take(0xB, a, 1000));  // another player's number
+    CHECK_FALSE(desk.take(0xA, a + 100, 1000));
+    auto got = desk.take(0xA, a, 2000);
+    REQUIRE(got);
+    CHECK(*got == 100);
+    CHECK_FALSE(desk.take(0xA, a, 2000));  // once
+    CHECK_FALSE(desk.take(0xB, b, 1000 + WheelDesk<int>::kExpireMs + 1));  // too late
+    const uint32_t c1 = desk.open(0xA, 1, 5000);
+    const uint32_t c2 = desk.open(0xA, 2, 5000);  // a new wheel replaces the old one
+    CHECK_FALSE(desk.take(0xA, c1, 5000));
+    REQUIRE(desk.take(0xA, c2, 5000));
+    desk.open(0xA, 3, 6000);
+    desk.forget(0xA);
+    CHECK(desk.size() == 0);
+}
+
+TEST_CASE("jobs remote: the player's game opens a wheel only within 2 s of its own key press or pick, once") {
+    using namespace jobs::remote;
+    ClientGate g;
+    CHECK_FALSE(g.take_wheel(1000));  // never asked
+    g.asked(1000);
+    CHECK(g.take_wheel(1000 + ClientGate::kWaitMs));
+    CHECK_FALSE(g.take_wheel(1000 + ClientGate::kWaitMs));  // a second answer opens nothing
+    g.asked(5000);
+    CHECK_FALSE(g.take_wheel(5000 + ClientGate::kWaitMs + 1));  // late
+    g.picked(9000);  // a pick (the job wheel's Craft) may bring the next wheel
+    CHECK(g.take_wheel(9500));
+}
+
+TEST_CASE("jobs remote: a player who may not give jobs sees what a working villager does, and why nothing else happens") {
+    using namespace jobs::remote;
+    const Candidate villager{12, {0, 1, 0}, Kind::Villager};
+    const Candidate chest{30, {0, 1, 0}, Kind::Chest};
+    const std::string job = "farms around chest 30: 4 harvests";
+    auto r = refused_press(villager, &job);
+    CHECK(r.find("Villager 12 farms around chest 30: 4 harvests") == 0);
+    CHECK(r.find("admins") != std::string::npos);
+    CHECK(refused_press(villager, nullptr).find("Only the server's admins") == 0);
+    CHECK(refused_press(chest, nullptr).find("Only the server's admins") == 0);
+    CHECK(refused_press(std::nullopt, nullptr).find("Only the server's admins") == 0);
 }
