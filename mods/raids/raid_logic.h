@@ -208,6 +208,11 @@ public:
         }
         return now_ms - t.best_ms > kNoProgressMs;
     }
+    // The clock starts again from now (a raider whose wall spot takes damage is not stuck).
+    void hold(uint32_t id, uint64_t now_ms) {
+        auto it = map_.find(id);
+        if (it != map_.end()) it->second.best_ms = now_ms;
+    }
 
 private:
     struct Track {
@@ -217,6 +222,303 @@ private:
         uint64_t best_ms;
     };
     std::map<uint32_t, Track> map_;
+};
+
+// ---- walls (the "Raiders break walls" setting; EMF API v44) ----
+// A raider held up on its way to the altar breaks the wall (or the closed gate) in front of it. The mod finds the wall
+// (emf::find_wall on a line from the raider's chest toward the altar) and the gate (the first door on a path that may
+// open doors) and feeds them in; WallWork decides who works where and when a hit lands, and the mod carries out the
+// actions (break_blocks for a hit, enemy orders, releasing a raider to march on).
+struct WallSettings {
+    bool on = false;
+    double hole_radius = 1.0;   // "Hole size"
+    bool drops = false;         // "Broken blocks drop items"
+    double damage_scale = 1.0;  // from the difficulty
+};
+// The "Hole size" setting: small (about a door), medium, large.
+inline double hole_radius_of(const std::string& v) {
+    if (v == "medium") return 1.75;
+    if (v == "large") return 2.5;
+    return 1.0;
+}
+// How hard raiders hit walls and gates, by the (effective) difficulty.
+inline double wall_damage_scale(const std::string& difficulty) {
+    if (difficulty == "easy") return 0.5;
+    if (difficulty == "hard") return 1.5;
+    if (difficulty == "deadly") return 2.0;
+    return 1.0;
+}
+
+// A hole: spheres of `radius` from `centre` up to `height` above it (break_blocks' column).
+struct Hole {
+    Vec3 centre;
+    double radius = 1.0, height = 0.0;
+};
+// The hole at a wall point for a raider standing at feet_y: low enough to reach the floor (0.75 r over the feet) and
+// at least 2.2 m high (a small hole is a column of two spheres).
+inline Hole hole_at(const Vec3& wall, double feet_y, double r) {
+    Hole h;
+    h.centre = {wall.x, feet_y + 0.75 * r, wall.z};
+    h.radius = r;
+    h.height = (std::max)(0.0, 2.2 - 1.5 * r);
+    return h;
+}
+// Damage added to each raider hit on a gate: it falls in about 6 hits at normal (12 easy, 4 hard, 3 deadly); 40 x
+// scale when its health is not known.
+inline int32_t gate_damage(int32_t max_health, double scale) {
+    const double d = max_health > 0 ? std::ceil(static_cast<double>(max_health) * scale / 6.0) : std::ceil(40.0 * scale);
+    return static_cast<int32_t>((std::min)(100000.0, (std::max)(1.0, d)));
+}
+
+struct Gate {
+    uint32_t door = 0;
+    Vec3 pos;
+    int32_t max_health = 0;
+};
+
+struct WallAction {
+    enum Kind {
+        Hit,        // break_blocks at `hole` with the default damage x damage_scale
+        OrderWall,  // send `raider` at the wall point `at` (a hidden target there), for 3 s
+        OrderGate,  // send `raider` at `door` with gate_damage added to its hits, for 3 s
+        Release,    // `raider` stops working: cancel its order, it marches on the altar again
+        GiveUp,     // spot `spot` ended without getting through (or nobody works it): its hidden target goes
+        Done,       // spot `spot` is through (the wall is open, the gate is gone): its hidden target goes
+    } kind = Hit;
+    uint32_t spot = 0, raider = 0, door = 0;
+    Hole hole;
+    Vec3 at;
+    double damage_scale = 1.0;
+    int32_t gate_damage = 0;
+};
+
+class WallWork {
+public:
+    static constexpr uint64_t kLookMs = 10000;      // no 3 m of progress this long: look for a wall
+    static constexpr double kProgress = 3.0;
+    static constexpr double kNearBase = 20.0;       // look only within the base radius + this
+    static constexpr double kReach = 4.0;           // the wall search's length from the chest
+    static constexpr double kChest = 1.2;
+    static constexpr double kWorkRange = 3.0;       // a worker this near its spot counts for its hits
+    static constexpr uint64_t kHitEveryMs = 1500;
+    static constexpr uint64_t kOrderEveryMs = 3000; // the orders last 3 s and are renewed
+    static constexpr uint64_t kGiveUpMs = 120000;
+    static constexpr size_t kMaxSpots = 4;
+    static constexpr double kGateRange = 6.0;       // a gate is looked for this near the raider
+    static constexpr uint64_t kHoldMs = 3000;       // the 60 s clock waits while the spot took damage this recently
+
+    struct SpotInfo {
+        uint32_t id = 0;
+        bool gate = false;
+        uint32_t door = 0;
+        Vec3 point;  // the wall point, or the gate's position
+        Hole hole;
+        int32_t gate_damage = 0;
+        std::vector<uint32_t> workers;
+    };
+
+    // Once per look: true when the raider made no 3 m of progress toward the altar for 10 s, is within the base radius
+    // + 20 m of it, works no spot and did not look in the last 10 s.
+    bool wants_look(uint32_t id, const Vec3& pos, const Vec3& altar, double base_radius, uint64_t now) {
+        if (working(id)) return false;
+        const double d = horizontal_distance(pos, altar);
+        auto it = track_.find(id);
+        if (d > base_radius + kNearBase) {
+            track_[id] = {d, now, it == track_.end() ? 0 : it->second.last_look};
+            return false;
+        }
+        if (it == track_.end()) {
+            track_[id] = {d, now, 0};
+            return false;
+        }
+        Track& t = it->second;
+        if (d < t.best - kProgress) {
+            t.best = d;
+            t.best_ms = now;
+            return false;
+        }
+        if (now - t.best_ms < kLookMs) return false;
+        if (t.last_look && now - t.last_look < kLookMs) return false;
+        t.last_look = now;
+        return true;
+    }
+
+    // What the look found (nothing: nullopt): the raider works the nearer of the two. A wall within the hole radius +
+    // 0.5 m of a spot's point joins that spot, a gate the spot of that door; a new spot only while fewer than 4.
+    std::optional<uint32_t> assign(uint32_t raider, const Vec3& pos, std::optional<Vec3> wall, std::optional<Gate> gate,
+                                   const WallSettings& s, uint64_t now) {
+        if (auto mine = spot_of(raider)) return mine;
+        if (wall && gate) {
+            if (horizontal_distance(pos, gate->pos) < horizontal_distance(pos, *wall))
+                wall.reset();
+            else
+                gate.reset();
+        }
+        Spot* spot = nullptr;
+        if (gate) {
+            for (auto& sp : spots_)
+                if (sp.gate && sp.door == gate->door) spot = &sp;
+            if (!spot) {
+                if (spots_.size() >= kMaxSpots) return std::nullopt;
+                Spot n;
+                n.id = next_id_++;
+                n.gate = true;
+                n.door = gate->door;
+                n.point = gate->pos;
+                n.gate_damage = gate_damage(gate->max_health, s.damage_scale);
+                n.started = now;
+                spots_.push_back(n);
+                spot = &spots_.back();
+            }
+        } else if (wall) {
+            for (auto& sp : spots_)
+                if (!sp.gate && horizontal_distance(sp.point, *wall) <= s.hole_radius + 0.5) spot = &sp;
+            if (!spot) {
+                if (spots_.size() >= kMaxSpots) return std::nullopt;
+                Spot n;
+                n.id = next_id_++;
+                n.point = *wall;
+                n.hole = hole_at(*wall, pos.y, s.hole_radius);
+                n.started = now;
+                spots_.push_back(n);
+                spot = &spots_.back();
+            }
+        } else {
+            return std::nullopt;
+        }
+        spot->workers[raider] = std::nullopt;  // its order goes out at the next tick
+        return spot->id;
+    }
+
+    // About once a second while the raid fights. raiders: the living raiders and where they are.
+    std::vector<WallAction> tick(const std::map<uint32_t, Vec3>& raiders, const WallSettings& s, uint64_t now) {
+        std::vector<WallAction> out;
+        for (size_t i = 0; i < spots_.size();) {
+            Spot& sp = spots_[i];
+            for (auto w = sp.workers.begin(); w != sp.workers.end();)
+                w = raiders.count(w->first) ? std::next(w) : sp.workers.erase(w);
+            const bool expired = now - sp.started >= kGiveUpMs;
+            if (!s.on || expired || sp.workers.empty()) {
+                for (const auto& w : sp.workers) out.push_back(action(WallAction::Release, sp, w.first));
+                out.push_back(action(WallAction::GiveUp, sp, 0));
+                spots_.erase(spots_.begin() + static_cast<std::ptrdiff_t>(i));
+                continue;
+            }
+            int in_range = 0;
+            for (auto& [id, ordered] : sp.workers) {
+                const Vec3& p = raiders.at(id);
+                if (horizontal_distance(p, sp.point) <= kWorkRange && std::fabs(p.y - sp.point.y) <= kWorkRange) ++in_range;
+                if (!ordered || now - *ordered >= kOrderEveryMs) {
+                    ordered = now;
+                    WallAction a = action(sp.gate ? WallAction::OrderGate : WallAction::OrderWall, sp, id);
+                    out.push_back(a);
+                }
+            }
+            if (!sp.gate && in_range > 0 && (!sp.last_hit || now - *sp.last_hit >= kHitEveryMs)) {
+                sp.last_hit = now;
+                WallAction a = action(WallAction::Hit, sp, 0);
+                a.damage_scale = s.damage_scale * in_range;
+                out.push_back(a);
+            }
+            ++i;
+        }
+        return out;
+    }
+
+    // A hit's answer: the spot took damage when anything was damaged or removed.
+    void on_hit(uint32_t spot, uint32_t damaged, uint32_t removed, uint64_t now) {
+        if (Spot* sp = find(spot); sp && (damaged || removed)) sp->last_damage = now;
+    }
+    // A gate's health now: a drop since the last reading is damage.
+    void on_gate_health(uint32_t spot, int32_t health, uint64_t now) {
+        Spot* sp = find(spot);
+        if (!sp) return;
+        if (sp->last_health >= 0 && health < sp->last_health) sp->last_damage = now;
+        sp->last_health = health;
+    }
+    // Through: nothing blocks the line any more (or the gate is gone). Its workers go back to marching.
+    std::vector<WallAction> wall_clear(uint32_t spot) {
+        std::vector<WallAction> out;
+        for (size_t i = 0; i < spots_.size(); ++i) {
+            if (spots_[i].id != spot) continue;
+            for (const auto& w : spots_[i].workers) out.push_back(action(WallAction::Release, spots_[i], w.first));
+            out.push_back(action(WallAction::Done, spots_[i], 0));
+            spots_.erase(spots_.begin() + static_cast<std::ptrdiff_t>(i));
+            break;
+        }
+        return out;
+    }
+    // It works a spot that took damage within the last 3 s (the stuck clock waits meanwhile).
+    bool holding(uint32_t raider, uint64_t now) const {
+        for (const auto& sp : spots_)
+            if (sp.workers.count(raider)) return sp.last_damage && now - *sp.last_damage < kHoldMs;
+        return false;
+    }
+    // It stops working (a fight, the mod's choice); a spot left without workers ends at the next tick.
+    void release(uint32_t raider) {
+        for (auto& sp : spots_) sp.workers.erase(raider);
+    }
+    // Gone, dead or removed: it is forgotten altogether.
+    void forget(uint32_t raider) {
+        release(raider);
+        track_.erase(raider);
+    }
+    void clear() {
+        spots_.clear();
+        track_.clear();
+    }
+    bool working(uint32_t raider) const { return spot_of(raider).has_value(); }
+    std::optional<uint32_t> spot_of(uint32_t raider) const {
+        for (const auto& sp : spots_)
+            if (sp.workers.count(raider)) return sp.id;
+        return std::nullopt;
+    }
+    std::vector<SpotInfo> spots() const {
+        std::vector<SpotInfo> out;
+        for (const auto& sp : spots_) {
+            SpotInfo i{sp.id, sp.gate, sp.door, sp.point, sp.hole, sp.gate_damage, {}};
+            for (const auto& w : sp.workers) i.workers.push_back(w.first);
+            out.push_back(i);
+        }
+        return out;
+    }
+
+private:
+    struct Track {
+        double best = 0;
+        uint64_t best_ms = 0, last_look = 0;
+    };
+    struct Spot {
+        uint32_t id = 0;
+        bool gate = false;
+        uint32_t door = 0;
+        Vec3 point;
+        Hole hole;
+        int32_t gate_damage = 0;
+        uint64_t started = 0;
+        std::optional<uint64_t> last_hit, last_damage;
+        int32_t last_health = -1;  // the gate's last reading (-1: none yet)
+        std::map<uint32_t, std::optional<uint64_t>> workers;  // raider -> when its order last went out
+    };
+    static WallAction action(WallAction::Kind k, const Spot& sp, uint32_t raider) {
+        WallAction a;
+        a.kind = k;
+        a.spot = sp.id;
+        a.raider = raider;
+        a.door = sp.door;
+        a.hole = sp.hole;
+        a.at = sp.point;
+        a.gate_damage = sp.gate_damage;
+        return a;
+    }
+    Spot* find(uint32_t id) {
+        for (auto& sp : spots_)
+            if (sp.id == id) return &sp;
+        return nullptr;
+    }
+    std::vector<Spot> spots_;
+    std::map<uint32_t, Track> track_;
+    uint32_t next_id_ = 1;
 };
 
 // ---- whom they fight ----
