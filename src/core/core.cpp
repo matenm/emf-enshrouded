@@ -50,6 +50,7 @@
 #include "enemy_orders.h"
 #include "move_orders.h"
 #include "path_glue.h"
+#include "block_glue.h"
 #include "teleport.h"
 #include "component_service.h"
 #include "offers.h"
@@ -758,6 +759,7 @@ void hk_register_all_programs(void* world) {
             emf::core::buffs_new_session();               // every player's buffs are a first sight again
             if (g_teleport) g_teleport->world_reset();
             emf::core::path_world_reset();                // path queries of the old world end (cancelled)
+            emf::core::blocks_world_reset();              // breaks waiting for the old world end (cancelled)
             if (g_doors) g_doors->world_reset();          // door orders and locks of the old world go
             if (g_orders) g_orders->world_reset();        // enemy orders of the old world end
             emf::core::builtin_world_reset(g_builtin);   // god's hit rules of the old world go
@@ -1666,6 +1668,56 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
             }
         }
         if (!off.empty()) emf::logf("path_find: off (%s)", off.c_str());
+    }
+    // v44 breaking blocks: the internal emf_blocks program calls the game's building-mining kernel with EMF's own table
+    // (private research wall_damage_2026-11-15.md); block_at and find_wall read voxels after a step.
+    {
+        auto addr = [&](emf::Sig s) -> uintptr_t {
+            const auto& r = g_state->sigs[static_cast<size_t>(s)];
+            return emf::is_usable(r, known) ? r.addr : 0;
+        };
+        emf::core::BlockGlueDeps deps;
+        deps.fns.kernel = reinterpret_cast<decltype(deps.fns.kernel)>(addr(emf::Sig::BlockKernel));
+        deps.fns.region_read = reinterpret_cast<decltype(deps.fns.region_read)>(addr(emf::Sig::VoxelRegionRead));
+        deps.fns.config_find = reinterpret_cast<decltype(deps.fns.config_find)>(addr(emf::Sig::BuildingConfigFind));
+        deps.fns.damage_get = reinterpret_cast<decltype(deps.fns.damage_get)>(addr(emf::Sig::VoxelDamageGet));
+        deps.after_step = [](std::function<void(EmfWorld*)> fn) {
+            auto* job = new std::function<void(EmfWorld*)>(std::move(fn));
+            g_state->dispatcher.post(EMF_WORLD_SERVER, [](EmfWorld* w, void* u) {
+                auto* f = static_cast<std::function<void(EmfWorld*)>*>(u);
+                (*f)(w);
+                delete f;
+            }, job);
+        };
+        deps.log = [](const std::string& line) { emf::logf("%s", line.c_str()); };
+        deps.now_ms = [] { return GetTickCount64(); };
+        deps.drop = [](EmfWorld* w, const uint8_t guid[16], uint32_t count, const float pos[3]) {
+            return emf::core::api_drop_items(w, guid, count, pos);
+        };
+        std::string off;
+        if (!deps.fns.kernel || !deps.fns.config_find)
+            off = "the BlockKernel or BuildingConfigFind signature is not usable on this game build";
+        else if (!addr(emf::Sig::IterBegin))
+            off = "the IterBegin signature is not usable on this game build";
+        else if (g_state->system_programs.registration_closed())
+            off = "mod programs are unavailable";
+        const emf::core::ProgramSpec spec = emf::core::blocks_setup(std::move(deps));
+        if (off.empty()) {
+            if (g_state->system_programs.add(spec, true)) {
+                emf::logf("breaking blocks: on (program %s in the server world)", emf::core::kBlocksProgramName);
+                g_state->dispatcher.subscribe_tick([](EmfWorld* w, void*) {
+                    if (emf::WorldView(reinterpret_cast<uint8_t*>(w)).kind() == EMF_WORLD_SERVER)
+                        emf::core::blocks_server_tick(GetTickCount64());
+                }, nullptr);
+            } else {
+                off = std::string("the ") + emf::core::kBlocksProgramName + " program could not be added";
+            }
+        }
+        if (!off.empty()) {
+            emf::core::blocks_stop(off.find("signature") != std::string::npos ? "not available on this game version"
+                                                                               : "off (" + off + ")");
+            emf::logf("breaking blocks: off (%s)", off.c_str());
+        }
     }
     // v23 change_component: the same record path (kind 3 / kind 4), in a program of its own.
     {

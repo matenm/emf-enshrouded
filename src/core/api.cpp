@@ -2611,6 +2611,24 @@ void set_core_state(CoreState* state) { g_state = state; }
 CoreState* core_state() { return g_state; }
 const EmfApi* api_table() { return &kApi; }
 
+uint32_t api_drop_items(EmfWorld* w, const uint8_t item_guid[16], uint32_t count, const float pos[3]) {
+    auto fn = reinterpret_cast<SpawnWrapperFn>(api_resolve("SpawnWrapper"));
+    const uint32_t item = item_id_from_guid(item_guid);
+    const auto rec = fn && item ? item_by_id(item_registry(w), item) : std::nullopt;
+    std::string why = !fn ? "the SpawnWrapper signature is not usable on this game build" : "unknown item";
+    uint32_t dropped = 0;
+    for (uint32_t left = count; rec && left > 0;) {  // a pickup holds at most 65535
+        const uint32_t n = (std::min)(left, 65535u);
+        if (!give_pickup(fn, raw(w), *rec, n, pos[0], pos[1] + 0.5, pos[2], &why)) break;
+        dropped += n;
+        left -= n;
+    }
+    if (dropped < count)
+        core_log("breaking blocks: " + std::to_string(count - dropped) + " of item " + std::to_string(item) +
+                 " could not be dropped (" + why + ")");
+    return dropped;
+}
+
 bool install_emf_hook(const char* name, uintptr_t target, void* detour, void** original) {
     if (g_state && g_state->hooks) {
         std::string why;

@@ -248,6 +248,9 @@ void set_core_state(CoreState* state);
 CoreState* core_state();
 // The API table handed to mods. Valid for the process lifetime.
 const EmfApi* api_table();
+// v44 breaking blocks' drops: count x the item with this GUID as loose pickups at pos (0.5 m up), on the server world's
+// thread inside a world callback; the number dropped (the rest is logged).
+uint32_t api_drop_items(EmfWorld* w, const uint8_t item_guid[16], uint32_t count, const float pos[3]);
 // Hands a wheel's result to the mod: its callback runs after the next step of a world of request.world_kind.
 void post_wheel_choice(const WheelRequest& request, int choice);
 // Hands a window event (EMF_UI_CLICK / _RIGHT_CLICK / _CLOSED) to the mod: its callback runs after the next step of a

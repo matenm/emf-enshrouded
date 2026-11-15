@@ -560,3 +560,16 @@ TEST_CASE("mods get their 16 programs besides EMF's internal ones (put_items and
     CHECK(sp.count() == kMaxModPrograms + 3);
     sp.reset();
 }
+
+TEST_CASE("EMF's 10 internal programs (emf_blocks is the tenth) fit beside the mods' 16") {
+    SystemPrograms sp;
+    sp.reset();
+    static int one = 1;
+    for (int i = 0; i < 10; ++i) {
+        ProgramSpec internal{"emf_internal" + std::to_string(i), EMF_WORLD_SERVER, counting_cb, &one, {}, {}};
+        REQUIRE(sp.add(internal, true));
+    }
+    for (size_t i = 0; i < kMaxModPrograms; ++i) CHECK(sp.add("mod" + std::to_string(i), EMF_WORLD_SERVER, counting_cb, &one));
+    CHECK(sp.count() == kMaxModPrograms + 10);
+    sp.reset();
+}
