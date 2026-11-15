@@ -31,6 +31,7 @@
 #include "hud_editor/bars.h"
 #include "hud_editor/gate.h"
 #include "hud_editor/hook.h"
+#include "emf/aim.hpp"
 #include "emf/keys.hpp"
 #include "save_commands.h"
 #include "save_slots.h"
@@ -50,6 +51,7 @@
 #include "enemy_orders.h"
 #include "move_orders.h"
 #include "path_glue.h"
+#include "block_commands.h"
 #include "block_glue.h"
 #include "teleport.h"
 #include "component_service.h"
@@ -1359,6 +1361,40 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
             }
         }
         if (!emf::core::add_buff_commands(g_state->commands)) emf::logf("commands: the buffs.* commands could not be added");
+    }
+    // v44 breaking blocks: blocks and break aim with the camera of the player the command means
+    {
+        emf::core::BlockCommandDeps bd;
+        bd.camera = [](EmfWorld* w, float o[3], float d[3]) -> bool {
+            namespace ecs = emf::gen::ecs;
+            const EmfApi* a = emf::core::api_table();
+            const uint32_t player = emf::core::command_player(a->local_player());
+            uint64_t size = 0;
+            const auto* in = player ? static_cast<const ecs::PlayerInput*>(a->get_component(w, ecs::PlayerInput::kHash,
+                                                                                               player, &size))
+                                    : nullptr;
+            if (!in || size < sizeof(ecs::PlayerInput)) return false;
+            const auto& cam = in->fromClient.camera;
+            const emf::aim::Vec3 dir = emf::aim::forward(
+                emf::aim::Quat{cam.orientation.x, cam.orientation.y, cam.orientation.z, cam.orientation.w});
+            const double len = emf::aim::length(dir);
+            if (len < 1e-9) return false;
+            const emf::aim::Vec3 pos = emf::aim::metres(cam.position);
+            o[0] = static_cast<float>(pos.x), o[1] = static_cast<float>(pos.y), o[2] = static_cast<float>(pos.z);
+            d[0] = static_cast<float>(dir.x / len), d[1] = static_cast<float>(dir.y / len), d[2] = static_cast<float>(dir.z / len);
+            return true;
+        };
+        bd.find_wall = [](EmfWorld* w, const float f[3], const float t[3], EmfBlockInfo* out) {
+            return emf::core::api_table()->find_wall(w, f, t, out);
+        };
+        bd.block_at = [](EmfWorld* w, float x, float y, float z, EmfBlockInfo* out) {
+            return emf::core::api_table()->block_at(w, x, y, z, out);
+        };
+        bd.break_blocks = [](EmfWorld* w, EmfBreakBlocks* r, EmfBreakCallback cb, void* u) {
+            return emf::core::api_table()->break_blocks(w, r, cb, u);
+        };
+        if (!emf::core::add_block_commands(g_state->commands, std::move(bd)))
+            emf::logf("commands: blocks and break could not be added");
     }
     // v39 enemy orders: an enemy's pick and an aggro entry for its target, written after every server step; the damage
     // option is a hit rule (enemy_orders.h)
