@@ -1398,6 +1398,17 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
             int32_t cur = 0;
             return emf::core::api_table()->attribute_get(w, entity, EMF_ATTR_HEALTH, &cur) && cur <= 0;
         };
+        d.nudge = [](EmfWorld* w, uint32_t entity, double x, double y, double z) {
+            EmfTeleport t{};
+            t.size = sizeof t;
+            t.entity = entity;
+            t.x = x;
+            t.y = y;
+            t.z = z;
+            t.flags = EMF_TELEPORT_FIND_GROUND;
+            const EmfApi* api = emf::core::api_table();
+            return api->teleport && api->teleport(w, &t);
+        };
         emf::core::ProgramSpec s;
         s.name = kMovesProgramName;
         s.world_kind = EMF_WORLD_SERVER;

@@ -1300,7 +1300,10 @@ Status: `EMF_MOVE_ARRIVED` (at the last point), `EMF_MOVE_STUCK` (no metre close
 `EMF_MOVE_CANCELLED` (`enemy_move_cancel`, a new move or `enemy_order` on it, or the world closed: then `world` is
 NULL). The callback runs once, after the move is gone (it may start another move): after a server step on the server
 world's thread, inside `enemy_move_cancel`, inside the `enemy_move` or `enemy_order` that replaced it, or (world NULL) when
-the world closes. A waiting guard order of an ended move is dropped; a waypoint that vanishes is placed again up to 3 times. `EMF_MOVE_PEACEFUL`
+the world closes. A waiting guard order of an ended move is dropped; a waypoint that vanishes is placed again up to 3 times.
+Two creatures on one spot, both with a move, block each other and neither walks (seen live): after 2 s without a metre
+closer the creature of the later move is moved 1 m aside with the game's teleport (since 0.6.12; at most twice per move,
+3 s apart). `EMF_MOVE_PEACEFUL`
 clears its fights against players each step (`EMF_MOVE_PEACEFUL_ALL`, API v41: every fight, animals and players'
 beasts too; a v40 core refuses the flag: check `emf::has_v41()`, which goes by the version number since the table did
 not grow) (a creature left in `Combat` with nothing to fight goes to `Idle`); without

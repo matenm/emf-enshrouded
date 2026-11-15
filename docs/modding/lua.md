@@ -747,7 +747,9 @@ or `stuck`, while not fighting: a wall, no path, a point it cannot reach), `"tim
 (`emf.enemy_move_cancel`, a new move or enemy order on it; `world` is nil when the world closed). A cancel from a
 server callback ends it at once, else at the next step. It returns the move's
 id, or nil and why (not the server world, no enemy AI, a player, a boss, a tamed beast without `allies`, bad points or
-numbers, more than 256 moves). Afterwards a creature that guarded someone guards them again (a tamed beast: its owner);
+numbers, more than 256 moves). Two creatures standing on one spot, both with a move, block each other and neither walks: after
+2 s without a metre closer EMF moves the later move's creature 1 m aside (EMF 0.6.12; at most twice). Spawn creatures
+at least a metre apart anyway. Afterwards a creature that guarded someone guards them again (a tamed beast: its owner);
 any other one that arrived lives there (its home is the last point, it roams around it). A move ends when your script
 reloads or pauses (`fn` is not called then). A move and an enemy order on the same creature end each other. Nothing is
 saved. `emf.enemy_moving(world, enemy)` is its move's id, or nil. Host only. On a core older than API v40: nil and a reason.

@@ -8,6 +8,7 @@
 #include <cstring>
 #include <map>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -794,4 +795,114 @@ TEST_CASE("api table (v42): version 42 (0.6.11: EmfPathResult.doors); the table 
     CHECK(EMF_API_VERSION == 42);
     CHECK(kPathResultV37Size == 20u);
     CHECK(sizeof(EmfPathResult) > kPathResultV37Size);
+}
+
+// A modder's raids (0.6.11) and a live check (2026-11-15): two creatures standing on one spot, each with a move, never
+// walk (Idle <-> Guard every half second, 0 m); moved 1 m apart, both walked at once. After 2 s without a metre of
+// progress, EMF moves the creature of the later move 1 m aside (the game's teleport, Deps::nudge).
+namespace {
+constexpr uint32_t kOther = 73;
+void add_enemy(Fake& f, uint32_t e, double x, double y, double z) {
+    f.add<gen::DynamicEnemy01BehaviorState>(e);
+    f.add<gen::DynamicAggro>(e);
+    f.add<gen::SelectedTargets>(e);
+    f.add<gen::Faction>(e).faction = static_cast<emf::gen::FactionType>(3);
+    f.place(e, x, y, z);
+}
+struct Nudges {
+    std::vector<std::tuple<uint32_t, double, double, double>> list;
+    MoveOrders::Deps deps(Fake& f) {
+        MoveOrders::Deps d = f.deps();
+        d.nudge = [this](EmfWorld*, uint32_t e, double x, double y, double z) {
+            list.push_back({e, x, y, z});
+            return true;
+        };
+        return d;
+    }
+};
+}  // namespace
+
+TEST_CASE("move orders (0.6.12): two creatures on one spot: the later move's creature is moved 1 m aside after 2 s") {
+    Fake f = world();
+    add_enemy(f, kOther, 0, 10, 0);  // the same spot as kEnemy
+    Nudges n;
+    MoveOrders o(n.deps(f));
+    Done a, b;
+    std::string why;
+    REQUIRE(o.add(W(), kEnemy, pts({{0, 10, 80}}), 2.0, 60, 0, cb(a), &why) != 0u);
+    REQUIRE(o.add(W(), kOther, pts({{0, 10, 80}}), 2.0, 60, 0, cb(b), &why) != 0u);
+    o.step(W());
+    f.now += 1500;
+    o.step(W());
+    CHECK(n.list.empty());  // not before 2 s
+    f.now += 600;
+    o.step(W());
+    REQUIRE(n.list.size() == 1u);
+    CHECK(std::get<0>(n.list[0]) == kOther);  // the later move's creature, never both
+    const double dx = std::get<1>(n.list[0]), dz = std::get<3>(n.list[0]);
+    CHECK(std::sqrt(dx * dx + dz * dz) == doctest::Approx(1.0).epsilon(0.05));
+    CHECK(std::get<2>(n.list[0]) == doctest::Approx(10.0));
+    f.now += 1000;
+    o.step(W());
+    CHECK(n.list.size() == 1u);  // not again within 3 s
+    f.now += 2500;
+    o.step(W());
+    CHECK(n.list.size() == 2u);  // still stacked (the fake does not move it): once more
+    f.now += 3500;
+    o.step(W());
+    CHECK(n.list.size() == 2u);  // at most twice per move
+    CHECK(a.calls == 0);
+    CHECK(b.calls == 0);
+}
+
+TEST_CASE("move orders (0.6.12): creatures half a metre apart, walking, or fighting are not moved aside") {
+    SUBCASE("half a metre apart") {
+        Fake f = world();
+        add_enemy(f, kOther, 0.5, 10, 0);
+        Nudges n;
+        MoveOrders o(n.deps(f));
+        Done a, b;
+        std::string why;
+        REQUIRE(o.add(W(), kEnemy, pts({{0, 10, 80}}), 2.0, 60, 0, cb(a), &why) != 0u);
+        REQUIRE(o.add(W(), kOther, pts({{0, 10, 80}}), 2.0, 60, 0, cb(b), &why) != 0u);
+        for (int i = 0; i < 4; ++i) {
+            f.now += 1000;
+            o.step(W());
+        }
+        CHECK(n.list.empty());
+    }
+    SUBCASE("on one spot but walking (a metre closer every second)") {
+        Fake f = world();
+        add_enemy(f, kOther, 0, 10, 0);
+        Nudges n;
+        MoveOrders o(n.deps(f));
+        Done a, b;
+        std::string why;
+        REQUIRE(o.add(W(), kEnemy, pts({{0, 10, 80}}), 2.0, 60, 0, cb(a), &why) != 0u);
+        REQUIRE(o.add(W(), kOther, pts({{0, 10, 80}}), 2.0, 60, 0, cb(b), &why) != 0u);
+        for (int i = 1; i <= 4; ++i) {
+            f.place(kEnemy, 0, 10, 1.5 * i);
+            f.place(kOther, 0, 10, 1.5 * i);
+            f.now += 1000;
+            o.step(W());
+        }
+        CHECK(n.list.empty());
+    }
+    SUBCASE("on one spot, fighting") {
+        Fake f = world();
+        add_enemy(f, kOther, 0, 10, 0);
+        Nudges n;
+        MoveOrders o(n.deps(f));
+        Done a, b;
+        std::string why;
+        REQUIRE(o.add(W(), kEnemy, pts({{0, 10, 80}}), 2.0, 60, 0, cb(a), &why) != 0u);
+        REQUIRE(o.add(W(), kOther, pts({{0, 10, 80}}), 2.0, 60, 0, cb(b), &why) != 0u);
+        f.get<gen::DynamicEnemy01BehaviorState>(kOther).state = emf::gen::enemy01::State::Combat;
+        f.get<gen::SelectedTargets>(kOther).targets[0].targetEntityId.id = kPlayer;
+        for (int i = 0; i < 4; ++i) {
+            f.now += 1000;
+            o.step(W());
+        }
+        CHECK(n.list.empty());
+    }
 }

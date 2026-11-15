@@ -251,6 +251,8 @@ int MoveOrders::tick(Move& m, uint64_t now) {
         m.since = now;
     } else if (now - m.since >= m.stuck_ms) {
         return EMF_MOVE_STUCK;
+    } else if (now - m.since >= kMoveUnstackMs) {
+        unstack(m, now);
     }
     auto* ai = comp<gen::DynamicEnemy01BehaviorState>(d_, m.world, m.enemy);
     // it took the waypoint as its guard target but stays calm (a fresh spawn sent farther than ~10 m, seen live: Roaming
@@ -323,11 +325,32 @@ bool MoveOrders::cancel_enemy(EmfWorld* world, uint32_t enemy, bool now) {
     return id && cancel(id, now);
 }
 
+void MoveOrders::unstack(Move& m, uint64_t now) {
+    if (!d_.nudge || m.unstacked >= kMoveUnstackMax || (m.last_unstack && now - m.last_unstack < kMoveResendMs)) return;
+    Point at{};
+    if (!place_of(d_, m.world, m.enemy, at)) return;
+    for (const Stand& s : stand_) {
+        if (s.id >= m.id || s.enemy == m.enemy) continue;  // only the later of two moves goes aside
+        const double dx = s.at[0] - at[0], dz = s.at[2] - at[2];
+        if (std::sqrt(dx * dx + dz * dz) > kMoveStackedM || std::abs(s.at[1] - at[1]) > 1.0) continue;
+        const double a = static_cast<double>(m.id) * 2.39996323;  // the golden angle: each move its own side
+        d_.nudge(m.world, m.enemy, at[0] + std::cos(a) * kMoveUnstackM, at[1], at[2] + std::sin(a) * kMoveUnstackM);
+        ++m.unstacked;
+        m.last_unstack = now;
+        return;
+    }
+}
+
 void MoveOrders::step(EmfWorld* world) {
     const uint64_t now = d_.now_ms ? d_.now_ms() : 0;
     std::vector<Done> done;
     {
         std::lock_guard<std::mutex> l(m_);
+        stand_.clear();
+        for (const Move& m : moves_) {
+            Point at{};
+            if (m.world == world && !m.cancelled && place_of(d_, world, m.enemy, at)) stand_.push_back({m.id, m.enemy, at});
+        }
         std::vector<Move> keep;
         keep.reserve(moves_.size());
         for (Move& m : moves_) {

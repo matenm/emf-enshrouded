@@ -38,6 +38,13 @@ constexpr double kMoveUpDown = 2.0;      // a point is reached within arrive + t
 constexpr double kMoveGuardSlack = 1.0;
 constexpr double kMoveGuardMax = 8.0;    // a larger guard distance is not believed
 constexpr uint32_t kMoveReplaceMax = 3;  // a waypoint that vanishes is placed again this often, then the move is stuck
+// Two creatures on one spot, both with a move, never walk (a modder's raids; live 2026-11-15: Idle <-> Guard, 0 m; moved
+// 1 m apart, both walked at once). After kMoveUnstackMs without a metre of progress, the creature of the later move
+// (the higher id) is moved kMoveUnstackM aside, at most kMoveUnstackMax times per move, kMoveResendMs apart.
+constexpr double kMoveStackedM = 0.3;    // across: "on one spot" (and within 1 m up or down)
+constexpr double kMoveUnstackM = 1.0;
+constexpr uint64_t kMoveUnstackMs = 2000;
+constexpr uint32_t kMoveUnstackMax = 2;
 // The invisible waypoint: the game's TestTransform template 6d71f70d-602c-4d55-9de2-73e5b84133b5 (CurrentTransform,
 // StaticTransform, DoNotSave), in the game's GUID layout (first three groups little-endian, docs/ENGINE_MAP.md).
 constexpr uint8_t kWaypointGuid[16] = {0x0d, 0xf7, 0x71, 0x6d, 0x2c, 0x60, 0x55, 0x4d,
@@ -57,6 +64,8 @@ public:
         std::function<void(uint32_t guarding, uint32_t guarded)> guard;  // the game's guard order, sent at the next step
         std::function<void(uint32_t guarding)> unguard;  // drops the guard orders still waiting for that creature
         std::function<bool(EmfWorld*, uint32_t entity)> dead;             // its health is known and 0 or less
+        // moves a creature there with the game's teleport (one standing on another moving creature's spot); false: refused
+        std::function<bool(EmfWorld*, uint32_t entity, double x, double y, double z)> nudge;
     };
     explicit MoveOrders(Deps d) : d_(std::move(d)) {}
 
@@ -86,6 +95,8 @@ private:
         uint32_t replaced = 0;      // times its waypoint vanished and was placed again
         uint64_t last_place = 0;    // when a waypoint was last spawned
         uint64_t last_nudge = 0;    // when it was last put in Guard (a calm creature that took the waypoint)
+        uint32_t unstacked = 0;     // times it was moved aside (it stood on another moving creature's spot)
+        uint64_t last_unstack = 0;
         EmfWorld* world = nullptr;
         std::vector<Point> points;
         size_t next = 0;  // the point it walks to
@@ -117,9 +128,16 @@ private:
     uint32_t moving_locked(EmfWorld* world, uint32_t enemy) const;  // under m_
     double distance(EmfWorld* w, uint32_t enemy, const Point& p) const;  // metres; < 0: no position
 
+    void unstack(Move& m, uint64_t now);  // kMoveUnstack*: moved aside when it stands on another moving creature's spot
+
+    struct Stand {
+        uint32_t id, enemy;
+        Point at;
+    };
     Deps d_;
     mutable std::mutex m_;  // moves_: a cancel may come from another thread
     std::vector<Move> moves_;
+    std::vector<Stand> stand_;  // this step: where each move's creature stands (under m_)
     uint32_t next_id_ = 1;
 };
 
