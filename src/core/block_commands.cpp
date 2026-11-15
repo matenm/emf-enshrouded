@@ -23,6 +23,14 @@ std::string at_text(float x, float y, float z) {
     return b;
 }
 
+bool parse_float(const char* s, float* out) {
+    char* end = nullptr;
+    const float v = std::strtof(s, &end);
+    if (!end || end == s || *end) return false;
+    *out = v;
+    return true;
+}
+
 // The first building block where the player looks, within kBlockLookRange; else why not (empty text: none there).
 bool looked_at(EmfWorld* w, EmfBlockInfo* out, float ray_end[3], std::string* why) {
     float o[3], d[3];
@@ -37,7 +45,21 @@ bool looked_at(EmfWorld* w, EmfBlockInfo* out, float ray_end[3], std::string* wh
     return g_deps.find_wall && g_deps.find_wall(w, o, ray_end, out);
 }
 
-void cmd_blocks(EmfWorld* w, int, const char* const*, void*) {
+void cmd_blocks(EmfWorld* w, int argc, const char* const* argv, void*) {
+    if (argc > 1) {  // blocks at x y z: what is at that point (no camera needed)
+        float p[3];
+        if (argc != 5 || std::strcmp(argv[1], "at") != 0 || !parse_float(argv[2], &p[0]) || !parse_float(argv[3], &p[1]) ||
+            !parse_float(argv[4], &p[2])) {
+            command_reply_line("usage: blocks [at <x> <y> <z>]");
+            return;
+        }
+        EmfBlockInfo e{};
+        e.size = sizeof e;
+        command_reply_line(g_deps.block_at && g_deps.block_at(w, p[0], p[1], p[2], &e)
+                               ? block_info_line(e)
+                               : "nothing read there (not loaded, or not the server world)");
+        return;
+    }
     EmfBlockInfo b{};
     float end[3];
     std::string why;
@@ -71,20 +93,17 @@ void on_break(EmfWorld*, uint32_t id, const EmfBreakResult* r, void* user) {
     br->reply(b);
 }
 
-bool parse_float(const char* s, float* out) {
-    char* end = nullptr;
-    const float v = std::strtof(s, &end);
-    if (!end || end == s || *end) return false;
-    *out = v;
-    return true;
-}
-
 void cmd_break(EmfWorld* w, int argc, const char* const* argv, void*) {
     EmfBreakBlocks r{};
     r.size = sizeof r;
-    bool ok = true;
+    bool ok = true, at = false;
     for (int i = 1; i < argc && ok; ++i) {
-        if (std::strcmp(argv[i], "instant") == 0)
+        if (std::strcmp(argv[i], "at") == 0) {
+            ok = i + 3 < argc && parse_float(argv[i + 1], &r.x) && parse_float(argv[i + 2], &r.y) &&
+                 parse_float(argv[i + 3], &r.z);
+            at = ok;
+            i += 3;
+        } else if (std::strcmp(argv[i], "instant") == 0)
             r.flags |= EMF_BREAK_INSTANT;
         else if (std::strcmp(argv[i], "drops") == 0)
             r.flags |= EMF_BREAK_DROPS;
@@ -94,19 +113,21 @@ void cmd_break(EmfWorld* w, int argc, const char* const* argv, void*) {
             ok = i == 1 && parse_float(argv[i], &r.radius);
     }
     if (!ok) {
-        command_reply_line("usage: break [radius 0.25-3.5] [instant] [drops] [height <m>]");
+        command_reply_line("usage: break [radius 0.25-3.5] [instant] [drops] [height <m>] [at <x> <y> <z>]");
         return;
     }
-    EmfBlockInfo b{};
-    float end[3];
-    std::string why;
-    if (!looked_at(w, &b, end, &why)) {
-        command_reply_line(why.empty() ? "no building block within 12 m where you look" : why);
-        return;
+    if (!at) {
+        EmfBlockInfo b{};
+        float end[3];
+        std::string why;
+        if (!looked_at(w, &b, end, &why)) {
+            command_reply_line(why.empty() ? "no building block within 12 m where you look" : why);
+            return;
+        }
+        r.x = b.x;
+        r.y = b.y;
+        r.z = b.z;
     }
-    r.x = b.x;
-    r.y = b.y;
-    r.z = b.z;
     auto* br = new BreakReply{current_reply()};
     const uint32_t id = g_deps.break_blocks ? g_deps.break_blocks(w, &r, on_break, br) : 0;
     if (!id) {
@@ -145,11 +166,12 @@ std::string block_info_line(const EmfBlockInfo& b) {
 
 bool add_block_commands(CommandCenter& commands, BlockCommandDeps deps) {
     g_deps = std::move(deps);
-    bool ok = commands.add("blocks", ": the player-built block where you look (material, hardness, health, damage so far) "
-                                     "(host or dedicated server)",
+    bool ok = commands.add("blocks", "[at <x> <y> <z>]: the player-built block where you look, or what is at a point "
+                                     "(material, hardness, health, damage so far; host or dedicated server)",
                            cmd_blocks, nullptr, nullptr);
-    ok &= commands.add("break", "[radius 0.25-3.5] [instant] [drops] [height <m>]: break the player-built blocks where "
-                                "you look (never the ground; the hole stays and is saved; host or dedicated server)",
+    ok &= commands.add("break", "[radius 0.25-3.5] [instant] [drops] [height <m>] [at <x> <y> <z>]: break the "
+                                "player-built blocks where you look, or around a point (never the ground; the hole stays "
+                                "and is saved; host or dedicated server)",
                        cmd_break, nullptr, nullptr);
     return ok;
 }

@@ -150,6 +150,29 @@ TEST_CASE("break: refused with a bad radius (the request's own text); nothing wh
     CHECK(said("usage: break"));
 }
 
+TEST_CASE("blocks and break at x y z: no camera needed (a dedicated server's console)") {
+    g_out.clear();
+    CommandCenter c;
+    Fake f;
+    f.camera = false;
+    REQUIRE(add_block_commands(c, f.deps()));
+    run(c, "blocks at 1 2 3");
+    CHECK(said("terrain 5"));  // what block_at says at that point
+    run(c, "break 2 instant at 4.5 6 7.25");
+    CHECK(f.last.radius == 2.0f);
+    CHECK(f.last.flags == EMF_BREAK_INSTANT);
+    CHECK(f.last.x == 4.5f);
+    CHECK(f.last.y == 6.0f);
+    CHECK(f.last.z == 7.25f);
+    CHECK(said("break 5 queued"));
+    g_out.clear();
+    run(c, "break at 1 2");
+    CHECK(said("usage: break"));
+    g_out.clear();
+    run(c, "blocks at x 2 3");
+    CHECK(said("usage: blocks"));
+}
+
 TEST_CASE("blocks and break are admin commands (no player flag)") {
     CommandCenter c;
     Fake f;
