@@ -652,7 +652,8 @@ api->net_to_player(w, from->player, "mymod/show", "ok", 2);  // the server -> th
   each new connection a beacon line (spoken as that player, kind 0) 10 s after it appears, and once more 35 s later
   if that game has not said hello (at most 2 times; a line that arrives while the game still loads can be lost); an EMF
   game hides it and answers with a hello (its EMF version, API, game build and channels); the server answers with a
-  welcome (its channels). A game without EMF shows the beacon line, at most twice: its marker and fields, then "This
+  welcome (its channels). No beacon goes while a hello is coming in; a hello whose next line takes more than 60 s is
+  dropped, and the second beacon can then go. A game without EMF shows the beacon line, at most twice: its marker and fields, then "This
   server runs EMF mods. Get EMF to see their windows; you can play without it."; `[net] greet=0` in `emf\emf_core.ini` turns the beacon
   off (and with it the whole transport for that server). A server without EMF sends no beacon, so an EMF game sends
   nothing to it; a marked line another player types is dropped (the line must be spoken as the player itself: the

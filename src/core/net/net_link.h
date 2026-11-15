@@ -128,6 +128,7 @@ public:
 private:
     struct Joining {
         Reassembly in;
+        uint64_t last_ms = 0;  // when its last line came (0: no clock); the tick drops it kPartialMaxAgeMs later
     };
     bool allowed(uint64_t account, size_t bytes);
     bool queue(uint32_t handle, uint64_t account, const std::vector<std::string>& lines);  // send_lines, else send

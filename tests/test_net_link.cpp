@@ -338,6 +338,34 @@ TEST_CASE("net link: no beacon again while a hello is still coming in (a second 
     CHECK(r.to_players.size() == 1);  // no second beacon
 }
 
+TEST_CASE("net link: a hello whose next line never comes is dropped after 60 s; the beacon comes again and the new hello is answered") {
+    Rig r;
+    ServerLinkDeps d = r.server_deps();
+    d.beacon_retry_ms = 15000;
+    ServerLink server(d);
+    server.tick({{kHandle, kAcct}});
+    REQUIRE(r.to_players.size() == 1);
+    r.to_players.clear();
+    // the first line of a two-line hello arrives, the second never does
+    const auto lines = split_message('H', 0, "emf/net", 1, std::string(1500, 'h'), nullptr);
+    REQUIRE(lines.size() == 2);
+    server.on_line(kHandle, kAcct, encode_line(lines[0]));
+    r.now += kPartialMaxAgeMs;  // 60 s: at the limit, still coming in
+    server.tick({{kHandle, kAcct}});
+    CHECK(r.to_players.empty());
+    r.now += 1000;  // over the limit: the half hello is dropped and the beacon comes again
+    server.tick({{kHandle, kAcct}});
+    REQUIRE(r.to_players.size() == 1);
+    int told = 0;
+    for (const auto& l : r.logs) told += l.find("a hello that never finished") != std::string::npos;
+    CHECK(told == 1);
+    // the game answers it with a whole hello: welcomed
+    r.client.on_chat_line(r.to_players[0].second, kAcct);
+    r.to_players.clear();
+    for (const auto& line : r.client.take_lines(100)) server.on_line(kHandle, kAcct, line);
+    CHECK(server.peers().size() == 1);
+}
+
 TEST_CASE("net link: a client with no channels sends no hello") {
     Rig r;
     r.client_channels.clear();

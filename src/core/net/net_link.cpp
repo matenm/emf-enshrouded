@@ -187,7 +187,9 @@ bool ServerLink::on_line(uint32_t handle, uint64_t account, std::string_view tex
                     note(account, "a hello on the wrong channel");
                     return true;
                 }
-                msg = joining_[conn].in.add(*line, &why, d_.now_ms ? d_.now_ms() : 0);
+                Joining& j = joining_[conn];
+                j.last_ms = d_.now_ms ? d_.now_ms() : 0;
+                msg = j.in.add(*line, &why, j.last_ms);
                 if (!msg) {
                     if (!why.empty()) note(account, "a hello line dropped: " + why);
                     return true;
@@ -287,8 +289,23 @@ void ServerLink::tick(const std::vector<Connection>& connected) {
         const std::lock_guard<std::mutex> g(m_);
         for (auto it = greeted_.begin(); it != greeted_.end();)
             it = now.count(it->first) ? std::next(it) : greeted_.erase(it);
-        for (auto it = joining_.begin(); it != joining_.end();)
-            it = now.count(it->first) ? std::next(it) : joining_.erase(it);
+        for (auto it = joining_.begin(); it != joining_.end();) {
+            if (!now.count(it->first)) {
+                it = joining_.erase(it);
+                continue;
+            }
+            // a hello whose next line is this late never finishes (its late lines would be dropped as well); while
+            // it waits no beacon goes, so it would keep mod messages off for that player until a reconnect
+            const uint64_t last = it->second.last_ms;
+            if (ms && last && ms >= last && ms - last > kPartialMaxAgeMs) {
+                note(it->first.account, "a hello that never finished (no line of it for " +
+                                            std::to_string(kPartialMaxAgeMs / 1000) +
+                                            " s): dropped; the beacon can come again");
+                it = joining_.erase(it);
+                continue;
+            }
+            ++it;
+        }
         for (Peer* p : peers_.all())
             if (!now.count({p->handle, p->account})) left.push_back({p->handle, p->account});
         for (const auto& c : left) peers_.bye(c.handle);
