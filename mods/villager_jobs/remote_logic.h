@@ -146,20 +146,41 @@ private:
 };
 
 // The player's game: a wheel from the server opens only within kWaitMs of this game's own key press or pick, and only
-// once (a late answer would open a wheel the player no longer expects).
+// once (a late answer would open a wheel the player no longer expects; Late: the game says so and cancels it).
 class ClientGate {
 public:
     static constexpr uint64_t kWaitMs = 2000;
+    enum class Answer { Open, Late, NotAsked };
     void asked(uint64_t now_ms) { at_ = now_ms ? now_ms : 1; }
     void picked(uint64_t now_ms) { at_ = now_ms ? now_ms : 1; }
-    bool take_wheel(uint64_t now_ms) {
-        const bool ok = at_ && now_ms >= at_ && now_ms - at_ <= kWaitMs;
+    Answer take_wheel(uint64_t now_ms) {
+        const uint64_t at = at_;
         at_ = 0;
-        return ok;
+        if (!at) return Answer::NotAsked;
+        return now_ms >= at && now_ms - at <= kWaitMs ? Answer::Open : Answer::Late;
     }
 
 private:
     uint64_t at_ = 0;
+};
+
+// The server: a joined player's key presses count at most once per kMinGapMs (a held key or a macro would make the
+// server search the world and answer for each one).
+class PressGate {
+public:
+    static constexpr uint64_t kMinGapMs = 300;
+    bool allow(uint64_t account, uint64_t now_ms) {
+        const auto it = last_.find(account);
+        if (it != last_.end() && now_ms >= it->second && now_ms - it->second < kMinGapMs) return false;
+        last_[account] = now_ms;
+        return true;
+    }
+    void forget(uint64_t account) { last_.erase(account); }
+    void clear() { last_.clear(); }
+    size_t size() const { return last_.size(); }
+
+private:
+    std::map<uint64_t, uint64_t> last_;
 };
 
 // What a press does for a player who may not give jobs: a working villager's job, and that only admins give them.

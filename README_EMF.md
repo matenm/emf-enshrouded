@@ -648,8 +648,8 @@ Villager Jobs, which picks what that player looks at and shows its notes and whe
 <player entity>` in the server's console shows where a player looks and what K picks there). Only admins give,
 change and stop jobs: the host, and the accounts in `[chat] admins` of the server's `emf\emf_core.ini` (the same
 admins as for EMF's chat commands). For anyone else, K at a working villager says what it does. Notes of running jobs
-(a chest gone, out of materials) go to the host and to every player who joined with the mod. When the server has no
-Villager Jobs 1.5, K says so.
+(a chest gone, out of materials) go to the host and to every player who joined with the mod. A joined player's wheel
+waits 30 s for a pick (after that, K again). When the server has no Villager Jobs 1.5, K says so.
 
 How the work moves: a walk order makes the villager roam near its target, so it acts within 6 m of it; the order is
 repeated every 5 s, and a target it cannot get close to within 60 s is left alone for 2 minutes (noted once: villagers

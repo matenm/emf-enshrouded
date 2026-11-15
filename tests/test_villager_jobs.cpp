@@ -1359,17 +1359,29 @@ TEST_CASE("jobs remote: a pending wheel is taken once, by its own player and num
     CHECK(desk.size() == 0);
 }
 
-TEST_CASE("jobs remote: the player's game opens a wheel only within 2 s of its own key press or pick, once") {
+TEST_CASE("jobs remote: the player's game opens a wheel only within 2 s of its own key press or pick, once; a late one says so") {
     using namespace jobs::remote;
     ClientGate g;
-    CHECK_FALSE(g.take_wheel(1000));  // never asked
+    CHECK(g.take_wheel(1000) == ClientGate::Answer::NotAsked);
     g.asked(1000);
-    CHECK(g.take_wheel(1000 + ClientGate::kWaitMs));
-    CHECK_FALSE(g.take_wheel(1000 + ClientGate::kWaitMs));  // a second answer opens nothing
+    CHECK(g.take_wheel(1000 + ClientGate::kWaitMs) == ClientGate::Answer::Open);
+    CHECK(g.take_wheel(1000 + ClientGate::kWaitMs) == ClientGate::Answer::NotAsked);  // a second answer opens nothing
     g.asked(5000);
-    CHECK_FALSE(g.take_wheel(5000 + ClientGate::kWaitMs + 1));  // late
+    CHECK(g.take_wheel(5000 + ClientGate::kWaitMs + 1) == ClientGate::Answer::Late);
     g.picked(9000);  // a pick (the job wheel's Craft) may bring the next wheel
-    CHECK(g.take_wheel(9500));
+    CHECK(g.take_wheel(9500) == ClientGate::Answer::Open);
+}
+
+TEST_CASE("jobs remote: a joined player's key presses count at most once per 300 ms, each player on their own") {
+    using namespace jobs::remote;
+    PressGate g;
+    CHECK(g.allow(0xA, 1000));
+    CHECK_FALSE(g.allow(0xA, 1000 + PressGate::kMinGapMs - 1));  // held, a macro: dropped
+    CHECK(g.allow(0xB, 1001));
+    CHECK(g.allow(0xA, 1000 + PressGate::kMinGapMs));
+    g.forget(0xA);
+    CHECK(g.allow(0xA, 1000 + PressGate::kMinGapMs + 1));
+    CHECK(g.size() == 2);
 }
 
 TEST_CASE("jobs remote: a player who may not give jobs sees what a working villager does, and why nothing else happens") {
