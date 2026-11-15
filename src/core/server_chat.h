@@ -256,7 +256,7 @@ struct PlayerInfo {
 };
 // The entry (kPlayerInfoSize bytes) of player `entity`, if it is theirs (its id is `entity`) and holds an account.
 std::optional<PlayerInfo> read_player_info(const uint8_t* entry, uint32_t entity);
-// chat.players: "game admin (permissions 0x17)" / "no game admin (permissions 0x06)" from an entry's permissions byte.
+// chat.players: "game admin (permissions 0x3f)" / "no game admin (permissions 0x2e)" from an entry's permissions byte.
 std::string game_role_text(uint8_t permissions);
 // Reads n bytes of game memory at src into dst; false when it cannot (a guarded copy in the core, a fake in tests).
 using MemoryRead = std::function<bool(const void* src, void* dst, size_t n)>;

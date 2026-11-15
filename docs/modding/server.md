@@ -78,7 +78,7 @@ These are EMF's own admins, for its commands. The game's own admins (who joined 
 To find your account hash, type an EMF command for admins (`/pos`) into the chat: EMF answers that you may not, and
 the server log says `chat command refused from account 0x...`. Put that value into `admins`, then restart the server.
 Or write `chat.players` into `emf\commands.txt` while you are on the server: the log lists every player with their
-account hash (EMF API v19) and whether the game counts them as an admin ("game admin (permissions 0x17)").
+account hash (EMF API v19) and whether the game counts them as an admin ("game admin (permissions 0x3f)").
 
 **Commands for every player** (EMF API v17): mods can mark commands that any player may run, without being in
 `admins`: `/help` (it lists only what that player may run), `/raids.status`, `/loot.toggle`, `/loot.status`,
