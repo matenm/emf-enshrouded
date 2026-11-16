@@ -1,4 +1,4 @@
-/* EMF (Enshrouded Modding Framework) C API, version 44 (see EMF_API_VERSION).
+/* EMF (Enshrouded Modding Framework) C API, version 45 (see EMF_API_VERSION).
  *
  * A mod is a DLL in <game>/emf/mods/ that exports:
  *     extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api);
@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define EMF_API_VERSION 44
+#define EMF_API_VERSION 45
 
 /* World kinds (the byte at the entity storage + 8: world+0xE15DC8 on build 1273043, world+0xE179C8 on 1283531). */
 #define EMF_WORLD_SERVER 0
@@ -819,6 +819,9 @@ typedef void (*EmfMoveCallback)(EmfWorld* world, uint32_t id, uint32_t status, v
 #define EMF_BREAK_INSTANT 0x1u /* break at once: no health, no cracks */
 #define EMF_BREAK_DROPS 0x2u   /* removed blocks drop what a pickaxe would give (each material's item, so many blocks
                                   per item), at the hole */
+#define EMF_BREAK_WORLD 0x4u   /* API v45: break the world's own blocks too (its ruins, as the game shipped them). Without
+                                  it every sphere stops just short of the nearest such block (and of any block whose
+                                  origin is not known), so a hole next to a ruin is smaller. A v44 core refuses the flag */
 #define EMF_BREAK_DONE 0u
 #define EMF_BREAK_CANCELLED 1u /* the world ended first */
 #define EMF_BREAK_FAILED 2u    /* a game call faulted: breaking is off until a restart */
@@ -826,7 +829,7 @@ typedef void (*EmfMoveCallback)(EmfWorld* world, uint32_t id, uint32_t status, v
 #define EMF_BREAK_DEFAULT_DAMAGE {100, 100, 95, 60, 50}
 typedef struct EmfBreakBlocks {
     uint32_t size;            /* sizeof(EmfBreakBlocks) */
-    uint32_t flags;           /* EMF_BREAK_INSTANT, EMF_BREAK_DROPS */
+    uint32_t flags;           /* EMF_BREAK_INSTANT, EMF_BREAK_DROPS, EMF_BREAK_WORLD (v45) */
     float x, y, z;            /* metres: the centre of the (lowest) sphere */
     float radius;             /* metres, 0.25..3.5; 0 = 1 */
     float height;             /* metres, 0..4: more spheres up to this far above the centre (a column; at most 8) */
@@ -852,6 +855,9 @@ typedef struct EmfBlockInfo {
     int32_t health;    /* building: the material's health points; 0 unknown */
     int32_t damage;    /* building: the damage so far, 0..255 (it heals 20 s after the last hit); -1 unknown */
     float x, y, z;     /* the block's centre, metres */
+    int32_t world;     /* API v45 (written when size covers it): building: 1 = the world's own block (a ruin as the
+                          game shipped it), 0 = a player's (placed, or another material than the shipped one), -1 = not
+                          known (its place is not loaded); terrain and empty: 0 */
 } EmfBlockInfo;
 
 typedef struct EmfHitRule {

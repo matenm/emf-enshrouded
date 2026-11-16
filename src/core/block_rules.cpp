@@ -67,6 +67,28 @@ int world_verdict(uint16_t cur, bool base_known, uint16_t base) {
     return static_cast<uint8_t>(base & 0xFF) == m ? 1 : 0;
 }
 
+float shrink_off_world(float cx, float cy, float cz, float r,
+                       const std::function<int(int32_t, int32_t, int32_t)>& world_cell) {
+    const double c[3] = {cx, cy, cz};
+    int32_t lo[3], hi[3];
+    for (int a = 0; a < 3; ++a) {
+        lo[a] = static_cast<int32_t>(std::floor((c[a] - r) * 2.0));
+        hi[a] = static_cast<int32_t>(std::floor((c[a] + r) * 2.0));
+    }
+    double nearest = r + 1.0;  // none within r
+    for (int32_t k = lo[2]; k <= hi[2]; ++k)
+        for (int32_t j = lo[1]; j <= hi[1]; ++j)
+            for (int32_t i = lo[0]; i <= hi[0]; ++i) {
+                const double dx = (i + 0.5) / 2.0 - c[0], dy = (j + 0.5) / 2.0 - c[1], dz = (k + 0.5) / 2.0 - c[2];
+                const double d = std::sqrt(dx * dx + dy * dy + dz * dz);
+                if (d > r || d >= nearest) continue;
+                if (world_cell(i, j, k) != 0) nearest = d;  // the world's own, or unknown
+            }
+    if (nearest > r) return r;
+    const double left = nearest - 0.01;
+    return left < kBlockMinRadius ? 0.0f : static_cast<float>(left);
+}
+
 std::string block_origin_line(const BlockOrigin& o) {
     char b[200];
     char shipped[48];
@@ -85,7 +107,7 @@ std::string block_origin_line(const BlockOrigin& o) {
 
 std::string break_check(const EmfBreakBlocks& r) {
     if (r.size < kBreakBlocksV44Size) return "the request's size is too small (set size = sizeof(EmfBreakBlocks))";
-    if (r.flags & ~(EMF_BREAK_INSTANT | EMF_BREAK_DROPS)) return "unknown flags";
+    if (r.flags & ~(EMF_BREAK_INSTANT | EMF_BREAK_DROPS | EMF_BREAK_WORLD)) return "unknown flags";
     if (!std::isfinite(r.x) || !std::isfinite(r.y) || !std::isfinite(r.z)) return "the point is not a number";
     if (!std::isfinite(r.radius) || !std::isfinite(r.height)) return "radius or height is not a number";
     const float radius = request_radius(r);
@@ -108,6 +130,7 @@ float request_radius(const EmfBreakBlocks& r) { return r.radius == 0.0f ? 1.0f :
 BreakSpec break_spec(const EmfBreakBlocks& r) {
     BreakSpec s;
     s.instant = (r.flags & EMF_BREAK_INSTANT) != 0;
+    s.world = (r.flags & EMF_BREAK_WORLD) != 0;
     bool any = false;
     for (int i = 0; i < 5; ++i) any = any || r.damage[i] != 0;
     for (int i = 0; i < 5; ++i) s.damage[i] = any ? r.damage[i] : kDefaultBreakDamage[i];

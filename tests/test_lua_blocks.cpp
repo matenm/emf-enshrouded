@@ -169,3 +169,48 @@ TEST_CASE("lua 1.37: nil on a core older than v44") {
     CHECK(logged("old nil nil nil"));
     CHECK(r.fake.breaks.empty());
 }
+
+TEST_CASE("lua 1.38: a block's world (true: the world's own, false: a player's, nil: not known) and break_blocks' world option; a v44 core gives no world") {
+    Rig r(L"lua_block_world");
+    add_script(r.dir, "bw",
+               "emf.command('go', '', function(w)\n"
+               "  local b = emf.block_at(w, 1, 2, 3)\n"
+               "  emf.log('world ' .. tostring(b.world))\n"
+               "end)\n"
+               "emf.command('brk', '', function(w)\n"
+               "  emf.break_blocks(w, 1, 2, 3, {world = true}, function() end)\n"
+               "  emf.break_blocks(w, 1, 2, 3, {world = false}, function() end)\n"
+               "end)\n"
+               "emf.command('old', '', function(w)\n"
+               "  emf.log('old ' .. tostring(emf.block_at(w, 1, 2, 3).world))\n"
+               "end)\n"
+               "emf.command('bad', '', function(w)\n"
+               "  local ok, err = pcall(emf.break_blocks, w, 1, 2, 3, {world = 1}, function() end)\n"
+               "  emf.log('bad ' .. tostring(ok) .. ' ' .. tostring(err))\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.fake.block.kind = EMF_BLOCK_BUILDING;
+    r.fake.block.material = 10;
+    r.fake.block.world = 1;
+    r.run_command("bw.go");
+    CHECK(logged("world true"));
+    r.fake.block.world = 0;
+    r.run_command("bw.go");
+    CHECK(logged("world false"));
+    r.fake.block.world = -1;
+    r.run_command("bw.go");
+    CHECK(logged("world nil"));
+    r.run_command("bw.brk");
+    REQUIRE(r.fake.breaks.size() == 2u);
+    CHECK((r.fake.breaks[0].r.flags & EMF_BREAK_WORLD) != 0);
+    CHECK((r.fake.breaks[1].r.flags & EMF_BREAK_WORLD) == 0);
+    r.run_command("bw.bad");
+    CHECK(logged("bad false"));
+    CHECK(logged("world must be true or false"));
+    // a v44 core never wrote world: nil
+    r.api.version = 44;
+    r.fake.block.world = 1;
+    r.run_command("bw.old");
+    CHECK(logged("old nil"));
+}

@@ -67,6 +67,8 @@ constexpr uint32_t kBreakBlocksV44Size = EMF_FIELD_END(EmfBreakBlocks, why);
 constexpr uint32_t kBreakResultV44Size = EMF_FIELD_END(EmfBreakResult, dropped);
 constexpr uint32_t kBlockInfoV44Size = EMF_FIELD_END(EmfBlockInfo, z);
 constexpr uint32_t kApiV44Size = EMF_FIELD_END(EmfApi, find_wall);
+constexpr uint32_t kApiV45Size = kApiV44Size;  // v45: the version only (EmfBlockInfo.world, EMF_BREAK_WORLD)
+constexpr uint32_t kBlockInfoV45Size = EMF_FIELD_END(EmfBlockInfo, world);
 constexpr uint32_t kUiWidgetV24Size = EMF_FIELD_END(EmfUiWidget, pad);  // 56: a v24/v25 mod's widget_size
 
 // The x64 layouts mods are built with. A field that moves breaks every built mod; appending one changes sizeof only:
@@ -163,9 +165,10 @@ static_assert(offsetof(EmfApi, player_permissions) == kApiV40Size && kApiV43Size
 static_assert(offsetof(EmfApi, break_blocks) == kApiV43Size && kApiV44Size == 1120 && sizeof(EmfApi) == kApiV44Size,
               "EmfApi layout (v44 appends break_blocks, block_at, find_wall)");
 static_assert(kBreakResultV44Size == 20 && sizeof(EmfBreakResult) == 20, "EmfBreakResult layout (v44)");
-static_assert(kBlockInfoV44Size == 40 && sizeof(EmfBlockInfo) == 40 && offsetof(EmfBlockInfo, damage) == 24 &&
-                  offsetof(EmfBlockInfo, x) == 28,
+static_assert(kBlockInfoV44Size == 40 && offsetof(EmfBlockInfo, damage) == 24 && offsetof(EmfBlockInfo, x) == 28,
               "EmfBlockInfo layout (v44)");
+static_assert(kBlockInfoV45Size == 44 && sizeof(EmfBlockInfo) == 44 && offsetof(EmfBlockInfo, world) == 40,
+              "EmfBlockInfo layout (v45 appends world)");
 static_assert(kBreakBlocksV44Size == 160 && sizeof(EmfBreakBlocks) == 160 && offsetof(EmfBreakBlocks, damage) == 28 &&
                   offsetof(EmfBreakBlocks, materials) == 56 && offsetof(EmfBreakBlocks, why) == 64,
               "EmfBreakBlocks layout (v44)");

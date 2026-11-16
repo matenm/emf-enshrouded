@@ -1068,6 +1068,8 @@ inline bool game_admin(World w, uint32_t player) {
 }
 // v44: breaking player-built blocks, never terrain (break_blocks, block_at, find_wall)
 inline bool has_v44() { return api() && api()->size >= offsetof(EmfApi, find_wall) + sizeof(api()->find_wall); }
+// API v45 (EmfBlockInfo.world, EMF_BREAK_WORLD: the world's own blocks, its ruins, are never broken unless asked)
+inline bool has_v45() { return has_v44() && api()->version >= 45; }
 // Queues the break (req.size is set here): its id, or 0 with req.why. cb gets the counts after the server step.
 inline uint32_t break_blocks(World w, EmfBreakBlocks& req, EmfBreakCallback cb = nullptr, void* user = nullptr) {
     req.size = sizeof req;

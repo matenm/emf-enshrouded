@@ -574,16 +574,19 @@ TEST_CASE("api break_blocks (v44): queued on a server world; refused on a client
     CHECK(api->break_blocks(f.world(), nullptr, on_done, nullptr) == 0);
 }
 
-TEST_CASE("api table (v44): break_blocks, block_at and find_wall appended; version 44") {
+TEST_CASE("api table (v44, v45): break_blocks, block_at and find_wall appended; v45 is the version only (EmfBlockInfo.world, EMF_BREAK_WORLD)") {
     const EmfApi* api = api_table();
-    CHECK(api->version == 44u);
-    CHECK(EMF_API_VERSION == 44);
+    CHECK(api->version == 45u);
+    CHECK(EMF_API_VERSION == 45);
     CHECK(api->size == kApiV44Size);
+    CHECK(kApiV45Size == kApiV44Size);
     CHECK(offsetof(EmfApi, break_blocks) == kApiV43Size);
     CHECK(api->break_blocks != nullptr);
     CHECK(api->block_at != nullptr);
     CHECK(api->find_wall != nullptr);
-    CHECK(kBlockInfoV44Size == sizeof(EmfBlockInfo));
+    CHECK(kBlockInfoV44Size == 40);
+    CHECK(kBlockInfoV45Size == sizeof(EmfBlockInfo));
+    CHECK(offsetof(EmfBlockInfo, world) == 40);
     CHECK(kBreakResultV44Size == sizeof(EmfBreakResult));
 }
 
@@ -636,4 +639,43 @@ TEST_CASE("blocks origin: without the column reader signatures every building ce
     REQUIRE(ok);
     CHECK_FALSE(o.base_known);
     CHECK(o.world == -1);
+}
+
+TEST_CASE("api block_at and find_wall (v45): world is 1 for the world's own block, 0 for a player's, -1 when the base is not known; a v44 caller's struct is not written past its 40 bytes") {
+    Fixture f;
+    g_base_columns = {{2, 7}};
+    g_voxels[{20, 40, 60}] = 0xFF87;
+    g_base[{20, 40, 60}] = 0xFF87;  // the shipped world's stone
+    EmfBlockInfo out{};
+    out.size = sizeof out;
+    bool ok = false;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->block_at(w, 10.2f, 20.2f, 30.2f, &out); });
+    REQUIRE(ok);
+    CHECK(out.world == 1);
+    g_base[{20, 40, 60}] = 0;  // a player built it on air
+    const float from[3] = {8.1f, 20.2f, 30.2f}, to[3] = {12.1f, 20.2f, 30.2f};
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->find_wall(w, from, to, &out); });
+    REQUIRE(ok);
+    CHECK(out.world == 0);
+    g_base_columns.clear();  // not loaded
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->block_at(w, 10.2f, 20.2f, 30.2f, &out); });
+    REQUIRE(ok);
+    CHECK(out.world == -1);
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->block_at(w, 1.2f, 2.2f, 3.2f, &out); });
+    REQUIRE(ok);
+    CHECK(out.kind == EMF_BLOCK_EMPTY);
+    CHECK(out.world == 0);  // no building block
+    // a v44 mod's 40-byte struct: the 4 bytes after it stay as they were
+    struct {
+        EmfBlockInfo info;
+        uint32_t guard;
+    } v44{};
+    v44.info.size = 40;
+    std::memset(reinterpret_cast<uint8_t*>(&v44.info) + 40, 0xAB, sizeof v44 - 40);
+    g_base_columns = {{2, 7}};
+    g_base[{20, 40, 60}] = 0xFF87;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->block_at(w, 10.2f, 20.2f, 30.2f, &v44.info); });
+    REQUIRE(ok);
+    CHECK(v44.info.material == 7);
+    CHECK(static_cast<uint32_t>(v44.info.world) == 0xABABABABu);
 }

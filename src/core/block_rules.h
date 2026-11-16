@@ -4,6 +4,7 @@
 // terrain (materials 0..127) are always 0, so the kernel can never dig the ground; the game's Unbreakable materials
 // and materials without a config stay 0 too.
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,7 @@ constexpr uint32_t kBlockMaxMaterials = 128;
 
 struct BreakSpec {
     bool instant = false;
+    bool world = false;              // EMF_BREAK_WORLD: the world's own blocks too (else the spheres stop short of them)
     int32_t damage[5] = {};          // per hardness class (damage mode)
     std::vector<uint8_t> materials;  // building ids; empty = every one that can break
 };
@@ -60,6 +62,13 @@ struct DropStack {
 // breaking treats as the world's own. A cell that is no building block (empty, terrain): 0. Only the low byte counts:
 // decay and overgrowth paint change the high one.
 int world_verdict(uint16_t cur, bool base_known, uint16_t base);
+
+// Ruin protection for one break sphere: the game's kernel breaks every cell whose centre is within the radius and
+// decides by material, not by cell, so EMF shrinks the radius instead: to just short (0.01 m) of the nearest cell that
+// world_cell says is the world's own (1) or unknown (-1), among the cells within r. The radius to use; 0 when less
+// than kBlockMinRadius is left (the sphere is skipped). world_cell(i, j, k): cell (i, j, k) of 0.5 m, its centre at
+// ((i + 0.5) / 2, ...); 0 for a player's block, terrain and empty cells.
+float shrink_off_world(float cx, float cy, float cz, float r, const std::function<int(int32_t, int32_t, int32_t)>& world_cell);
 
 // One cell read for the `blocks origin` probe: what it is now, what the shipped world has there, and the verdict.
 struct BlockOrigin {

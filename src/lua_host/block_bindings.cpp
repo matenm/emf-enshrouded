@@ -59,6 +59,9 @@ void read_options(lua_State* L, int t, EmfBreakBlocks& r, std::vector<uint8_t>& 
                 r.flags |= EMF_BREAK_INSTANT;
             else if (std::strcmp(m, "damage") != 0)
                 luaL_error(L, "emf.break_blocks: mode must be 'damage' or 'break'");
+        } else if (key == "world") {
+            if (!lua_isboolean(L, v)) luaL_error(L, "emf.break_blocks: world must be true or false");
+            if (lua_toboolean(L, v)) r.flags |= EMF_BREAK_WORLD;
         } else if (key == "drops") {
             if (!lua_isboolean(L, v)) luaL_error(L, "emf.break_blocks: drops must be true or false");
             if (lua_toboolean(L, v)) r.flags |= EMF_BREAK_DROPS;
@@ -87,7 +90,7 @@ void read_options(lua_State* L, int t, EmfBreakBlocks& r, std::vector<uint8_t>& 
                 lua_pop(L, 1);
             }
         } else {
-            luaL_error(L, "emf.break_blocks: unknown option '%s' (radius, height, mode, damage, drops, materials)",
+            luaL_error(L, "emf.break_blocks: unknown option '%s' (radius, height, mode, damage, drops, materials, world)",
                        key.c_str());
         }
         lua_pop(L, 1);
@@ -141,8 +144,9 @@ void break_cb(EmfWorld* w, uint32_t id, const EmfBreakResult* r, void* user) {
     }
 }
 
-void push_block(lua_State* L, const EmfBlockInfo& b) {
-    lua_createtable(L, 0, 9);
+// world_known: the core is v45 or newer (an older one never writes world)
+void push_block(lua_State* L, const EmfBlockInfo& b, bool world_known) {
+    lua_createtable(L, 0, 10);
     lua_pushstring(L, b.kind == EMF_BLOCK_BUILDING ? "building" : b.kind == EMF_BLOCK_TERRAIN ? "terrain" : "empty");
     lua_setfield(L, -2, "kind");
     lua_pushinteger(L, b.material);
@@ -156,6 +160,10 @@ void push_block(lua_State* L, const EmfBlockInfo& b) {
     if (b.damage >= 0) {
         lua_pushinteger(L, b.damage);
         lua_setfield(L, -2, "damage");
+    }
+    if (b.kind == EMF_BLOCK_BUILDING && world_known && b.world >= 0) {  // 1.38 (v45): nil when not known
+        lua_pushboolean(L, b.world == 1);
+        lua_setfield(L, -2, "world");
     }
     lua_pushnumber(L, b.x);
     lua_setfield(L, -2, "x");
@@ -203,7 +211,7 @@ int l_break_blocks(lua_State* L) {
     return 1;
 }
 
-// emf.block_at(world, x, y, z): {kind, material, fill, hardness, health, damage, x, y, z}, or nil.
+// emf.block_at(world, x, y, z): {kind, material, fill, hardness, health, damage, x, y, z, world (1.38)}, or nil.
 int l_block_at(lua_State* L) {
     Script* s = script_of(L);
     EmfWorld* w = lua_world_arg(L, 1);
@@ -216,7 +224,7 @@ int l_block_at(lua_State* L) {
         lua_pushnil(L);
         return 1;
     }
-    push_block(L, b);
+    push_block(L, b, a->version >= 45);
     return 1;
 }
 
@@ -234,7 +242,7 @@ int l_find_wall(lua_State* L) {
         lua_pushnil(L);
         return 1;
     }
-    push_block(L, b);
+    push_block(L, b, a->version >= 45);
     return 1;
 }
 

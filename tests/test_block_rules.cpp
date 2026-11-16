@@ -153,7 +153,7 @@ TEST_CASE("block rules: break_check refusals") {
                     r.materials = many;
                 }).empty());
     CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.material_count = 1; }).empty());  // no list
-    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.flags = 0x4; }).empty());
+    CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.flags = 0x8; }).empty());
     CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.x = std::numeric_limits<float>::quiet_NaN(); }).empty());
     CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.z = std::numeric_limits<float>::infinity(); }).empty());
     CHECK_FALSE(bad([](EmfBreakBlocks& r) { r.size = kBreakBlocksV44Size - 1; }).empty());
@@ -228,4 +228,46 @@ TEST_CASE("block rules: world_verdict: a building cell whose material equals the
     CHECK(world_verdict(0xFF8A, true, 0xFF05) == 0);   // built where terrain was
     CHECK(world_verdict(0xFF8A, false, 0) == -1);      // the base is not known (not loaded)
     CHECK(world_verdict(0xFF05, false, 0) == 0);       // terrain: no building block, whatever the base
+}
+
+TEST_CASE("block rules: shrink_off_world: a sphere stops just short of the nearest world (or unknown) building cell; none near: the radius stays; under 0.25 m: skipped") {
+    // cells are 0.5 m; cell (i, j, k) has its centre at ((i + 0.5) / 2, ...)
+    auto none = [](int32_t, int32_t, int32_t) { return 0; };
+    CHECK(shrink_off_world(10.25f, 20.25f, 30.25f, 2.0f, none) == doctest::Approx(2.0f));
+    // a ruin cell whose centre is 1 m from the sphere's centre: (22, 40, 60) -> (11.25, 20.25, 30.25)
+    auto ruin = [](int32_t i, int32_t j, int32_t k) { return i == 22 && j == 40 && k == 60 ? 1 : 0; };
+    const float r = shrink_off_world(10.25f, 20.25f, 30.25f, 2.0f, ruin);
+    CHECK(r == doctest::Approx(0.99f));
+    CHECK(r < 1.0f);  // the game's kernel breaks a cell whose centre is within the radius: strictly short of it
+    // an unknown base counts as the world's own
+    auto unknown = [](int32_t i, int32_t j, int32_t k) { return i == 22 && j == 40 && k == 60 ? -1 : 0; };
+    CHECK(shrink_off_world(10.25f, 20.25f, 30.25f, 2.0f, unknown) == doctest::Approx(0.99f));
+    // a ruin cell farther than the radius changes nothing
+    CHECK(shrink_off_world(10.25f, 20.25f, 30.25f, 0.9f, ruin) == doctest::Approx(0.9f));
+    // the ruin cell right next to the centre: less than 0.25 m left, the sphere is skipped
+    CHECK(shrink_off_world(11.05f, 20.25f, 30.25f, 2.0f, ruin) == 0.0f);  // 0.2 m away
+    // the nearest of several counts; a cell exactly at the radius counts too (the kernel's test includes it)
+    auto two = [](int32_t i, int32_t j, int32_t k) {
+        if (i == 22 && j == 40 && k == 60) return 1;   // 1 m
+        if (i == 20 && j == 43 && k == 60) return 1;   // 1.5 m up
+        return 0;
+    };
+    CHECK(shrink_off_world(10.25f, 20.25f, 30.25f, 3.0f, two) == doctest::Approx(0.99f));
+    CHECK(shrink_off_world(10.25f, 20.25f, 30.25f, 1.0f, ruin) == doctest::Approx(0.99f));
+    // negative coordinates
+    auto neg = [](int32_t i, int32_t j, int32_t k) { return i == -3 && j == 0 && k == -3 ? 1 : 0; };  // (-1.25, 0.25, -1.25)
+    CHECK(shrink_off_world(-0.25f, 0.25f, -1.25f, 2.0f, neg) == doctest::Approx(0.99f));
+}
+
+TEST_CASE("block rules: EMF_BREAK_WORLD (v45) is a known flag and asks to break the world's own blocks too") {
+    EmfBreakBlocks r{};
+    r.size = sizeof r;
+    r.radius = 1;
+    r.flags = EMF_BREAK_WORLD;
+    CHECK(break_check(r).empty());
+    CHECK(break_spec(r).world);
+    r.flags = 0;
+    CHECK_FALSE(break_spec(r).world);
+    r.flags = 0x8;
+    CHECK(break_check(r) == "unknown flags");
 }

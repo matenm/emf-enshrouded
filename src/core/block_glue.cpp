@@ -408,6 +408,18 @@ void fill_damage(const Reads& r, EmfBlockInfo& b) {
     if (call_damage(g_deps.fns.damage_get, r.damage_store, cell, &d)) b.damage = d;
 }
 
+// EmfBlockInfo.world (v45) for the cell whose voxel is v.
+void fill_world(const Reads& r, EmfBlockInfo& b, uint16_t v) {
+    b.world = 0;
+    if (b.kind != EMF_BLOCK_BUILDING) return;
+    auto cache = std::make_unique<BaseCache>();
+    cache->editor = r.editor;
+    uint16_t base = 0;
+    const bool known = cache->cell(static_cast<int32_t>(std::floor(b.x * 2.0f)), static_cast<int32_t>(std::floor(b.y * 2.0f)),
+                                   static_cast<int32_t>(std::floor(b.z * 2.0f)), &base);
+    b.world = world_verdict(v, known, base);
+}
+
 }  // namespace
 
 bool blocks_block_at(EmfWorld* w, float x, float y, float z, EmfBlockInfo* out, std::string* why) {
@@ -429,6 +441,7 @@ bool blocks_block_at(EmfWorld* w, float x, float y, float z, EmfBlockInfo* out, 
     b.y = (static_cast<float>(cy) + 0.5f) / 2.0f;
     b.z = (static_cast<float>(cz) + 0.5f) / 2.0f;
     fill_damage(*r, b);
+    fill_world(*r, b, v);
     *out = b;
     return true;
 }
@@ -477,6 +490,14 @@ bool blocks_find_wall(EmfWorld* w, const float from[3], const float to[3], EmfBl
     if (!hit) return false;
     EmfBlockInfo b = *hit;
     fill_damage(*r, b);
+    const auto cx = static_cast<int32_t>(std::floor(b.x * 2.0f)), cy = static_cast<int32_t>(std::floor(b.y * 2.0f)),
+               cz = static_cast<int32_t>(std::floor(b.z * 2.0f));
+    uint16_t v = 0;
+    if (reader_of(*r)(cx, cy, cz, &v)) {
+        fill_world(*r, b, v);
+    } else {
+        b.world = -1;
+    }
     *out = b;
     return true;
 }
