@@ -50,6 +50,9 @@ typedef int32_t (*emf_content_portraits_fn)(const char* request_json, emf_conten
    reply: a NUL-terminated UTF-8 JSON
      {"code": n, "message": "...", "mods": [{"id": "...", "version": "..."}],
       "mod_errors": [{"id": "..." or null, "path": "...", "error": "..."}], "dlls": ["..."], "ms": n}
+   and, only when a mod's Lua gave any while the build ran (EML's warn, or an error in its log span),
+     "mod_warnings": [{"id": "...", "warning": "..."}]  (at most 20, each cut at 300 characters; the log has all)
+   A build with warnings still returns its code (EMF_CONTENT_OK when it worked): the mod says part of it is missing.
    *reply_len is always set to the full reply's byte length with the NUL (reply_len must not be NULL: BAD_REQUEST).
    When reply_cap < *reply_len, the reply is cut to fit: it keeps the real code and ms, adds "truncated": true, has
    empty lists and as much of the message as fits, and the call still returns the real code. Only when not even that

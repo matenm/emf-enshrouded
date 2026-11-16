@@ -12,7 +12,7 @@ use std::ffi::{CStr, c_char, c_int, c_void};
 use std::io;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
-use std::sync::{Mutex, TryLockError};
+use std::sync::{Arc, Mutex, TryLockError};
 use std::time::Instant;
 
 pub mod portraits;
@@ -151,6 +151,19 @@ struct ModErrorInfo {
     error: String,
 }
 
+/// A warning or error a mod's Lua gave while its content was built (EML's `warn`, or an error logged in its span): the
+/// build still worked, but the mod says something of it is missing (a creature pack that caught its own failure).
+#[derive(Serialize, Clone, Debug)]
+struct ModWarningInfo {
+    id: String,
+    warning: String,
+}
+
+/// At most this many warnings go into a reply; every one still goes to the log.
+const MAX_MOD_WARNINGS: usize = 20;
+/// A warning longer than this many characters is cut (the log has it whole).
+const MAX_WARNING_CHARS: usize = 300;
+
 #[derive(Serialize, Deserialize, Default)]
 struct Reply {
     code: i32,
@@ -162,6 +175,9 @@ struct Reply {
     mods: Vec<ModInfo>,
     #[serde(skip_deserializing)]
     mod_errors: Vec<ModErrorInfo>,
+    /// Only when a mod gave one (a reply without warnings stays as before).
+    #[serde(skip_deserializing, skip_serializing_if = "Vec::is_empty")]
+    mod_warnings: Vec<ModWarningInfo>,
     #[serde(skip_deserializing)]
     dlls: Vec<String>,
     ms: u64,
@@ -316,9 +332,94 @@ fn build(request: Request) -> Reply {
     }
 }
 
-/// Runs `f` with the caller's log callback as the tracing subscriber (none when there is no callback).
-fn with_log<R>(logger: Logger, f: impl FnOnce() -> R) -> R {
-    if logger.callback.is_some() {
+/// The `mod_id` a span was opened with (EML opens a `lua` span with the mod's id around each line a mod's Lua logs).
+struct ModId(String);
+
+/// One field's text from a span's or an event's fields.
+struct FieldText {
+    name: &'static str,
+    value: Option<String>,
+}
+
+impl tracing::field::Visit for FieldText {
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == self.name {
+            self.value = Some(value.to_string());
+        }
+    }
+
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == self.name && self.value.is_none() {
+            self.value = Some(format!("{value:?}"));
+        }
+    }
+}
+
+/// A warning's text for the reply: tabs and line breaks become single spaces, cut to MAX_WARNING_CHARS characters.
+fn warning_text(raw: &str) -> String {
+    let mut out = String::new();
+    let mut space = false;
+    for c in raw.trim().chars() {
+        if c == '\t' || c == '\r' || c == '\n' {
+            if !space {
+                out.push(' ');
+            }
+            space = true;
+        } else {
+            out.push(c);
+            space = false;
+        }
+    }
+    match out.char_indices().nth(MAX_WARNING_CHARS) {
+        Some((at, _)) => out[..at].to_string(),
+        None => out,
+    }
+}
+
+/// Collects the warnings and errors logged inside a span that carries a `mod_id`, for the reply.
+struct ModWarningLayer(Arc<Mutex<Vec<ModWarningInfo>>>);
+
+impl<S> tracing_subscriber::Layer<S> for ModWarningLayer
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        id: &tracing::span::Id,
+        ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        let mut mod_id = FieldText { name: "mod_id", value: None };
+        attrs.record(&mut mod_id);
+        if let (Some(mod_id), Some(span)) = (mod_id.value, ctx.span(id)) {
+            span.extensions_mut().insert(ModId(mod_id));
+        }
+    }
+
+    fn on_event(&self, event: &tracing::Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
+        if *event.metadata().level() > tracing::Level::WARN {
+            return;  // information and below: not a warning
+        }
+        let Some(scope) = ctx.event_scope(event) else { return };
+        let Some(id) = scope.into_iter().find_map(|span| span.extensions().get::<ModId>().map(|m| m.0.clone())) else {
+            return;  // not inside a mod's span: EML's or EMF's own line
+        };
+        let mut message = FieldText { name: "message", value: None };
+        event.record(&mut message);
+        let mut list = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if list.len() < MAX_MOD_WARNINGS {
+            list.push(ModWarningInfo { id, warning: warning_text(&message.value.unwrap_or_default()) });
+        }
+    }
+}
+
+/// Runs `f` with the caller's log callback as the tracing subscriber (none when there is no callback), and gives the
+/// warnings mods logged meanwhile.
+fn with_log_collecting<R>(logger: Logger, f: impl FnOnce() -> R) -> (R, Vec<ModWarningInfo>) {
+    use tracing_subscriber::layer::SubscriberExt;
+    let warnings = Arc::new(Mutex::new(Vec::new()));
+    let layer = ModWarningLayer(warnings.clone());
+    let result = if logger.callback.is_some() {
         let subscriber = tracing_subscriber::fmt()
             .with_ansi(false)
             .without_time()
@@ -326,11 +427,19 @@ fn with_log<R>(logger: Logger, f: impl FnOnce() -> R) -> R {
             .with_target(true)
             .with_max_level(tracing::Level::DEBUG)
             .with_writer(CallbackWriter(logger))
-            .finish();
+            .finish()
+            .with(layer);
         tracing::subscriber::with_default(subscriber, f)
     } else {
-        f()
-    }
+        tracing::subscriber::with_default(tracing_subscriber::registry().with(layer), f)
+    };
+    let list = std::mem::take(&mut *warnings.lock().unwrap_or_else(|e| e.into_inner()));
+    (result, list)
+}
+
+/// Runs `f` with the caller's log callback as the tracing subscriber (none when there is no callback).
+fn with_log<R>(logger: Logger, f: impl FnOnce() -> R) -> R {
+    with_log_collecting(logger, f).0
 }
 
 /// Parses the request, runs the build with the caller's log callback, and gives the code and the reply JSON.
@@ -339,7 +448,11 @@ pub fn build_json(request_json: &str, logger: Logger) -> (i32, String) {
     let mut reply = match serde_json::from_str::<Request>(request_json) {
         Err(e) => Reply::failed(BAD_REQUEST, format!("The request is not valid JSON for emf_content: {e}")),
         Ok(request) if request.game_dir.is_empty() => Reply::failed(BAD_REQUEST, "The request's game_dir is empty"),
-        Ok(request) => with_log(logger, || build(request)),
+        Ok(request) => {
+            let (mut reply, warnings) = with_log_collecting(logger, || build(request));
+            reply.mod_warnings = warnings;
+            reply
+        }
     };
     reply.ms = started.elapsed().as_millis() as u64;
     (reply.code, reply.to_json())
@@ -772,6 +885,73 @@ mod tests {
         let eml_error = lines.iter().find(|(level, line)| *level == 0 && line.starts_with("eml::"));
         assert!(eml_error.is_some(), "an error line from EML itself: {lines:?}");
         assert!(eml_error.unwrap().1.contains("enshrouded.exe"), "{lines:?}");
+    }
+
+    // A creature pack that caught its own failure (pcall) and only said so in a print: the build answered "up to
+    // date" and the game started without that creature, with nothing on screen.
+    #[test]
+    fn a_mods_warnings_are_collected_with_its_id_and_still_logged() {
+        let mut lines: Vec<(i32, String)> = Vec::new();
+        let logger = Logger::new(Some(collect), &mut lines as *mut _ as *mut c_void);
+        let ((), warnings) = with_log_collecting(logger, || {
+            let mod_id = "emf_beastmaster_bear";
+            tracing::warn_span!(target: "eml::lua", "lua", mod_id).in_scope(|| {
+                tracing::warn!(target: "eml::lua", "emf_beastmaster_bear:\tBear: not added: out of references");
+            });
+            let quiet = "quiet";
+            tracing::info_span!(target: "eml::lua", "lua", mod_id = quiet).in_scope(|| {
+                tracing::info!(target: "eml::lua", "only information");
+            });
+            let failing = "failing";
+            tracing::info_span!(target: "eml::lua", "lua", mod_id = failing).in_scope(|| {
+                tracing::error!(target: "eml::lua", "an error counts too");
+            });
+            tracing::warn!(target: "eml::content", "a warning outside any mod is not one of a mod's");
+        });
+        assert_eq!(warnings.len(), 2, "{:?}", warnings.iter().map(|w| &w.warning).collect::<Vec<_>>());
+        assert_eq!(warnings[0].id, "emf_beastmaster_bear");
+        assert_eq!(warnings[0].warning, "emf_beastmaster_bear: Bear: not added: out of references");
+        assert_eq!(warnings[1].id, "failing");
+        assert!(lines.iter().any(|(level, line)| *level == 1 && line.contains("not added")), "{lines:?}");
+    }
+
+    #[test]
+    fn a_mods_warnings_are_collected_without_a_log_callback() {
+        let ((), warnings) = with_log_collecting(Logger::none(), || {
+            let mod_id = "m";
+            tracing::warn_span!(target: "eml::lua", "lua", mod_id).in_scope(|| {
+                tracing::warn!(target: "eml::lua", "w");
+            });
+        });
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].id, "m");
+    }
+
+    #[test]
+    fn a_mods_warnings_are_capped_and_cut_between_letters() {
+        let ((), warnings) = with_log_collecting(Logger::none(), || {
+            let mod_id = "m";
+            tracing::warn_span!(target: "eml::lua", "lua", mod_id).in_scope(|| {
+                for _ in 0..30 {
+                    tracing::warn!(target: "eml::lua", "{}", "\u{e9}".repeat(400));
+                }
+            });
+        });
+        assert_eq!(warnings.len(), MAX_MOD_WARNINGS);
+        assert!(warnings[0].warning.chars().count() <= MAX_WARNING_CHARS);
+        assert!(warnings[0].warning.ends_with('\u{e9}'));
+    }
+
+    #[test]
+    fn a_reply_lists_the_mods_warnings() {
+        let reply = Reply {
+            code: OK,
+            mod_warnings: vec![ModWarningInfo { id: "a".into(), warning: "b".into() }],
+            ..Default::default()
+        };
+        let v = parse(&reply.to_json());
+        assert_eq!(v["mod_warnings"][0]["id"], "a");
+        assert_eq!(v["mod_warnings"][0]["warning"], "b");
     }
 
     #[test]
