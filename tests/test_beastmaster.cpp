@@ -868,6 +868,35 @@ TEST_CASE("beastmaster: passive beasts still go where Attack sends them, for 20 
     CHECK_FALSE(still_fighting(b, 1234));  // 20 s on: passive again
 }
 
+// An order that ended early (its target died or turned friendly, the chase was dropped) left Attack's 20 s running: the
+// passive beast fought whatever the game picked next until then.
+TEST_CASE("beastmaster: a passive beast is calm again as soon as Attack's order ends early (target dead or friendly, chase dropped)") {
+    for (int how = 0; how < 3; ++how) {
+        CAPTURE(how);
+        BeastRig b;
+        wolf_out(b);
+        b.reply("beastmaster.mode passive");
+        creature(b, 70, 0, 10, kSkeletonFoe);
+        creature(b, 71, 4, 10, kSkeletonFoe);
+        b.look(1, 0, 10.5, 0, 0);  // looking at 70
+        REQUIRE(b.reply("beastmaster.attack").find("attack") != std::string::npos);
+        fighting(b, 1234, 70);
+        b.seconds(2);
+        REQUIRE(still_fighting(b, 1234));  // sent: left to fight
+        if (how == 0) b.r.fake.attrs[{70, EMF_ATTR_HEALTH}] = 0;  // it died
+        if (how == 1) component<ecs::Faction>(b.r.fake, 70).faction = static_cast<emf::gen::FactionType>(kPlayerAlly);
+        if (how == 2) place(b.r.fake, 1234, 0, 10, 50);  // chased beyond 45 m: it drops the chase and runs back
+        b.seconds(1);                                    // the order ends at the check
+        if (how == 2) {
+            place(b.r.fake, 1234, 0, 10, 5);  // back beside its owner
+            b.seconds(4);                     // the 3 s of coming back are over
+        }
+        fighting(b, 1234, 71);  // the game picks another foe for it
+        b.seconds(1);
+        CHECK_FALSE(still_fighting(b, 1234));  // passive again at once, not after the rest of the 20 s
+    }
+}
+
 TEST_CASE("beastmaster: a beast more than 45 m from its owner drops its chase and is told to guard them again, in any mode") {
     BeastRig b;
     wolf_out(b);

@@ -41,7 +41,8 @@ page says who applies them). Without them everything else works and those beasts
 6. **Modes**, for all your beasts at once: **Mode** on the wheel steps through them, or `/beastmaster mode <mode>`;
    the line at the bottom left shows it ("Beasts (passive): ...").
    - **Defending** (the first): they fight what attacks you or them, and what you send them at with Attack.
-   - **Passive:** they ignore fights and keep following you; Attack still sends them at a creature (for 20 s).
+   - **Passive:** they ignore fights and keep following you; Attack still sends them at a creature (for 20 s, or until
+     it falls, turns friendly or they drop the chase: then they are calm again at once).
    - **Aggressive:** they also go after hostile creatures within 25 m of you (never wildlife, farm animals, bosses or
      players).
 7. **A beast that falls** rests for 60 seconds, then comes back beside you by itself, free (the line at the bottom left

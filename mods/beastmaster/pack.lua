@@ -509,8 +509,10 @@ local function order(world, id, target)
 	return true
 end
 
--- The order over: the game picks for the beast again.
+-- The order over: the game picks for the beast again, and a passive beast is calm again at once (an order that ended
+-- early, its target dead or friendly or the chase dropped, does not leave the rest of SENT_S to fight anything).
 function P:end_order(world, id)
+	self.sent[id] = nil
 	if not self.orders[id] then return end
 	self.orders[id] = nil
 	local a = world:position(id) and world:get("DynamicAggro", id)
@@ -576,10 +578,7 @@ end
 -- Every order of `account`'s beasts ends (their mode changed: passive ones stop at once).
 function P:end_orders(world, account)
 	for _, b in ipairs(self.env.beasts():list(account)) do
-		if b.entity and self.orders[b.entity] then
-			self:end_order(world, b.entity)
-			self.sent[b.entity] = nil
-		end
+		if b.entity and self.orders[b.entity] then self:end_order(world, b.entity) end
 	end
 end
 
