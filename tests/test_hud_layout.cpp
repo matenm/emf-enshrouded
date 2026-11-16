@@ -159,6 +159,21 @@ TEST_CASE("layout_from_json: out-of-range values are clamped with a note; wrong 
     CHECK(r.notes[3] == "buffRow.hidden is not true or false, left at false");
 }
 
+TEST_CASE("layout_from_json: a bar's scale in a hand-edited file is left at 1 with a note (the bars have none of their own); its move stays") {
+    const size_t mana = static_cast<size_t>(bar_element(kBarMana));
+    const size_t health = static_cast<size_t>(bar_element(kBarHealth));
+    const LayoutRead r = layout_from_json(
+        R"({"format":1,"elements":{"bar:mana":{"y":2,"scale":1.5},"bar:health":{"scale":1},"buffRow":{"scale":1.5}}})");
+    REQUIRE(r.layout.has_value());
+    CHECK(r.layout->elements[mana].y == 2.0f);
+    CHECK(r.layout->elements[mana].scale == 1.0f);
+    CHECK(r.layout->elements[health].is_default());  // stored as nothing: no "(moved)", nothing written back
+    CHECK(r.layout->elements[1].scale == 1.5f);       // the other parts keep theirs
+    REQUIRE(r.notes.size() == 1);
+    CHECK(r.notes[0] == "bar:mana.scale: health, mana and stamina have no scale of their own (scale playerStatusParent), "
+                        "left at 1");
+}
+
 TEST_CASE("layout_from_json: refuses a newer format, a missing format, a non-object, bad JSON, a file over 64 KB") {
     CHECK(layout_from_json(R"({"format":2})").error == "made by a newer EMF (format 2): update EMF");
     CHECK(layout_from_json(R"({"format":0})").error == "format 0 is not a HUD layout format");

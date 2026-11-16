@@ -140,6 +140,8 @@ TEST_CASE("hud.list: the state, every part, the layouts") {
     CHECK(l[15] == "  health (bar:health): where the game draws it, not seen yet");
     CHECK(l[18] == "  lines_top_right (lines:top_right): where EMF puts them, not seen yet");
     CHECK(l[21].rfind("hud: layouts: Default (active)", 0) == 0);
+    run(e, {"hud.move", "mana", "0", "5"});  // a bar has no scale of its own: none is listed
+    CHECK(run(e, {"hud.list"})[16] == "  mana (bar:mana): x 0 %, y 5 %, not seen yet");
 }
 
 TEST_CASE("hud.list: off, with the gate's words") {

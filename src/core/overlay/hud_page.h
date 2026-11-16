@@ -32,6 +32,10 @@ uint32_t page_colour(const hud::HudView& v, int bar, hud::BarPart part);
 uint32_t page_panel_colour(const hud::HudView& v);
 // The panel switch works when the panel colour does, and always to turn a set colour off.
 bool panel_switch_enabled(const hud::HudView& v);
+// Whether a part's offset and Hidden do anything: a bar's only while the bars move on their own (bars_work).
+bool part_moves(const hud::HudView& v, size_t part);
+// The keys line under a part's card: only the keys that do something for that part (a bar has no scale of its own).
+std::string page_keys_line(const hud::HudView& v, size_t part);
 // A picker's floats (0..1, clamped) as a colour with alpha.
 hud::Colour picked(const float rgba[4]);
 // The set colours the page has no button for, as "end #00ff00, heal #0000ff80"; "" for none.

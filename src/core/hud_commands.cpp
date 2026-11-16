@@ -181,7 +181,8 @@ std::vector<std::string> list_lines(HudEditor& editor) {
         if (e.is_default()) {
             line += parts[i].lines >= 0 ? "where EMF puts them" : "where the game draws it";
         } else {
-            line += pos_text(e) + ", scale " + number_text(e.scale);
+            line += pos_text(e);
+            if (parts[i].bar < 0) line += ", scale " + number_text(e.scale);  // a bar has no scale of its own
             if (e.hidden) line += ", hidden";
         }
         if (!v.live[i].seen) line += ", not seen yet";

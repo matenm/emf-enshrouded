@@ -309,7 +309,9 @@ stamina is not full).
 - **Health, mana and stamina** each move and hide on their own, anywhere on the screen (only the vitals part scales
   them). Inside the vitals' area a bar keeps its dark backing; moved far away from it, the game draws the bar without it.
   The vitals' card has **Swap health and mana** and **Swap health and stamina**: the bars stack in the new order with the
-  game's own spacing (`hud.swap`, `hud.order`). A hidden bar, or stamina while it is full, leaves no gap.
+  game's own spacing (`hud.swap`, `hud.order`). A hidden bar, or stamina while it is full, leaves no gap. Where the bars
+  cannot move on their own (a game build without the bars' drawing call, or after scale stopped), their cards say why
+  and their offsets, Hidden and keys are off; the vitals part still moves all three.
 - **Status effects grow upward:** a switch on the buffs' card (`hud.grow up`). The list of status effects then sits on the
   food icons' bottom edge and grows up instead of down; it never leaves the screen (at the top edge it stops and the rest
   grows down). With the vitals at the bottom of the screen, move the buffs part above the bars so the list has room.
@@ -332,7 +334,7 @@ stamina is not full).
 
 - **Offsets** are percent of the screen, from where the game draws the part, so a layout fits other screen sizes. The page
   shows the pixels at your resolution next to each value. Tab picks the next part, the arrow keys move it by 0.5 % (Shift:
-  5 %), `+` and `-` scale it, H hides it and R resets it.
+  5 %), `+` and `-` scale it (not the three bars), H hides it and R resets it.
 - **Keys:** F9 opens the page (press it again to close the console) and Pause puts the whole HUD back. Both are
   settings on the page and take one key each.
 - **Layouts** are saved under a name in `<game>\emf\hud\<name>.json`, one file each, and are the same for every character.

@@ -288,6 +288,46 @@ TEST_CASE("hud page: a mod lines card draws, and scales even without the game's 
     CHECK(std::string(emf_imgui_last_assert()).empty());
 }
 
+TEST_CASE("part_moves and page_keys_line: a bar's move and hide only while the bars move on their own; a bar is offered no scale keys") {
+    HudView v;
+    v.bars_work = true;
+    const size_t mana = static_cast<size_t>(bar_element(kBarMana));
+    const std::string all =
+        "Keys: Tab / Shift+Tab next part, arrows move 0.5 % (Shift: 5 %), + / - scale, H hide, R reset";
+    CHECK(part_moves(v, 0));
+    CHECK(part_moves(v, mana));
+    CHECK(page_keys_line(v, 0) == all);
+    CHECK(page_keys_line(v, mana) == "Keys: Tab / Shift+Tab next part, arrows move 0.5 % (Shift: 5 %), H hide, R reset");
+    v.bars_work = false;
+    CHECK(part_moves(v, 0));  // the vitals part moves the whole group without the bar hook
+    CHECK_FALSE(part_moves(v, mana));
+    CHECK(page_keys_line(v, 0) == all);
+    CHECK(page_keys_line(v, mana) == "Keys: Tab / Shift+Tab next part, R reset");
+}
+
+TEST_CASE("hud page: with the bars not moving on their own, a bar's arrows and H do nothing; its card draws") {
+    PageRig p;
+    p.rig.bars = false;  // no bar hook on this build
+    p.e = &p.rig.make();
+    const size_t mana = static_cast<size_t>(bar_element(kBarMana));
+    p.st.selected = mana;
+    p.frame();
+    p.press(ImGuiKey_RightArrow);
+    p.press(ImGuiKey_H);
+    CHECK(p.e->view().elements[mana].is_default());
+    p.press(ImGuiKey_R);  // reset still works (nothing to reset here)
+    p.press(ImGuiKey_Tab);  // and stepping on
+    CHECK(p.st.selected == mana + 1);
+    CHECK(std::string(emf_imgui_last_assert()).empty());
+    PageRig on;  // with the bars working the same keys move and hide it
+    on.st.selected = mana;
+    on.frame();
+    on.press(ImGuiKey_RightArrow);
+    CHECK(on.e->view().elements[mana].x == 0.5f);
+    on.press(ImGuiKey_H);
+    CHECK(on.e->view().elements[mana].hidden);
+}
+
 TEST_CASE("panel_switch_enabled: on when the panel works, and always to turn a set colour off") {  // review Minor 3
     HudView v;
     CHECK_FALSE(panel_switch_enabled(v));

@@ -212,7 +212,14 @@ LayoutRead layout_from_json(std::string_view text) {
             ElementLayout& e = l.elements[idx];
             read_number(val, "x", key, kOffsetMin, kOffsetMax, 0, clamp_offset, &e.x, r.notes);
             read_number(val, "y", key, kOffsetMin, kOffsetMax, 0, clamp_offset, &e.y, r.notes);
-            read_number(val, "scale", key, kScaleMin, kScaleMax, 1, clamp_scale, &e.scale, r.notes);
+            if (parts[idx].bar < 0) {
+                read_number(val, "scale", key, kScaleMin, kScaleMax, 1, clamp_scale, &e.scale, r.notes);
+            } else if (const json::Value* s = val.get("scale"); s && !(s->is(json::Value::Type::Number) && s->n == 1)) {
+                // a bar has no scale of its own (the vitals part scales the three): a hand-edited one would be kept and
+                // shown, and scale nothing
+                r.notes.push_back(key + ".scale: health, mana and stamina have no scale of their own (scale " +
+                                  parts[static_cast<size_t>(find_element("vitals"))].scope + "), left at 1");
+            }
             if (const json::Value* h = val.get("hidden")) {
                 if (h->is(json::Value::Type::Bool))
                     e.hidden = h->b;

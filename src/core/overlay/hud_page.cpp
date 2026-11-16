@@ -61,6 +61,8 @@ void apply_keys(HudEditor& editor, HudPageState& st, const HudView& v) {
         const PageCommand c = page_command(m.page, io.KeyShift);
         const size_t i = st.selected;
         const ElementLayout& cur = v.elements[i];
+        // a bar's move and hide do nothing while the bars do not move on their own (its card has them off too)
+        if ((c.action == PageAction::Move || c.action == PageAction::ToggleHide) && !part_moves(v, i)) break;
         switch (c.action) {
             case PageAction::Next: st.selected = step_element(st.selected, false); break;
             case PageAction::Previous: st.selected = step_element(st.selected, true); break;
@@ -97,6 +99,7 @@ void apply_mouse(HudEditor& editor, HudPageState& st, const HudView& v, ImVec2 d
     const int hit = pick_part(rects, io.MousePos);
     if (hit < 0) return;
     st.selected = static_cast<size_t>(hit);
+    if (!part_moves(v, st.selected)) return;  // a bar that cannot move on its own: picked, not dragged
     st.dragging = hit;
     st.drag_start_mouse = io.MousePos;
     st.drag_start_x = v.elements[static_cast<size_t>(hit)].x;
@@ -253,14 +256,17 @@ void draw_part_panel(HudEditor& editor, HudPageState& st, const HudView& v, ImVe
         ImGui::TextColored(kErrorColour, "%s", v.bars_note.c_str());
         ImGui::PopTextWrapPos();
     }
+    const bool moves = part_moves(v, i);  // a bar's offset and Hidden need the bars to move on their own
     float x = el.x, y = el.y;
+    ImGui::BeginDisabled(!moves);
     bool moved = ImGui::SliderFloat("Offset X", &x, kOffsetMin, kOffsetMax, "%.1f %%");
     ImGui::SameLine();
     ImGui::TextDisabled("%d px", percent_to_pixels(x, display.x));
     moved |= ImGui::SliderFloat("Offset Y", &y, kOffsetMin, kOffsetMax, "%.1f %%");
     ImGui::SameLine();
     ImGui::TextDisabled("%d px", percent_to_pixels(y, display.y));
-    if (moved) editor.set_offset(i, x, y, Save::Later);
+    ImGui::EndDisabled();
+    if (moved && moves) editor.set_offset(i, x, y, Save::Later);
 
     const bool lines = part.lines >= 0;  // EMF draws them: their scale needs no transform stack
     if (bar) {
@@ -295,14 +301,16 @@ void draw_part_panel(HudEditor& editor, HudPageState& st, const HudView& v, ImVe
     }
 
     bool hidden = el.hidden;
-    if (ImGui::Checkbox("Hidden", &hidden)) request_hide(editor, st, v, i, hidden);
+    ImGui::BeginDisabled(!moves);
+    if (ImGui::Checkbox("Hidden", &hidden) && moves) request_hide(editor, st, v, i, hidden);
+    ImGui::EndDisabled();
     if (waiting(st.confirm_hide_ms, now_ms()) && !el.hidden && part.confirm_hide)
         ImGui::TextColored(kErrorColour, "Hide %s? Click again within 3 s.", part.label);
     ImGui::SameLine();
     if (ImGui::Button("Reset")) editor.reset(i, Save::Later);
     ImGui::Spacing();
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("Keys: Tab / Shift+Tab next part, arrows move 0.5 %% (Shift: 5 %%), + / - scale, H hide, R reset");
+    ImGui::TextDisabled("%s", page_keys_line(v, i).c_str());
     ImGui::PopTextWrapPos();
 }
 
@@ -367,6 +375,19 @@ uint32_t page_panel_colour(const HudView& v) {
 }
 
 bool panel_switch_enabled(const HudView& v) { return v.panel_works || v.panel.set; }
+
+bool part_moves(const HudView& v, size_t part) {
+    return part >= kHudElementCount || hud_elements()[part].bar < 0 || v.bars_work;
+}
+
+std::string page_keys_line(const HudView& v, size_t part) {
+    const bool bar = part < kHudElementCount && hud_elements()[part].bar >= 0;
+    std::string s = "Keys: Tab / Shift+Tab next part";
+    if (part_moves(v, part)) s += ", arrows move 0.5 % (Shift: 5 %)";
+    if (!bar) s += ", + / - scale";
+    if (part_moves(v, part)) s += ", H hide";
+    return s + ", R reset";
+}
 
 Colour picked(const float rgba[4]) {
     uint32_t v = 0;
