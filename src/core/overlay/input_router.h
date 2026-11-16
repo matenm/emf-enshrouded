@@ -62,6 +62,9 @@ public:
     // the render thread each frame the console draws; opening or closing the console clears it.
     void set_esc_to_console(bool on) { esc_to_console_ = on; }
     bool esc_to_console() const { return esc_to_console_.load(); }
+    // Asked when the console key is pressed while the console is closed: true while the game's own text box (its chat)
+    // has the keys, so the key types its character there instead of opening the console. Null: never.
+    void set_game_text(bool (*typing)()) { game_text_ = typing; }
     // A key from raw input (WM_INPUT), or from key messages when the window gets no raw keyboard input.
     Route key(const KeyEvent& e);
     // A key message (WM_KEYDOWN/UP) that follows the same key's raw input: it copies the raw decision (Game or
@@ -89,6 +92,7 @@ private:
     std::atomic<uint16_t> window_skip_vk_{0};  // the close key's press that opened the window (see set_window)
     std::atomic<bool> esc_to_console_{false};
     std::atomic<uint16_t> hidden_vk_{0};
+    std::atomic<bool (*)()> game_text_{nullptr};
     bool swallow_char_ = false;  // the character right after a toggle belongs to the toggle key
     uint16_t held_ = 0;          // the key that toggled, until it is released (its auto-repeats are swallowed)
     bool passes_[512];           // per key: did the last raw decision let the game see it

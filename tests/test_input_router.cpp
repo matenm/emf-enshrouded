@@ -587,3 +587,27 @@ TEST_CASE("KeyDebugLog: without raw input, key messages count as the presses") {
     CHECK_FALSE(log.key_message(0x17, 0x49, true).empty());
     CHECK(log.key_message(0x17, 0x49, true) == "overlay keys: 2 key presses logged; no more until the game starts again");
 }
+
+namespace {
+bool g_game_typing = false;
+bool game_typing_for_test() { return g_game_typing; }
+}  // namespace
+
+// Typing the console key's character in the game's chat (an apostrophe on a Norwegian keyboard) opened EMF's console.
+TEST_CASE("InputRouter: while the game's chat has the keys, the console key types into it; an open console still closes") {
+    InputRouter r(0x2b);
+    r.set_game_text(&game_typing_for_test);
+    g_game_typing = true;
+    CHECK(r.key(down(0x2b)) == Route::Game);
+    CHECK_FALSE(r.open());
+    CHECK(r.character(L'\'') == Route::Game);  // its character reaches the chat box
+    CHECK(r.key(up(0x2b)) == Route::Game);
+    g_game_typing = false;
+    CHECK(r.key(down(0x2b)) == Route::Toggle);  // out of the chat: the console opens as before
+    CHECK(r.open());
+    CHECK(r.key(up(0x2b)) == Route::Swallow);
+    g_game_typing = true;  // the console open (it has the keys, not the game's chat): its key closes it
+    CHECK(r.key(down(0x2b)) == Route::Toggle);
+    CHECK_FALSE(r.open());
+    g_game_typing = false;
+}

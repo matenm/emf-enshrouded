@@ -77,6 +77,12 @@ Route InputRouter::decide(const KeyEvent& e) {
             held_ = e.scan;        // and its auto-repeats do not close the console after the list hid
             return Route::Console;
         }
+        if (toggle && !open_) {
+            if (bool (*typing)() = game_text_.load(); typing && typing()) {  // the game's chat has the keys: type it there
+                swallow_char_ = false;
+                return Route::Game;
+            }
+        }
         if (toggle || (open_ && esc)) {
             open_ = !open_.load();
             esc_to_console_ = false;  // until the console says again that its suggestions show
@@ -88,6 +94,7 @@ Route InputRouter::decide(const KeyEvent& e) {
         return open_ ? Route::Console : Route::Game;
     }
     if (held) held_ = 0;
+    if (toggle && !held && game_down_[index(e)]) return Route::Game;  // it typed into the game's chat
     if (toggle || held) return Route::Swallow;  // the game never saw these go down
     return open_ ? Route::Both : Route::Game;
 }

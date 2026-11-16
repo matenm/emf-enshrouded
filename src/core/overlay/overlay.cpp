@@ -13,6 +13,7 @@
 #include <set>
 
 #include "core/emf_settings.h"
+#include "core/game_screen.h"
 #include "core/game_text.h"
 #include "core/hud_editor/lines.h"
 #include "core/screen_glyphs.h"
@@ -826,6 +827,7 @@ bool start_overlay(const OverlayConfig& config, OverlayDeps deps) {
     g_ui.suggester.set_rows(config.suggest_rows);
     g_model = std::make_unique<ConsoleModel>();
     g_router = std::make_unique<InputRouter>(config.toggle_scan);
+    g_router->set_game_text(&game_typing_now);  // the console key types into the game's chat while it is open
     g_history_path = g_deps.emf_dir + L"\\console_history.txt";
     g_model->load_history(g_history_path);
     InputCallbacks cb;

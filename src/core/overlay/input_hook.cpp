@@ -15,6 +15,7 @@
 
 #include "common/hooks.h"
 #include "common/log.h"
+#include "core/game_screen.h"
 #include "injected_keys.h"
 
 namespace emf::core {
@@ -90,6 +91,12 @@ SHORT WINAPI hk_get_async_key_state(int vk) {
     if (InjectedKeys* inj = g_injected.load(std::memory_order_acquire); inj && inj->any())
         if (from_mod(_ReturnAddress()))
             if (const auto s = injected_key_state(inj, vk, true, GetTickCount64(), true, game_really_in_front())) return *s;
+    // the player types in the game's chat or rename box (game_screen.h): mods read every key as up, and a key held
+    // then stays up for them until released
+    if (const bool typing = game_typing_now(); (typing || typing_gate().any()) && from_mod(_ReturnAddress())) {
+        const SHORT s = o_get_async_key_state(vk);
+        if (typing_gate().hide(vk, (s & 0x8000) != 0, typing)) return 0;
+    }
     if (g_router && (g_router->capturing() || g_router->hiding()) && from_mod(_ReturnAddress())) {
         if (g_router->capturing()) return 0;
         const SHORT s = o_get_async_key_state(vk);
@@ -102,6 +109,12 @@ SHORT WINAPI hk_get_key_state(int vk) {
     if (InjectedKeys* inj = g_injected.load(std::memory_order_acquire); inj && inj->any())
         if (from_mod(_ReturnAddress()))
             if (const auto s = injected_key_state(inj, vk, true, GetTickCount64(), false, game_really_in_front())) return *s;
+    // the player types in the game's chat or rename box (game_screen.h): mods read every key as up, and a key held
+    // then stays up for them until released
+    if (const bool typing = game_typing_now(); (typing || typing_gate().any()) && from_mod(_ReturnAddress())) {
+        const SHORT s = o_get_key_state(vk);
+        if (typing_gate().hide(vk, (s & 0x8000) != 0, typing)) return 0;
+    }
     if (g_router && (g_router->capturing() || g_router->hiding()) && from_mod(_ReturnAddress())) {
         if (g_router->capturing()) return 0;
         const SHORT s = o_get_key_state(vk);
