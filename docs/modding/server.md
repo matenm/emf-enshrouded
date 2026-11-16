@@ -230,6 +230,10 @@ are not compared.
   mods talks to players' games, when it has mods its players must match, or when it refuses players (above). A
   server whose mods players do not need stays silent, and then has nothing to compare (`players.mods` shows "no EMF"
   for everyone there). `[net] greet=0` in `emf\emf_core.ini` switches the greeting, and with it the check, off.
+  Its words follow what a player without EMF can do there: a server that refuses says "This server lets in only
+  players with EMF and its mods. Get EMF and the same mods to play here.", one with content mods "This server runs
+  EMF mods that change the game's content. Get EMF and the same mods to play here; without them, items from those
+  mods can be lost.", any other "This server runs EMF mods. Get EMF to see their windows; you can play without it."
 - It travels as the core's own message channel `emf/mods` (version 1); an older EMF at either end takes no part.
 
 ## Keeping a test server private

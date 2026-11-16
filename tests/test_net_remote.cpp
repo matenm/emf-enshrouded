@@ -291,6 +291,29 @@ TEST_CASE("net remote: the server's peer watch hears a game's hello and its leav
     CHECK(seen[1] == std::make_pair(kAcct, false));
 }
 
+TEST_CASE("net remote: the server's beacon is worded by the case the core names (set_beacon_case), asked at each beacon") {
+    Pair p;
+    BeaconCase which = BeaconCase::Content;
+    p.server.s.set_beacon_case([&] { return which; });
+    p.server.s.server_tick({{kHandle, kAcct}});
+    REQUIRE(p.chat_to_player.size() == 1);
+    auto line = parse_line(p.chat_to_player[0].second, nullptr);
+    REQUIRE(line);
+    CHECK(line->payload == beacon_text(BeaconCase::Content));
+    which = BeaconCase::Refuse;
+    p.server.s.server_tick({{kHandle + 1, kAcct + 1}});  // another connection
+    REQUIRE(p.chat_to_player.size() == 2);
+    line = parse_line(p.chat_to_player[1].second, nullptr);
+    REQUIRE(line);
+    CHECK(line->payload == beacon_text(BeaconCase::Refuse));
+    Pair plain;  // no case set: a game without EMF can play here
+    plain.server.s.server_tick({{kHandle, kAcct}});
+    REQUIRE(plain.chat_to_player.size() == 1);
+    line = parse_line(plain.chat_to_player[0].second, nullptr);
+    REQUIRE(line);
+    CHECK(line->payload == kBeaconText);
+}
+
 TEST_CASE("net remote: the reasons for dropped messages are remembered up to a limit, however many channels a player names") {
     Side server;
     ServerEnv senv;

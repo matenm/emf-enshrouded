@@ -278,7 +278,8 @@ Beastmaster runs where the world runs (the host, or a dedicated server). A playe
   every 15 s).
 - **without it** plays as before: the stable's commands and everything else with `/beastmaster` in the chat, the news
   as chat lines. When they join, EMF's greeting may show in their chat, at most twice: "This server runs EMF mods. Get
-  EMF to see their windows; you can play without it." Only they see it.
+  EMF to see their windows; you can play without it." Only they see it. (On a server with content mods, such as the
+  creature packs, or one that refuses games without its mods, it says they need EMF and the same mods.)
 
 **For server owners:** a dedicated server has no models to see a stable by, so the games of players with Beastmaster
 tell it where the stables they see are (a Stable, a Large Stable or an animal bed within 80 m of a flame altar). Those

@@ -2123,6 +2123,12 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
             }
             return yes.load();
         });
+        // the beacon's words for a player without EMF: never "you can play without it" where they cannot (the mods
+        // check's refuse kicks them; content mods give the server other data than theirs)
+        net->set_beacon_case([] {
+            return emf::core::net::beacon_case_for(g_mods_refuse != nullptr,
+                                                   g_mods_check && g_mods_check->server_has_content());
+        });
     }
     // [net] mods_check=refuse (the owner's option; warn is the default): a player whose game lacks a required mod (or has
     // no EMF) is told why in the chat, then kicked 5 s later with the game's own admin kick (handleAccountAction with a

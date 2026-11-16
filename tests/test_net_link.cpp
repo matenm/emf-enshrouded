@@ -756,6 +756,33 @@ TEST_CASE("net link: a server whose greets says no sends no beacon; one that say
     CHECK(r.to_players.size() == 1);
 }
 
+TEST_CASE("net link: the beacon's words follow what a player without EMF can do here: a server with content mods or one that refuses never says one can play without it") {
+    const auto beacon_of = [](std::function<BeaconCase()> which) {
+        Rig r;
+        auto d = r.server_deps();
+        d.beacon_case = std::move(which);
+        ServerLink s(d);
+        s.tick({{kHandle, kAcct}});
+        REQUIRE(r.to_players.size() == 1);
+        const auto line = parse_line(r.to_players[0].second, nullptr);
+        REQUIRE(line);
+        return line->payload;
+    };
+    CHECK(beacon_of({}) == "This server runs EMF mods. Get EMF to see their windows; you can play without it.");
+    CHECK(beacon_of([] { return BeaconCase::Optional; }) == kBeaconText);
+    const std::string content = beacon_of([] { return BeaconCase::Content; });
+    CHECK(content == "This server runs EMF mods that change the game's content. Get EMF and the same mods to play "
+                     "here; without them, items from those mods can be lost.");
+    const std::string refuse = beacon_of([] { return BeaconCase::Refuse; });
+    CHECK(refuse == "This server lets in only players with EMF and its mods. Get EMF and the same mods to play here.");
+    for (const auto& s : {content, refuse}) CHECK(s.find("without it") == std::string::npos);
+    using emf::core::net::beacon_case_for;
+    CHECK(beacon_case_for(false, false) == BeaconCase::Optional);
+    CHECK(beacon_case_for(false, true) == BeaconCase::Content);
+    CHECK(beacon_case_for(true, false) == BeaconCase::Refuse);
+    CHECK(beacon_case_for(true, true) == BeaconCase::Refuse);  // a kick follows: that comes first
+}
+
 TEST_CASE("net link: only the core's emf/ channels greet only when the core says so; a mod's channel always does") {
     using emf::core::net::greets_for;
     CHECK_FALSE(greets_for({}, true));  // no channel at all: nothing to talk about

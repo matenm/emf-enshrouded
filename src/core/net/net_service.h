@@ -84,6 +84,12 @@ inline bool greets_for(const std::map<std::string, uint32_t>& channels, bool cor
     return core_needs && !channels.empty();
 }
 
+// The beacon's words for a server that refuses games without its mods ([net] mods_check=refuse in force) and one with
+// EML content mods: a refusal comes first (a kick follows), then content (a game without it has other data).
+inline BeaconCase beacon_case_for(bool refuses, bool has_content) {
+    return refuses ? BeaconCase::Refuse : has_content ? BeaconCase::Content : BeaconCase::Optional;
+}
+
 class NetService {
 public:
     explicit NetService(NetDeps deps) : d_(std::move(deps)) {}
@@ -121,12 +127,15 @@ public:
     std::map<std::string, uint32_t> channel_versions();
     // The core's own channels alone make the server greet only while this says yes (greets_for).
     void set_core_greets(std::function<bool()> f) { core_greets_ = std::move(f); }
+    // Which words the beacon says (beacon_case_for), asked at each beacon; unset: a game without EMF can play here.
+    void set_beacon_case(std::function<BeaconCase()> f) { beacon_case_ = std::move(f); }
     // The server end: called (the receive loop's thread, no lock held) when a player's game said hello (joined) and when
     // that peer is gone (its connection left, or a hello came on another connection). Set before enable_server.
     void set_peer_watch(std::function<void(uint64_t account, bool joined)> f) { peer_watch_ = std::move(f); }
 
 private:
     std::function<bool()> core_greets_;  // set_core_greets
+    std::function<BeaconCase()> beacon_case_;  // set_beacon_case
     std::function<void(uint64_t, bool)> peer_watch_;  // set_peer_watch
     struct Channel {
         ChannelDef def;

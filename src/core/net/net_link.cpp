@@ -329,7 +329,9 @@ void ServerLink::tick(const std::vector<Connection>& connected) {
         }
     }
     const std::string beacon = [&] {
-        const auto lines = split_message('S', 0, kControl, kControlVersion, kBeaconText, nullptr);
+        if (fresh.empty()) return std::string();
+        const BeaconCase which = d_.beacon_case ? d_.beacon_case() : BeaconCase::Optional;
+        const auto lines = split_message('S', 0, kControl, kControlVersion, beacon_text(which), nullptr);
         return lines.empty() ? std::string() : encode_line(lines.front());
     }();
     for (size_t i = 0; i < fresh.size(); ++i) {

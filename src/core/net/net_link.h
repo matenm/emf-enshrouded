@@ -55,15 +55,30 @@ std::optional<HelloInfo> parse_hello_text(std::string_view text);
 
 // ---- the server's end ----
 // The beacon's words after its marker and fields: what a player whose game has no EMF reads in the chat (at most
-// twice). An EMF game takes the line by its type and never reads them.
+// twice). An EMF game takes the line by its type and never reads them. Worded by what such a player can do here:
+enum class BeaconCase {
+    Optional,  // the mods add windows and features: a game without EMF plays as it is
+    Content,   // EML content mods: a game without them has other data (items from them can be lost)
+    Refuse,    // [net] mods_check=refuse: a game without EMF and the server's mods is told why, then kicked
+};
 inline constexpr const char* kBeaconText =
     "This server runs EMF mods. Get EMF to see their windows; you can play without it.";
+inline constexpr const char* kBeaconTextContent =
+    "This server runs EMF mods that change the game's content. Get EMF and the same mods to play here; without them, "
+    "items from those mods can be lost.";
+inline constexpr const char* kBeaconTextRefuse =
+    "This server lets in only players with EMF and its mods. Get EMF and the same mods to play here.";
+inline const char* beacon_text(BeaconCase c) {
+    return c == BeaconCase::Refuse ? kBeaconTextRefuse : c == BeaconCase::Content ? kBeaconTextContent : kBeaconText;
+}
 
 struct ServerLinkDeps {
     // the channels this server has (name -> version); none: no beacon is sent
     std::function<std::map<std::string, uint32_t>()> channels;
     // whether new connections get a beacon (empty: when `channels` is not empty)
     std::function<bool()> greets;
+    // which words the beacon says (beacon_text), asked at each beacon (empty: BeaconCase::Optional)
+    std::function<BeaconCase()> beacon_case;
     // one marked line for the player on (handle, account); false: it could not be queued
     std::function<bool(uint32_t handle, uint64_t account, const std::string& line)> send;
     // a message's (or welcome's) lines for the player on (handle, account), all or none; when set it is used for them
