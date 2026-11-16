@@ -366,6 +366,31 @@ TEST_CASE("beastmaster: a fallen beast comes back by itself after its rest, free
     CHECK(b.r.fake.spawns.size() == 3);
 }
 
+// Seen live: the game's EntityDiedEvent comes a step or two after the health reads 0; a check of the beasts in between
+// took the dead wolf for gone (sent home, no rest), so it did not come back after its rest.
+TEST_CASE("beastmaster: a beast whose health reads 0 before the game's death event has fallen: it rests and comes back; the late event changes nothing") {
+    BeastRig b({{"rest_s", "10"}});
+    auto notes_with = [&](const std::string& needle) {
+        size_t n = 0;
+        for (const auto& x : b.r.fake.notes) n += x.find(needle) != std::string::npos;
+        return n;
+    };
+    b.reply("beastmaster.give wolf");
+    b.spawnable(2);
+    REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+    b.r.fake.attrs[{1234, EMF_ATTR_HEALTH}] = 0;  // dead, the event not here yet
+    b.seconds(2);
+    CHECK(notes_with("Wolf fell; it comes back in") == 1);
+    CHECK(b.reply("beastmaster.list").find("then comes back") != std::string::npos);
+    deliver(b.r.fake, "EntityDiedEvent", died_event(1234));  // the game's event, late
+    b.seconds(2);
+    CHECK(notes_with("Wolf fell") == 1);  // once
+    CHECK(contains(b.r.fake.destroyed, 1234));      // its body
+    b.seconds(8);
+    REQUIRE(b.r.fake.spawns.size() == 2);  // back after its 10 s rest, not later
+    CHECK(b.noted("Wolf is back"));
+}
+
 TEST_CASE("beastmaster: a resting beast that comes back holds its slot, comes back after a reload, and stays home when the setting goes off meanwhile") {
     {
         BeastRig b;

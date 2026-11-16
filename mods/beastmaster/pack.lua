@@ -813,6 +813,11 @@ function P:step(world)
 		if owner then away, why = self.aside:check(world, account, owner, now, self:spots(account)) end
 		local stepped = false
 		for _, b in ipairs(beasts:list(account)) do
+			local cur = b.out and b.entity and world:position(b.entity) and emf.health(world, b.entity)
+			if cur and cur <= 0 and self.ids[b.entity] then
+				-- dead, the game's EntityDiedEvent not here yet (it comes a step or two after; seen live): it fell
+				self:on_died(b.entity, world)
+			end
 			if b.out and b.entity then
 				if not ours(world, b.entity) then
 					self.ids[b.entity] = nil  -- gone, or the id names another entity now: never touched again
