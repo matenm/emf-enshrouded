@@ -2275,7 +2275,8 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
         hd.build_scale = hud_scale_ready(g_state->sigs, known, build);
         hd.build_bars = hud_bars_ready(g_state->sigs, known, build);
         hd.build_panel = hud_panel_ready(g_state->sigs, known, build);
-        hd.key_down = [](uint32_t vk) { return emf::keys::down(vk); };
+        // not while the player types in the game's chat (a page or reset key bound to a letter)
+        hd.key_down = [](uint32_t vk) { return !emf::core::game_typing_now() && emf::keys::down(vk); };
         hd.toggle_page = [] { emf::core::overlay_toggle_settings_page(emf::core::kPageHud); };
         hd.run = emf::core::profile_worker_runner();
         hd.now_ms = [] { return GetTickCount64(); };

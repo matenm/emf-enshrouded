@@ -15,6 +15,7 @@
 #include "core/api.h"
 #include "core/fault_report.h"
 #include "core/game_screen.h"
+#include "core/overlay/input_hook.h"
 #include "core/marker_capture.h"
 #include "core/system_programs.h"
 
@@ -367,7 +368,7 @@ void cmd_markers_test(EmfWorld*, int argc, const char* const* argv, void*) {
 void cmd_screen(EmfWorld*, int, const char* const*, void*) {
     const CoreState* s = core_state();
     command_reply_line(game_screen_line(game_screen().screen(GetTickCount64()), game_screen().offset(),
-                                        s && s->exe.server));
+                                        s && s->exe.server, key_state_hooked()));
 }
 
 }  // namespace

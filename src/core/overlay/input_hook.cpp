@@ -92,15 +92,18 @@ SHORT WINAPI hk_get_async_key_state(int vk) {
         if (from_mod(_ReturnAddress()))
             if (const auto s = injected_key_state(inj, vk, true, GetTickCount64(), true, game_really_in_front())) return *s;
     // the player types in the game's chat or rename box (game_screen.h): mods read every key as up, and a key held
-    // then stays up for them until released
-    if (const bool typing = game_typing_now(); (typing || typing_gate().any()) && from_mod(_ReturnAddress())) {
+    // then stays up for them until released. The real state is read once (its low bit, "pressed since the last call",
+    // is used up by a read).
+    const bool typing = game_typing_now();
+    const bool gate = typing || typing_gate(true).any();
+    const bool router = g_router && (g_router->capturing() || g_router->hiding());
+    if ((gate || router) && from_mod(_ReturnAddress())) {
+        if (router && g_router->capturing()) return 0;
         const SHORT s = o_get_async_key_state(vk);
-        if (typing_gate().hide(vk, (s & 0x8000) != 0, typing)) return 0;
-    }
-    if (g_router && (g_router->capturing() || g_router->hiding()) && from_mod(_ReturnAddress())) {
-        if (g_router->capturing()) return 0;
-        const SHORT s = o_get_async_key_state(vk);
-        return g_router->hidden_from_mods(vk, (s & 0x8000) != 0) ? 0 : s;
+        const bool down = (s & 0x8000) != 0;
+        if (gate && typing_gate(true).hide(vk, down, typing)) return 0;
+        if (router && g_router->hidden_from_mods(vk, down)) return 0;
+        return s;
     }
     return o_get_async_key_state(vk);
 }
@@ -110,15 +113,18 @@ SHORT WINAPI hk_get_key_state(int vk) {
         if (from_mod(_ReturnAddress()))
             if (const auto s = injected_key_state(inj, vk, true, GetTickCount64(), false, game_really_in_front())) return *s;
     // the player types in the game's chat or rename box (game_screen.h): mods read every key as up, and a key held
-    // then stays up for them until released
-    if (const bool typing = game_typing_now(); (typing || typing_gate().any()) && from_mod(_ReturnAddress())) {
+    // then stays up for them until released. The real state is read once (its low bit, "pressed since the last call",
+    // is used up by a read).
+    const bool typing = game_typing_now();
+    const bool gate = typing || typing_gate(false).any();
+    const bool router = g_router && (g_router->capturing() || g_router->hiding());
+    if ((gate || router) && from_mod(_ReturnAddress())) {
+        if (router && g_router->capturing()) return 0;
         const SHORT s = o_get_key_state(vk);
-        if (typing_gate().hide(vk, (s & 0x8000) != 0, typing)) return 0;
-    }
-    if (g_router && (g_router->capturing() || g_router->hiding()) && from_mod(_ReturnAddress())) {
-        if (g_router->capturing()) return 0;
-        const SHORT s = o_get_key_state(vk);
-        return g_router->hidden_from_mods(vk, (s & 0x8000) != 0) ? 0 : s;
+        const bool down = (s & 0x8000) != 0;
+        if (gate && typing_gate(false).hide(vk, down, typing)) return 0;
+        if (router && g_router->hidden_from_mods(vk, down)) return 0;
+        return s;
     }
     return o_get_key_state(vk);
 }
@@ -127,6 +133,7 @@ void track_key(const KeyEvent& e) {
     UINT vk = e.vkey;
     if (!vk) vk = MapVirtualKeyW(e.scan | (e.extended ? 0xE000 : 0), MAPVK_VSC_TO_VK_EX);
     g_keys.track(vk, e);
+    if (!e.down) typing_key_released(static_cast<int>(vk));  // let go: the chat gate holds it up for mods no longer
 }
 
 // Types characters into the console (those the router gives to it).
@@ -463,5 +470,6 @@ bool install_input_hooks(InputRouter* router, InputCallbacks callbacks) {
 
 HWND input_game_window() { return game_window(); }
 bool input_capturing() { return g_router && g_router->capturing(); }
+bool key_state_hooked() { return g_key_hooks.load(); }
 
 }  // namespace emf::core

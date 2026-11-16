@@ -78,7 +78,9 @@ Route InputRouter::decide(const KeyEvent& e) {
             return Route::Console;
         }
         if (toggle && !open_) {
-            if (bool (*typing)() = game_text_.load(); typing && typing()) {  // the game's chat has the keys: type it there
+            // the game's chat has the keys (type it there), or this is a repeat of a press the chat got: still the game's
+            bool (*typing)() = game_text_.load();
+            if (game_down_[index(e)] || (typing && typing())) {
                 swallow_char_ = false;
                 return Route::Game;
             }

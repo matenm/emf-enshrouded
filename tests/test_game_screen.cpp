@@ -106,19 +106,78 @@ TEST_CASE("hud_screen_offset_at: the offset from the signature's bytes, only whe
     code[6] = 0x01;  // beyond 64 KB: UiPlayData is not that large
     CHECK(hud_screen_offset_at(code) == 0u);
     CHECK(hud_screen_offset_at(nullptr) == 0u);
+    code[4] = 0xD8;
+    code[5] = 0x1C;
+    code[6] = 0x00;
+    REQUIRE(hud_screen_offset_at(code) == 0x1cd8u);
+    code[3] = 0xBE;  // movzx r15d, byte [rsi+...]: another base register, not the read we know
+    CHECK(hud_screen_offset_at(code) == 0u);
+    code[3] = 0xBF;
+    code[10] = 0xFE;  // cmp r14b: another register
+    CHECK(hud_screen_offset_at(code) == 0u);
 }
 
 TEST_CASE("game_screen_line: the screen by the game's own name, and whether mods' keys read as up") {
-    CHECK(game_screen_line(kScreenTextChat, 0x1cd8, false) ==
+    CHECK(game_screen_line(kScreenTextChat, 0x1cd8, false, true) ==
           "screen: 43 TextChat: mods' keys read as up (the game's text box has them)");
-    CHECK(game_screen_line(kScreenRename, 0x1cd8, false) ==
+    CHECK(game_screen_line(kScreenRename, 0x1cd8, false, true) ==
           "screen: 47 Rename: mods' keys read as up (the game's text box has them)");
-    CHECK(game_screen_line(kScreenInGame, 0x1cd8, false) == "screen: 1 InGame: mods' keys as usual");
-    CHECK(game_screen_line(9, 0x1cd8, false) == "screen: 9 Backpack: mods' keys as usual");
-    CHECK(game_screen_line(53, 0x1cd8, false) == "screen: 53 YcPlayground: mods' keys as usual");
-    CHECK(game_screen_line(200, 0x1cd8, false) == "screen: 200: mods' keys as usual");
-    CHECK(game_screen_line(std::nullopt, 0x1cd8, false) == "screen: not known (no game world on this client right now)");
-    CHECK(game_screen_line(std::nullopt, 0, false) ==
+    CHECK(game_screen_line(kScreenInGame, 0x1cd8, false, true) == "screen: 1 InGame: mods' keys as usual");
+    CHECK(game_screen_line(9, 0x1cd8, false, true) == "screen: 9 Backpack: mods' keys as usual");
+    CHECK(game_screen_line(53, 0x1cd8, false, true) == "screen: 53 YcPlayground: mods' keys as usual");
+    CHECK(game_screen_line(200, 0x1cd8, false, true) == "screen: 200: mods' keys as usual");
+    CHECK(game_screen_line(std::nullopt, 0x1cd8, false, true) == "screen: not known (no game world on this client right now)");
+    CHECK(game_screen_line(std::nullopt, 0, false, true) ==
           "screen: not known: the chat key gate is off (the HudScreenRead signature is not usable on this game build)");
-    CHECK(game_screen_line(std::nullopt, 0, true) == "screen: the dedicated server has no game screen");
+    CHECK(game_screen_line(std::nullopt, 0, true, true) == "screen: the dedicated server has no game screen");
+    // the key hooks are not in (the overlay is off): the screen is read, but nothing is paused
+    CHECK(game_screen_line(kScreenTextChat, 0x1cd8, false, false) ==
+          "screen: 43 TextChat: mods' keys are not paused (EMF's key hooks are not installed: the overlay is off)");
+}
+
+// The hook read the clock before the reading: a reading a moment newer than the caller's clock said "not known".
+TEST_CASE("game screen: a reading newer than the caller's clock counts") {
+    GameScreen g;
+    g.seen(kScreenTextChat, 1000);
+    REQUIRE(g.screen(999).has_value());
+    CHECK(g.typing(999));
+}
+
+// A key seen up while typing stayed marked until the first read after the chat closed.
+TEST_CASE("typing gate: a key seen up while typing is not held after the close") {
+    TypingKeyGate gate;
+    CHECK(gate.hide('K', true, true));
+    CHECK(gate.hide('K', false, true));  // let go while still typing
+    CHECK_FALSE(gate.any());
+    CHECK_FALSE(gate.hide('K', true, false));  // a press after the close is a press
+}
+
+// A mod that never asked about the key again (a changed keybind) left the mark, and the gate armed, for good.
+TEST_CASE("typing gate: the window's key release clears the mark, Shift, Ctrl and Alt by either side too") {
+    TypingKeyGate gate;
+    CHECK(gate.hide('K', true, true));
+    gate.released('K');
+    CHECK_FALSE(gate.any());
+    CHECK(gate.hide(VK_SHIFT, true, true));
+    CHECK(gate.hide(VK_CONTROL, true, true));
+    CHECK(gate.hide(VK_MENU, true, true));
+    gate.released(VK_LSHIFT);
+    gate.released(VK_RCONTROL);
+    gate.released(VK_LMENU);
+    CHECK_FALSE(gate.any());
+    CHECK(gate.hide(VK_LSHIFT, true, true));
+    gate.released(VK_SHIFT);
+    CHECK_FALSE(gate.any());
+    gate.released(0);  // out of range: nothing
+    gate.released(300);
+}
+
+TEST_CASE("typing gates: GetAsyncKeyState's and GetKeyState's marks are kept apart; a release clears both") {
+    CHECK(&typing_gate(true) != &typing_gate(false));
+    CHECK(typing_gate(true).hide('J', true, true));
+    CHECK_FALSE(typing_gate(false).any());
+    CHECK(typing_gate(false).hide('J', true, true));
+    typing_key_released('J');
+    CHECK_FALSE(typing_gate(true).any());
+    CHECK_FALSE(typing_gate(false).any());
 }

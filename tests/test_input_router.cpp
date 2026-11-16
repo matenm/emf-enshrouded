@@ -611,3 +611,20 @@ TEST_CASE("InputRouter: while the game's chat has the keys, the console key type
     CHECK_FALSE(r.open());
     g_game_typing = false;
 }
+
+// Held in the chat while Enter closed it: the next auto-repeat opened the console, and the game never saw the release.
+TEST_CASE("InputRouter: the console key held in the chat as it closes: its repeats and its release still go to the game") {
+    InputRouter r(0x2b);
+    r.set_game_text(&game_typing_for_test);
+    g_game_typing = true;
+    CHECK(r.key(down(0x2b)) == Route::Game);
+    CHECK(r.legacy_key(down(0x2b)) == Route::Game);
+    CHECK(r.key(down(0x2b)) == Route::Game);  // auto-repeat while typing
+    g_game_typing = false;                     // Enter closed the chat
+    CHECK(r.key(down(0x2b)) == Route::Game);  // a repeat, not a press: the console stays closed
+    CHECK_FALSE(r.open());
+    CHECK(r.key(up(0x2b)) == Route::Game);
+    CHECK(r.legacy_key(up(0x2b)) == Route::Game);
+    CHECK(r.key(down(0x2b)) == Route::Toggle);  // the next press opens it
+    CHECK(r.open());
+}

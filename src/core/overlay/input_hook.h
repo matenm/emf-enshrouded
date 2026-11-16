@@ -55,6 +55,9 @@ enum class InjectedKeyHooks {
 // The debug bridge's keys for mods (mod_key, injected_keys.h): hooks GetAsyncKeyState/GetKeyState if the overlay did
 // not, and GetForegroundWindow. `keys` must live for the process.
 InjectedKeyHooks install_injected_keys(InjectedKeys* keys);
+// GetAsyncKeyState and GetKeyState are hooked (the overlay or the debug bridge installed them): what mods' key reads
+// go through (the console's capture, wheels, the chat key gate).
+bool key_state_hooked();
 
 // The game window EMF hooked (null until found).
 HWND input_game_window();

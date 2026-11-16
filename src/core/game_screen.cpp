@@ -28,7 +28,8 @@ void GameScreen::read(const uint8_t* uipd, uint64_t now_ms) {
 
 std::optional<uint8_t> GameScreen::screen(uint64_t now_ms) const {
     const uint64_t at = seen_ms_.load(std::memory_order_acquire);
-    if (!at || now_ms < at || now_ms - at > kGameScreenStaleMs) return std::nullopt;
+    // a reading newer than the caller's clock (taken just before) is fresh
+    if (!at || (now_ms > at && now_ms - at > kGameScreenStaleMs)) return std::nullopt;
     return static_cast<uint8_t>(screen_.load(std::memory_order_relaxed));
 }
 
@@ -43,6 +44,7 @@ bool TypingKeyGate::hide(int vk, bool down, bool typing) {
     const uint64_t bit = marks ? uint64_t{1} << (vk & 63) : 0;
     if (typing) {
         if (marks && down) word->fetch_or(bit, std::memory_order_relaxed);
+        else if (marks) word->fetch_and(~bit, std::memory_order_relaxed);  // let go while typing: nothing held over
         return true;
     }
     if (!marks || !(word->load(std::memory_order_relaxed) & bit)) return false;
@@ -58,14 +60,31 @@ bool TypingKeyGate::any() const {
 }
 
 uint32_t hud_screen_offset_at(const uint8_t* match) {
+    // movzx r15d, byte [rdi + disp32]; cmp r15b, imm8 (TextChat): the read the chat window makes, nothing else
+    static const uint8_t kMovzx[] = {0x44, 0x0F, 0xB6, 0xBF};
+    static const uint8_t kCmp[] = {0x41, 0x80, 0xFF};
     uint8_t code[12];
     if (!match || !emf::seh_read(match, code, sizeof code) || code[11] != kScreenTextChat) return 0;
+    if (std::memcmp(code, kMovzx, sizeof kMovzx) != 0 || std::memcmp(code + 8, kCmp, sizeof kCmp) != 0) return 0;
     uint32_t off = 0;
     std::memcpy(&off, code + 4, sizeof off);
     return off > 0 && off < 0x10000 ? off : 0;  // UiPlayData is some KB, not more
 }
 
-std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, bool server) {
+void TypingKeyGate::released(int vk) {
+    const auto clear = [this](int k) { held_[k >> 6].fetch_and(~(uint64_t{1} << (k & 63)), std::memory_order_relaxed); };
+    if (vk <= 0 || vk >= 256) return;
+    clear(vk);
+    // Shift, Ctrl and Alt: a mod may ask by the generic code or by either side; the window reports one side
+    static const int kGroups[3][3] = {{VK_SHIFT, VK_LSHIFT, VK_RSHIFT},
+                                      {VK_CONTROL, VK_LCONTROL, VK_RCONTROL},
+                                      {VK_MENU, VK_LMENU, VK_RMENU}};
+    for (const auto& g : kGroups)
+        if (vk == g[0] || vk == g[1] || vk == g[2])
+            for (int k : g) clear(k);
+}
+
+std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, bool server, bool key_hooks) {
     // keen::HudScreenType as the game reflects it
     static const char* const kNames[] = {
         "Invalid", "InGame", "SystemMenu", "SettingsMenu", "InGameMenu", "Map", "Journal", "Character", "PlayerCrafting",
@@ -83,6 +102,7 @@ std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, boo
     if (!screen) return "screen: not known (no game world on this client right now)";
     std::string line = "screen: " + std::to_string(*screen);
     if (*screen < std::size(kNames)) line += std::string(" ") + kNames[*screen];
+    if (!key_hooks) return line + ": mods' keys are not paused (EMF's key hooks are not installed: the overlay is off)";
     return line + (screen_takes_text(*screen) ? ": mods' keys read as up (the game's text box has them)"
                                               : ": mods' keys as usual");
 }
@@ -92,9 +112,14 @@ GameScreen& game_screen() {
     return g;
 }
 
-TypingKeyGate& typing_gate() {
-    static TypingKeyGate g;
-    return g;
+TypingKeyGate& typing_gate(bool async) {
+    static TypingKeyGate a, s;
+    return async ? a : s;
+}
+
+void typing_key_released(int vk) {
+    typing_gate(true).released(vk);
+    typing_gate(false).released(vk);
 }
 
 bool game_typing_now() { return game_screen().typing(GetTickCount64()); }

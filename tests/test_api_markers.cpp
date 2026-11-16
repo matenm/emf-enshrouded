@@ -14,6 +14,7 @@
 #include "core/api.h"
 #include "core/api_sizes.h"
 #include "core/game_screen.h"
+#include "core/overlay/input_hook.h"
 #include "core/marker_capture.h"
 #include "fake_world.h"
 
@@ -343,7 +344,9 @@ TEST_CASE("client tick: the game's HUD screen byte is read from UiPlayData at th
     CHECK(*seen == kScreenTextChat);
     f.uipd[0x1cd8] = kScreenInGame;
     markers_client_tick(f.cw());  // no offset (signature not usable): the old reading stays and goes stale
-    CHECK(*game_screen().screen(GetTickCount64()) == kScreenTextChat);
+    const auto kept = game_screen().screen(GetTickCount64());
+    REQUIRE(kept.has_value());
+    CHECK(*kept == kScreenTextChat);
     game_screen().seen(kScreenInGame, GetTickCount64());  // leave no typing state for later tests
 }
 
@@ -357,7 +360,12 @@ TEST_CASE("screen: the console says which game screen is open and whether mods' 
     center.run_without_world("screen", [&](const std::string& l) { replies.push_back(l); }, "this is someone else's game");
     game_screen().seen(kScreenInGame, GetTickCount64());
     game_screen().set_offset(0);
+    // whether mods' keys read as up depends on the key hooks (a test that installs the bridge's keys puts them in)
+    const std::string want = key_state_hooked()
+                                 ? "screen: 43 TextChat: mods' keys read as up (the game's text box has them)"
+                                 : "screen: 43 TextChat: mods' keys are not paused (EMF's key hooks are not installed: the "
+                                   "overlay is off)";
     bool said = false;
-    for (const auto& l : replies) said |= l == "screen: 43 TextChat: mods' keys read as up (the game's text box has them)";
+    for (const auto& l : replies) said |= l == want;
     CHECK(said);
 }

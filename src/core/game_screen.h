@@ -43,6 +43,9 @@ public:
     // True when a mod asking about `vk` (physically `down`) is to be told it is up.
     bool hide(int vk, bool down, bool typing);
     bool any() const;  // some key is held up for mods since the player typed
+    // The window saw vk go up (raw or key message): it counts again, whether or not a mod asks about it. Shift, Ctrl and
+    // Alt clear their generic code and both sides.
+    void released(int vk);
 
 private:
     std::atomic<uint64_t> held_[4] = {};
@@ -53,10 +56,13 @@ private:
 uint32_t hud_screen_offset_at(const uint8_t* match);
 
 // The console's `screen` line: the screen with the game's name for it, and whether mods' keys read as up.
-std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, bool server);
+std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, bool server, bool key_hooks);
 
 GameScreen& game_screen();
-TypingKeyGate& typing_gate();
+// One gate per API: GetAsyncKeyState (async) and GetKeyState (the thread's own view) can disagree on a held key.
+TypingKeyGate& typing_gate(bool async);
+// The window saw vk go up: both gates forget it.
+void typing_key_released(int vk);
 // The player types in one of the game's text boxes right now (GetTickCount64 clock).
 bool game_typing_now();
 
