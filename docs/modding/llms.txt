@@ -605,6 +605,7 @@ From the mods in the EMF zip (only while that mod runs):
 - beastmaster.threat: the monsters held on you or your beasts now, and for how long [beastmaster]
 - beastmaster.home: where your beasts at home are (in a Large Stable) and what they do [beastmaster]
 - beastmaster.idle: what your beasts do while you stand still now [beastmaster]
+- beastmaster.air: each player's movement state as this world sees it, and whether they count as in the air [beastmaster]
 - beastmaster.loyalty <name or number> <1-10>: set a beast's loyalty (admin) [beastmaster]
 - beastmaster.give <species>: add a beast to your collection (admin) [beastmaster]
 - beastmaster.spawn <species>: a wild beast 5 m in front of you, to try taming (admin) [beastmaster]
