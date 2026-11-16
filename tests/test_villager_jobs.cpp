@@ -1359,6 +1359,39 @@ TEST_CASE("jobs remote: a pending wheel is taken once, by its own player and num
     CHECK(desk.size() == 0);
 }
 
+TEST_CASE("jobs remote: a pick runs only while its player is still an admin (rights are checked again when it comes)") {
+    using namespace jobs::remote;
+    WheelDesk<int> desk;
+    std::optional<int> action;
+    uint32_t s = desk.open(0xA, 7, 1000);
+    CHECK(take_pick(desk, 0xA, s, 2, true, 2000, &action) == PickAnswer::Run);
+    REQUIRE(action);
+    CHECK(*action == 7);
+
+    // Demoted while the wheel was open: refused, the wheel is gone, nothing runs.
+    action.reset();
+    s = desk.open(0xA, 8, 3000);
+    CHECK(take_pick(desk, 0xA, s, 0, false, 4000, &action) == PickAnswer::Refused);
+    CHECK_FALSE(action);
+    CHECK(desk.size() == 0);
+    CHECK(take_pick(desk, 0xA, s, 0, true, 4000, &action) == PickAnswer::Closed);  // taken once, even when refused
+
+    // A cancel says nothing; a demoted player's cancel runs nothing either.
+    s = desk.open(0xA, 9, 5000);
+    CHECK(take_pick(desk, 0xA, s, -1, false, 5000, &action) == PickAnswer::Quiet);
+    CHECK_FALSE(action);
+    CHECK(desk.size() == 0);
+    s = desk.open(0xA, 10, 5000);
+    CHECK(take_pick(desk, 0xA, s, -1, true, 5000, &action) == PickAnswer::Run);  // an admin's cancel (the action ignores it)
+    CHECK(take_pick(desk, 0xA, s, -1, true, 5000, &action) == PickAnswer::Quiet);  // no wheel: a cancel says nothing
+
+    // No wheel (past 30 s, a newer one came): closed, for an admin and a demoted player alike.
+    action.reset();
+    s = desk.open(0xA, 11, 6000);
+    CHECK(take_pick(desk, 0xA, s, 1, false, 6000 + WheelDesk<int>::kExpireMs + 1, &action) == PickAnswer::Closed);
+    CHECK_FALSE(action);
+}
+
 TEST_CASE("jobs remote: the player's game opens a wheel only within 2 s of its own key press or pick, once; a late one says so") {
     using namespace jobs::remote;
     ClientGate g;

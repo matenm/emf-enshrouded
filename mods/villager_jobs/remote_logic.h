@@ -146,6 +146,21 @@ private:
     std::map<uint64_t, Open> open_;
 };
 
+// What the server does with a joined player's pick (`choice`, -1 = cancelled) of wheel `seq`: Run its action (put in
+// `*action`), say the wheel has Closed (kept open past kExpireMs, or a newer wheel came), Refuse it (`admin` is the
+// sender's rights now: a player who lost them while the wheel was open picks nothing; the check at the key press is not
+// enough), or nothing (Quiet: a cancel). The wheel is taken in every case.
+enum class PickAnswer { Run, Closed, Refused, Quiet };
+template <class Action>
+PickAnswer take_pick(WheelDesk<Action>& desk, uint64_t account, uint32_t seq, int choice, bool admin, uint64_t now_ms,
+                     std::optional<Action>* action) {
+    auto pick = desk.take(account, seq, now_ms);
+    if (!pick) return choice >= 0 ? PickAnswer::Closed : PickAnswer::Quiet;
+    if (!admin) return choice >= 0 ? PickAnswer::Refused : PickAnswer::Quiet;
+    *action = std::move(pick);
+    return PickAnswer::Run;
+}
+
 // The player's game: a wheel from the server opens only within kWaitMs of this game's own key press or pick, and only
 // once (a late answer would open a wheel the player no longer expects; Late: the game says so and cancels it).
 class ClientGate {

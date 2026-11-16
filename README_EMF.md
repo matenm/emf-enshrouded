@@ -650,7 +650,8 @@ change and stop jobs: the host, the game's own admins (on a dedicated server who
 password; in a game someone hosts, the players the host made admins), and the accounts in `[chat] admins` of the
 server's `emf\emf_core.ini`. For anyone else, K at a working villager says what it does. Notes of running jobs
 (a chest gone, out of materials) go to the host and to every player who joined with the mod. A joined player's wheel
-waits 30 s for a pick (after that, K again). When the server has no Villager Jobs 1.5, K says so.
+waits 30 s for a pick (after that, K again); a player who stops being an admin while their wheel is open picks
+nothing. When the server has no Villager Jobs 1.5, K says so.
 
 How the work moves: a walk order makes the villager roam near its target, so it acts within 6 m of it; the order is
 repeated every 5 s, and a target it cannot get close to within 60 s is left alone for 2 minutes (noted once: villagers

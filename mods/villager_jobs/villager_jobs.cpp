@@ -739,10 +739,18 @@ void on_server_message(EmfWorld* raw, const EmfNetFrom* from, const void* data, 
     a.admin = remote::may_give_jobs(from->admin != 0, emf::player_permissions(w, from->player).value_or(0));
     const uint64_t now = GetTickCount64();
     if (m->kind == remote::Msg::Pick) {
-        if (auto pick = g_desk.take(from->account, m->seq, now))
-            (*pick)(w, m->choice);
-        else if (m->choice >= 0)  // kept open past 30 s, or a newer wheel came
-            tell(w, a, "That wheel has closed: press the jobs key again");
+        // the rights are read again here: a player made no admin while their wheel was open picks nothing
+        std::optional<WheelPick> pick;
+        switch (remote::take_pick(g_desk, from->account, m->seq, m->choice, a.admin, now, &pick)) {
+            case remote::PickAnswer::Run: (*pick)(w, m->choice); break;
+            case remote::PickAnswer::Closed: tell(w, a, "That wheel has closed: press the jobs key again"); break;
+            case remote::PickAnswer::Refused:
+                tell(w, a, remote::refused_press(std::nullopt, nullptr));
+                EMF_LOG(kMod, "player 0x%016llx picked on a jobs wheel after losing admin rights: refused",
+                        static_cast<unsigned long long>(from->account));
+                break;
+            case remote::PickAnswer::Quiet: break;
+        }
         return;
     }
     if (!g_presses.allow(from->account, now)) return;  // a held key or a macro
