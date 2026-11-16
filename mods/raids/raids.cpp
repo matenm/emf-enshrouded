@@ -91,7 +91,8 @@ void read_settings() {
     if (!raids::apply_preset(c.preset, c.s, c.reward)) c.preset = "custom";  // a preset replaces its settings
     c.walls = raids::wall_settings(emf::setting_bool(kMod, "break_walls", false), emf::setting_text(kMod, "hole_size", "small"),
                                    emf::setting_bool(kMod, "wall_drops", false), c.preset,
-                                   emf::setting_text(kMod, "difficulty", "normal"));
+                                   emf::setting_text(kMod, "difficulty", "normal"),
+                                   emf::setting_float(kMod, "wall_strength", 1.0));
     c.custom = emf::setting_text(kMod, "templates", "verified") == "custom";
     std::vector<std::string> bad;
     c.custom_pool = raids::parse_custom_templates(emf::setting_text(kMod, "custom_templates", ""), &bad);

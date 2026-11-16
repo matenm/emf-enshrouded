@@ -1063,6 +1063,18 @@ TEST_CASE("walls: the settings: hole size, drops and the difficulty scale (a pre
     CHECK(wall_settings(true, "?", false, "nonsense", "deadly").damage_scale == 2.0);  // not a preset: its own
 }
 
+TEST_CASE("walls: Wall strength is x hits: the damage scale (walls and gates) is divided by it; 0.5..10") {
+    CHECK(wall_settings(true, "small", false, "custom", "normal", 2.0).damage_scale == doctest::Approx(0.5));
+    CHECK(wall_settings(true, "small", false, "custom", "hard", 3.0).damage_scale == doctest::Approx(0.5));
+    CHECK(wall_settings(true, "small", false, "custom", "normal", 0.5).damage_scale == doctest::Approx(2.0));
+    CHECK(wall_settings(true, "small", false, "hard", "easy", 1.5).damage_scale == doctest::Approx(1.0));  // preset's
+    CHECK(wall_settings(true, "small", false, "custom", "normal", 0.0).damage_scale == doctest::Approx(2.0));   // 0.5
+    CHECK(wall_settings(true, "small", false, "custom", "normal", -3.0).damage_scale == doctest::Approx(2.0));  // 0.5
+    CHECK(wall_settings(true, "small", false, "custom", "normal", 40.0).damage_scale == doctest::Approx(0.1));  // 10
+    CHECK(wall_settings(true, "small", false, "custom", "normal", std::nan("")).damage_scale == doctest::Approx(1.0));
+    CHECK(gate_damage(600, 1.0 / 3.0) == 34);  // strength 3: a gate takes 18 hits, not 6
+}
+
 TEST_CASE("raids: mod.json: Raiders break walls (off), Hole size (small), Broken blocks drop items (off); presets leave them") {
     std::ifstream f(std::string(EMF_SOURCE_DIR) + "/mods/raids/mod.json", std::ios::binary);
     REQUIRE(f.good());
@@ -1093,10 +1105,22 @@ TEST_CASE("raids: mod.json: Raiders break walls (off), Hole size (small), Broken
     CHECK(drops->label == "Broken blocks drop items");
     CHECK(drops->default_value == "0");
     CHECK(drops->when_key == "break_walls");
+    const auto* strength = def("wall_strength");
+    REQUIRE(strength);
+    CHECK(strength->label == "Wall strength (x hits)");
+    CHECK(strength->default_value == "1");
+    CHECK(strength->slider);
+    CHECK(strength->min == 0.5);
+    CHECK(strength->max == 10.0);
+    CHECK(strength->step == 0.5);
+    CHECK(strength->live);
+    CHECK(strength->group == "Walls");
+    CHECK(strength->when_key == "break_walls");
     for (const auto& key : preset_keys()) {
         CHECK(key != "break_walls");
         CHECK(key != "hole_size");
         CHECK(key != "wall_drops");
+        CHECK(key != "wall_strength");
     }
     CHECK(emf::core::version_text(r.manifest->version) == "1.2.0");
 }

@@ -233,7 +233,7 @@ struct WallSettings {
     bool on = false;
     double hole_radius = 1.0;   // "Hole size"
     bool drops = false;         // "Broken blocks drop items"
-    double damage_scale = 1.0;  // from the difficulty
+    double damage_scale = 1.0;  // from the difficulty, divided by "Wall strength"
 };
 // The "Hole size" setting: small (about a door), medium, large.
 inline double hole_radius_of(const std::string& v) {
@@ -270,9 +270,10 @@ inline int32_t gate_damage(int32_t max_health, double scale) {
     return static_cast<int32_t>((std::min)(100000.0, (std::max)(1.0, d)));
 }
 
-// The three wall settings plus the scale of the (effective) difficulty: a preset's while one is chosen.
+// The wall settings plus the scale of the (effective) difficulty (a preset's while one is chosen) divided by "Wall
+// strength" (x hits, 0.5..10: 2 = every wall and gate takes twice the hits).
 inline WallSettings wall_settings(bool on, const std::string& hole_size, bool drops, const std::string& preset_name,
-                                  const std::string& difficulty);
+                                  const std::string& difficulty, double strength = 1.0);
 
 struct Gate {
     uint32_t door = 0;
@@ -1151,13 +1152,15 @@ private:
 };
 
 inline WallSettings wall_settings(bool on, const std::string& hole_size, bool drops, const std::string& preset_name,
-                                  const std::string& difficulty) {
+                                  const std::string& difficulty, double strength) {
     WallSettings s;
     s.on = on;
     s.hole_radius = hole_radius_of(hole_size);
     s.drops = drops;
     const auto p = preset(preset_name);
-    s.damage_scale = wall_damage_scale(p ? p->difficulty : difficulty);
+    if (!(strength == strength)) strength = 1.0;  // NaN
+    strength = (std::min)(10.0, (std::max)(0.5, strength));
+    s.damage_scale = wall_damage_scale(p ? p->difficulty : difficulty) / strength;
     return s;
 }
 

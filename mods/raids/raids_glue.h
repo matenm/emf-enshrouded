@@ -180,10 +180,12 @@ inline bool player_near(const Vec3& p, const std::vector<Player>& players, doubl
         if (horizontal_distance(pl.pos, p) <= range) return true;
     return false;
 }
-// One raider hit on a wall: the game's T4 pickaxe (EMF_BREAK_DEFAULT_DAMAGE) times scale, whole, at most 100000.
+// One raider hit on a wall: the game's T4 pickaxe (EMF_BREAK_DEFAULT_DAMAGE) times scale, whole, 1 to 100000 (all
+// 0 would ask break_blocks for the full default).
 inline void wall_hit_damage(double scale, int32_t out[5]) {
     const int32_t def[5] = EMF_BREAK_DEFAULT_DAMAGE;
-    for (int i = 0; i < 5; ++i) out[i] = static_cast<int32_t>((std::min)(100000.0, std::round(def[i] * scale)));
+    for (int i = 0; i < 5; ++i)
+        out[i] = static_cast<int32_t>((std::min)(100000.0, (std::max)(1.0, std::round(def[i] * scale))));
 }
 
 }  // namespace raids
