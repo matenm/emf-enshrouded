@@ -289,6 +289,10 @@ int l_player_view(lua_State* L);
 // lua 1.29 paths (path_bindings.cpp): emf.path_find, emf.path_cancel
 int l_path_find(lua_State* L);
 int l_path_cancel(lua_State* L);
+// lua 1.37 breaking blocks (block_bindings.cpp): emf.break_blocks, emf.block_at, emf.find_wall
+int l_break_blocks(lua_State* L);
+int l_block_at(lua_State* L);
+int l_find_wall(lua_State* L);
 // lua 1.30 doors (door_bindings.cpp)
 int l_door(lua_State* L);
 int l_door_open(lua_State* L);

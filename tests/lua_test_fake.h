@@ -68,6 +68,17 @@ struct Fake {
     std::map<uint32_t, uint32_t> door_states;  // v38: entity -> EMF_DOOR_*
     std::vector<std::string> door_calls;
     std::vector<EmfEnemyOrder> orders;  // v39
+    struct BreakAsk {  // v44
+        EmfBreakBlocks r;
+        std::vector<uint8_t> materials;  // a copy of r.materials
+        EmfBreakCallback cb;
+        void* user;
+    };
+    std::vector<BreakAsk> breaks;
+    bool break_ok = true;
+    bool block_ok = true;       // block_at / find_wall answer
+    EmfBlockInfo block{};       // what block_at and find_wall give
+    float wall_from[3] = {}, wall_to[3] = {};
     std::vector<uint32_t> order_cancels;
     std::map<uint32_t, uint32_t> enemy_targets;
     struct Move {  // v40
@@ -783,6 +794,29 @@ bool f_player_character_name(EmfWorld*, uint32_t player, char* buf, uint32_t siz
     std::snprintf(buf, size, "%s", it->second.c_str());
     return true;
 }
+uint32_t f_break_blocks(EmfWorld*, EmfBreakBlocks* r, EmfBreakCallback cb, void* user) {
+    if (!g->break_ok) {
+        std::snprintf(r->why, sizeof r->why, "refused by the fake");
+        return 0;
+    }
+    Fake::BreakAsk ask{*r, {}, cb, user};
+    if (r->materials) ask.materials.assign(r->materials, r->materials + r->material_count);
+    g->breaks.push_back(ask);
+    return static_cast<uint32_t>(g->breaks.size());
+}
+bool f_block_at(EmfWorld*, float, float, float, EmfBlockInfo* out) {
+    if (!g->block_ok) return false;
+    *out = g->block;
+    out->size = sizeof *out;
+    return true;
+}
+bool f_find_wall(EmfWorld*, const float from[3], const float to[3], EmfBlockInfo* out) {
+    for (int i = 0; i < 3; ++i) g->wall_from[i] = from[i], g->wall_to[i] = to[i];
+    if (!g->block_ok) return false;
+    *out = g->block;
+    out->size = sizeof *out;
+    return true;
+}
 bool f_player_permissions(EmfWorld*, uint32_t player, uint32_t* perms) {
     if (perms) *perms = 0;
     auto it = g->permissions.find(player);
@@ -1045,6 +1079,9 @@ EmfApi fake_api() {
     a.game_language = f_game_language;
     a.player_character_name = f_player_character_name;  // v30
     a.player_permissions = f_player_permissions;        // v43
+    a.break_blocks = f_break_blocks;                    // v44
+    a.block_at = f_block_at;
+    a.find_wall = f_find_wall;
     a.chat_tell_ex = f_chat_tell_ex;
     a.chat_broadcast_ex = f_chat_broadcast_ex;
     a.on_hit = f_on_hit;  // v31
