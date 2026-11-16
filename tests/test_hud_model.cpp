@@ -55,6 +55,44 @@ TEST_CASE("hud: shown only with lines, the console closed, and a world running (
     CHECK_FALSE(emf::core::show_hud(false, true, false));  // main menu / loading: the last values would be stale
 }
 
+TEST_CASE("overlay: draws for canvases and markers on the play HUD and for the map screen, also without HUD lines") {
+    using emf::core::OverlayDue;
+    using emf::core::overlay_due;
+    OverlayDue d;
+    CHECK_FALSE(overlay_due(d));
+    d.world_live = true;
+    CHECK_FALSE(overlay_due(d));  // nothing to draw
+    d.canvases = true;
+    CHECK_FALSE(overlay_due(d));  // not on the play HUD (a menu): canvases hide there
+    d.world_ui = true;
+    CHECK(overlay_due(d));  // a minimap with the clock off (no HUD line)
+    d.canvases = false;
+    d.markers = true;
+    CHECK(overlay_due(d));  // 3D markers
+    d.world_ui = false;
+    d.map_open = true;
+    CHECK(overlay_due(d));  // the map screen: map markers, the hold ring, map clicks
+    d.markers = false;
+    CHECK(overlay_due(d));
+    d.world_live = false;
+    CHECK_FALSE(overlay_due(d));  // main menu / loading
+    OverlayDue h;
+    h.world_live = true;
+    h.hud_lines = true;
+    CHECK(overlay_due(h));
+    h.world_live = false;
+    CHECK_FALSE(overlay_due(h));
+    OverlayDue c;
+    c.console = true;
+    CHECK(overlay_due(c));
+    OverlayDue t;
+    t.toast = true;
+    CHECK(overlay_due(t));
+    OverlayDue b;
+    b.busy = true;
+    CHECK(overlay_due(b));
+}
+
 TEST_CASE("hud: long text is cut on a character boundary (UTF-8)") {
     HudModel h;
     std::string text(HudModel::kMaxText - 1, 'a');

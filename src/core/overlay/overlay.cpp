@@ -871,9 +871,26 @@ bool start_overlay(const OverlayConfig& config, OverlayDeps deps) {
     const bool input = install_input_hooks(g_router.get(), std::move(cb));
     VkOverlayHooks hooks;
     hooks.visible = [] {
-        return g_router->open() || g_ui.open_fraction > 0.0f || GetTickCount64() < g_toast_until.load() ||
-               g_wheel_gate.busy() || g_window_gate.busy() ||
-               (g_deps.hud && show_hud(g_router->open(), !g_deps.hud->empty(), world_live()));
+        OverlayDue d;
+        const uint64_t now = GetTickCount64();
+        d.console = g_router->open() || g_ui.open_fraction > 0.0f;
+        d.toast = now < g_toast_until.load();
+        d.busy = g_wheel_gate.busy() || g_window_gate.busy();
+        if (d.console || d.toast || d.busy) return true;
+        d.world_live = world_live();
+        if (!d.world_live) return false;
+        d.hud_lines = g_deps.hud && !g_deps.hud->empty();
+        const MarkerSight sight = marker_sight(now);
+        d.map_open = sight.map_open;
+        d.world_ui = sight.world_ui;
+        if (d.world_ui) {
+            if (g_deps.canvases) {
+                const auto view = g_deps.canvases->view();
+                d.canvases = view && !view->empty();
+            }
+            d.markers = g_deps.markers && g_deps.markers->size() > 0;
+        }
+        return overlay_due(d);
     };
     hooks.fonts_due = fonts_due;
     hooks.fonts = setup_fonts;
