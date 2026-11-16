@@ -41,6 +41,15 @@ double number_field(lua_State* L, int t, const char* key, const char* fn, double
     return v;
 }
 
+// An id field (an entity, an image handle, a map icon type): a whole number that fits in 32 bits, else an error (a
+// double cast to uint32_t out of range is undefined, and a fraction would be cut without a word).
+uint32_t id_field(lua_State* L, int t, const char* key, const char* fn) {
+    const double v = number_field(L, t, key, fn, 0);
+    if (!(v >= 0 && v <= 4294967295.0) || v != static_cast<double>(static_cast<uint32_t>(v)))
+        luaL_error(L, "%s: %s must be a whole number from 0 to 4294967295", fn, key);
+    return static_cast<uint32_t>(v);
+}
+
 bool flag_field(lua_State* L, int t, const char* key, bool def) {
     lua_getfield(L, t, key);
     const bool v = lua_isnil(L, -1) ? def : lua_toboolean(L, -1) != 0;
@@ -66,12 +75,16 @@ Spec read_spec(lua_State* L, Script* s, const char* id, int t, const char* fn) {
     m.x = number_field(L, t, "x", fn, 0);
     m.y = number_field(L, t, "y", fn, 0);
     m.z = number_field(L, t, "z", fn, 0);
-    m.entity = static_cast<uint32_t>(number_field(L, t, "entity", fn, 0));
+    m.entity = id_field(L, t, "entity", fn);
     m.height = static_cast<float>(number_field(L, t, "height", fn, 0));
     m.max_distance = static_cast<float>(number_field(L, t, "max_distance", fn, 0));
-    m.rgba = static_cast<uint32_t>(static_cast<int64_t>(number_field(L, t, "colour", fn, 0)));
-    m.icon = static_cast<uint32_t>(number_field(L, t, "icon", fn, 0));
-    m.game_icon = static_cast<uint32_t>(static_cast<int64_t>(number_field(L, t, "game_icon", fn, 0)));
+    // a colour keeps its low 32 bits as before (-1 is every bit); one beyond any whole number is an error
+    const double colour = number_field(L, t, "colour", fn, 0);
+    if (!(colour >= -9223372036854775808.0 && colour < 9223372036854775808.0))
+        luaL_error(L, "%s: colour must be 0xRRGGBBAA", fn);
+    m.rgba = static_cast<uint32_t>(static_cast<int64_t>(colour));
+    m.icon = id_field(L, t, "icon", fn);
+    m.game_icon = id_field(L, t, "game_icon", fn);
     lua_getfield(L, t, "text");
     if (!lua_isnil(L, -1)) {
         if (lua_type(L, -1) != LUA_TSTRING) luaL_error(L, "%s: text must be a string", fn);

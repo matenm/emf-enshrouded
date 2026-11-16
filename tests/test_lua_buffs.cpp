@@ -139,6 +139,30 @@ TEST_CASE("lua 1.24: emf.apply_buff and emf.remove_buff queue through the core; 
     CHECK(logged("rm refused the target does not have it"));
 }
 
+TEST_CASE("lua 1.24: emf.apply_buff seconds that are no time (NaN, infinite, negative, longer than 9e9) are an error, not a wrapped duration") {
+    Rig r(L"apply_buff_seconds");
+    types(r);
+    add_script(r.dir, "abs",
+               "emf.command('abs', '', function(w)\n"
+               "  for i, s in ipairs({0/0, math.huge, -math.huge, 1e10, -1}) do\n"
+               "    local ok, err = pcall(emf.apply_buff, w, 1, " + std::to_string(kWet) + ", {seconds = s})\n"
+               "    emf.log('sec ' .. i .. ' ' .. tostring(ok) .. ' ' .. tostring(err))\n"
+               "  end\n"
+               "  emf.apply_buff(w, 1, " + std::to_string(kWet) + ", {seconds = 9000000000})\n"
+               "  emf.apply_buff(w, 1, " + std::to_string(kWet) + ", {seconds = 0})\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("abs");
+    for (int i = 1; i <= 5; ++i)
+        CHECK(logged(("sec " + std::to_string(i) +
+                      " false emf.apply_buff: seconds must be 0 to 9000000000 (0: the type's own time)")
+                         .c_str()));
+    REQUIRE(r.fake.buff_asks.size() == 2);
+    CHECK(r.fake.buff_asks[0].ns == 9'000'000'000'000'000'000LL);
+    CHECK(r.fake.buff_asks[1].ns == 0);
+}
+
 TEST_CASE("lua 1.24: emf.on_buff hears the players' buff changes; one core listener") {
     Rig r(L"on_buff");
     types(r);

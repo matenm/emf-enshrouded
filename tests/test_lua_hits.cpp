@@ -265,6 +265,37 @@ TEST_CASE("lua 1.23: emf.hit_rule kinds: all, a name, a list; an unknown kind is
     CHECK(logged("lava"));
 }
 
+TEST_CASE("lua 1.23: emf.hit_rule add and min_health that do not fit, and kinds = {}, are errors (no rule that wraps or quietly means hits only)") {
+    Rig r(L"hit_rule_numbers");
+    add_script(r.dir, "hn",
+               "local function try(what, ...) local ok, err = pcall(...) emf.log(what .. ' ' .. tostring(ok) .. ' ' .. tostring(err)) end\n"
+               "try('add', emf.hit_rule, {add = 4294967301})\n"
+               "try('neg', emf.hit_rule, {add = -2147483649})\n"
+               "try('min', emf.hit_rule, {min_health = 4294967297})\n"
+               "try('minneg', emf.hit_rule, {min_health = -1})\n"
+               "try('kinds', emf.hit_rule, {kinds = {}, cancel = true})\n"
+               "try('onhit', emf.on_hit, function() end, {kinds = {}})\n"
+               "try('typo', emf.hit_rule, {kind = 'fall'})\n"
+               "emf.hit_rule{add = 2147483647}\n"
+               "emf.hit_rule{add = -2147483648, min_health = 2147483647}\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    CHECK(logged("add false"));
+    CHECK(logged("emf.hit_rule: add = 4294967301 does not fit (-2147483648 to 2147483647)"));
+    CHECK(logged("emf.hit_rule: add = -2147483649 does not fit (-2147483648 to 2147483647)"));
+    CHECK(logged("emf.hit_rule: min_health = 4294967297 does not fit (0 to 2147483647)"));
+    CHECK(logged("emf.hit_rule: min_health = -1 does not fit (0 to 2147483647)"));
+    CHECK(logged("kinds false"));
+    CHECK(logged("emf.hit_rule: kinds = {} names no kind (hit, fall, shroud, cold, drowning or all)"));
+    CHECK(logged("onhit false"));
+    CHECK(logged("emf.on_hit: kinds = {} names no kind (hit, fall, shroud, cold, drowning or all)"));
+    CHECK(logged("scale, add, min_health, cancel, kinds)"));  // the unknown-field list names kinds too
+    REQUIRE(r.fake.hit_rules_added.size() == 2);
+    CHECK(r.fake.hit_rules_added[0].add == 2147483647);
+    CHECK(r.fake.hit_rules_added[1].add == -2147483647 - 1);
+    CHECK(r.fake.hit_rules_added[1].min_health == 2147483647);
+}
+
 TEST_CASE("lua 1.23: hit.instant says the game's own damage kills at once (deadly shroud, out of air)") {
     Rig r(L"on_hit_instant");
     add_script(r.dir, "hi", "emf.on_hit(function(w, h) emf.log('instant ' .. h.kind .. ' ' .. tostring(h.instant)) end, {kinds = 'all'})\n");

@@ -94,6 +94,25 @@ TEST_CASE("lua 1.30: emf.door reads the state; door_open, door_close and door_lo
     CHECK(r.fake.door_calls[3] == "set 9 1 0");
 }
 
+TEST_CASE("lua 1.30: emf.door_close with a side (a third argument) is an error, not a side quietly dropped") {
+    Rig r(L"lua_door_close_side");
+    r.fake.door_states[500] = EMF_DOOR_OPEN;
+    add_script(r.dir, "dc",
+               "emf.command('go', '', function(w)\n"
+               "  local ok, err = pcall(emf.door_close, w, 500, 'front')\n"
+               "  emf.log('side ' .. tostring(ok) .. ' ' .. tostring(err))\n"
+               "  emf.log('nil ' .. tostring(emf.door_close(w, 500, nil)))\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("dc.go");
+    CHECK(logged("side false"));
+    CHECK(logged("emf.door_close(world, id) takes no side: a side is for emf.door_open"));
+    CHECK(logged("nil true"));
+    REQUIRE(r.fake.door_calls.size() == 1u);
+    CHECK(r.fake.door_calls[0] == "set 500 0 0");
+}
+
 TEST_CASE("lua 1.33: emf.enemy_move walks an enemy through points (one point or a list; arrive, seconds, peaceful, allies)") {
     Rig r(L"lua_moves");
     r.fake.moving[70] = 1;

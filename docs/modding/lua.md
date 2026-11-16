@@ -384,13 +384,14 @@ stamina too), `add` (added after the scale), `min_health` (the target keeps at l
 die from hits). A damage hit never becomes a heal and a heal never becomes damage. Rules apply in id order; cancel
 wins. A hit the game passes up a target of several parts (from the part struck to its parent) meets the rules once, at
 the first level that takes hits: `min_health` guards that level's health. A cancelled hit never reaches `on_hit`. An
-unknown field or a bad name is an error. A script's rules are removed when it reloads, unloads or pauses.
+unknown field or a bad name is an error, and so is an `add` outside -2147483648 to 2147483647 or a `min_health` outside 0
+to 2147483647 (it would not fit the core's rule). A script's rules are removed when it reloads, unloads or pauses.
 
 ### Fall, shroud, cold and drowning
 
 `kinds` lets a rule or a callback take part in the damage the game does not make as hits. A kind name is `"hit"`,
 `"fall"`, `"shroud"`, `"cold"` or `"drowning"`; `kinds` is one name, a list of names, or `"all"`. An unknown name is an
-error.
+error, and so is an empty list (`kinds = {}` would otherwise mean entity hits only).
 
 - `emf.hit_rule{kinds = "fall", to = "players", cancel = true}`. Without `kinds` a rule is for entity hits only, so every
   rule keeps its meaning.
@@ -450,7 +451,8 @@ ids with the console command `buffs.list` or `emf.buff_types`. Details: [referen
 
 `emf.apply_buff(world, target, type [, opts] [, fn])` and `emf.remove_buff(world, target, type [, fn])` return true when
 queued, false when refused at once (the log says why: not the server world, an unknown type, 64 requests waiting, not
-available on this game build). `opts`: `seconds` (0 or absent = the type's default), `source` (the entity the buff comes
+available on this game build). `opts`: `seconds` (0 or absent = the type's default; 0 to 9000000000, anything else,
+NaN too, is an error), `source` (the entity the buff comes
 from, default the target; damage over time scales from the source's stats, so give a creature), `item` (the item type
 id a food buff takes its stats and time from, as `emf.item` gives: not an item entity; an unknown id is refused; without
 it a food buff likely has no stats). An unknown option is an error.
@@ -503,7 +505,7 @@ emf.unsend_marker(player, "pet")
 | `emf.world_to_screen(x, y, z)` | `px, py` in display pixels, or nil (behind the camera, no frame yet) |
 | `emf.marker_types()` | the game's map icon type ids its own map entries used in this world (for `game_icon`) |
 
-`spec` keys (anything else is an error):
+`spec` keys (anything else is an error; `entity`, `icon` and `game_icon` must be whole numbers from 0 to 4294967295):
 
 | Key | What |
 |---|---|
@@ -692,6 +694,7 @@ is not a door (player doors and gates). `logic` is true when a switch drives the
 
 - `emf.door_open(world, id [, "front" | "back"])` and `emf.door_close(world, id)` change the door at the next server
   step; players see it swing, and the game's collider and path grid follow it, so enemies' paths change. No sound plays.
+  A side given to `emf.door_close` is an error.
 - `emf.door_lock(world, id, true | false)`: while locked, no player gets the E prompt on it. From EMF 0.6.8 the lock is
   kept with the world (by the door's place): after a load the door there is locked again. A locked door that breaks
   or is taken down while a player is near loses its lock (a new door there is not locked). `emf.door_open` and

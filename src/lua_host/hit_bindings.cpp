@@ -3,6 +3,7 @@
 // only through rules, which the core applies; its rules go when it reloads, unloads or pauses.
 #include "host_impl.h"
 
+#include <cstdint>
 #include <cstring>
 #include <string>
 
@@ -200,6 +201,8 @@ uint8_t kinds_at(lua_State* L, int index, const char* fn) {
         one(-1);
     } else if (lua_istable(L, -1)) {
         const lua_Integer n = luaL_len(L, -1);
+        // an empty list would read as no kinds, which means entity hits only: never what a script that names kinds wants
+        if (n == 0) luaL_error(L, "%s: kinds = {} names no kind (hit, fall, shroud, cold, drowning or all)", fn);
         for (lua_Integer i = 1; i <= n; ++i) {
             lua_rawgeti(L, -1, i);
             one(-1);
@@ -210,6 +213,20 @@ uint8_t kinds_at(lua_State* L, int index, const char* fn) {
     }
     lua_pop(L, 1);
     return mask;
+}
+
+// A whole number field of the rule table that must fit in [lo, hi] (an int32 of the C rule): one that does not is an
+// error, not a value that wraps. `def` when absent.
+int32_t int32_of(lua_State* L, const char* key, lua_Integer lo, lua_Integer hi, int32_t def) {
+    lua_getfield(L, 1, key);
+    int32_t out = def;
+    if (!lua_isnil(L, -1)) {
+        const lua_Integer v = luaL_checkinteger(L, -1);
+        if (v < lo || v > hi) luaL_error(L, "emf.hit_rule: %s = %I does not fit (%I to %I)", key, v, lo, hi);
+        out = static_cast<int32_t>(v);
+    }
+    lua_pop(L, 1);
+    return out;
 }
 
 bool flag_of(lua_State* L, const char* key) {
@@ -275,7 +292,7 @@ int l_hit_rule(lua_State* L) {
         lua_pop(L, 1);  // the value; the key stays for the next round
         if (lua_type(L, -1) != LUA_TSTRING || !known_key(lua_tostring(L, -1)))
             return luaL_error(L, "emf.hit_rule: unknown field '%s' (from, to, crit, backstab, weakspot, types, attack, healing, "
-                                 "scale, add, min_health, cancel)",
+                                 "scale, add, min_health, cancel, kinds)",
                               luaL_tolstring(L, -1, nullptr));
     }
     EmfHitRule r{};
@@ -294,12 +311,9 @@ int l_hit_rule(lua_State* L) {
     lua_getfield(L, 1, "scale");
     if (!lua_isnil(L, -1)) r.scale = static_cast<float>(luaL_checknumber(L, -1));
     lua_pop(L, 1);
-    lua_getfield(L, 1, "add");
-    if (!lua_isnil(L, -1)) r.add = static_cast<int32_t>(luaL_checkinteger(L, -1));
-    lua_pop(L, 1);
-    lua_getfield(L, 1, "min_health");
-    if (!lua_isnil(L, -1)) r.min_health = static_cast<int32_t>(luaL_checkinteger(L, -1));
-    lua_pop(L, 1);
+    constexpr lua_Integer kMin32 = INT32_MIN, kMax32 = INT32_MAX;
+    r.add = int32_of(L, "add", kMin32, kMax32, 0);
+    r.min_health = int32_of(L, "min_health", 0, kMax32, 0);  // the core refuses a negative one
     const EmfApi* api = s->host->api;
     const uint32_t id = has_v31(api) && api->hit_rule_add ? api->hit_rule_add(&r) : 0;
     if (!id) {

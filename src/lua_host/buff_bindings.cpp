@@ -170,6 +170,8 @@ int fn_at(lua_State* L, int index) {
     return index;
 }
 
+constexpr lua_Number kMaxBuffSeconds = 9e9;  // times 1e9 still fits in int64 nanoseconds (about 285 years)
+
 int ask(lua_State* L, bool remove) {
     Script* s = script_of(L);
     const EmfApi* a = s->host->api;
@@ -190,9 +192,13 @@ int ask(lua_State* L, bool remove) {
             lua_pushnil(L);
             while (lua_next(L, 4)) {
                 const char* k = lua_type(L, -2) == LUA_TSTRING ? lua_tostring(L, -2) : "";
-                if (!std::strcmp(k, "seconds"))
-                    ns = static_cast<int64_t>(luaL_checknumber(L, -1) * 1e9);
-                else if (!std::strcmp(k, "source"))
+                if (!std::strcmp(k, "seconds")) {
+                    // NaN, infinity, a negative time or one past what nanoseconds hold would wrap in the cast
+                    const lua_Number sec = luaL_checknumber(L, -1);
+                    if (!(sec >= 0 && sec <= kMaxBuffSeconds))
+                        return luaL_error(L, "emf.apply_buff: seconds must be 0 to 9000000000 (0: the type's own time)");
+                    ns = static_cast<int64_t>(sec * 1e9);
+                } else if (!std::strcmp(k, "source"))
                     source = static_cast<uint32_t>(luaL_checkinteger(L, -1));
                 else if (!std::strcmp(k, "item"))
                     item = static_cast<uint32_t>(luaL_checkinteger(L, -1));

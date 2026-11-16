@@ -54,6 +54,33 @@ TEST_CASE("lua 1.25: emf.marker raises on an unknown key, a bad shape or a bad i
     CHECK(r.fake.markers.empty());
 }
 
+TEST_CASE("lua 1.25: emf.marker's entity, icon and game_icon must be whole numbers that fit; a colour beyond any number is an error") {
+    Rig r(L"marker_numbers");
+    add_script(r.dir, "mn",
+               "local function try(what, spec) local ok, err = pcall(emf.marker, 'a', spec)\n"
+               "  emf.log(what .. ' ' .. tostring(ok) .. ' ' .. tostring(err)) end\n"
+               "try('neg', {entity = -1})\n"
+               "try('big', {entity = 4294967296})\n"
+               "try('frac', {entity = 1.5})\n"
+               "try('nan', {icon = 0/0})\n"
+               "try('inf', {game_icon = math.huge})\n"
+               "try('colour', {colour = 1e300})\n"
+               "emf.marker('ok', {entity = 4294967295, icon = 3.0, game_icon = 0, colour = -1})\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    CHECK(logged("neg false emf.marker: entity must be a whole number from 0 to 4294967295"));
+    CHECK(logged("big false emf.marker: entity must be a whole number from 0 to 4294967295"));
+    CHECK(logged("frac false emf.marker: entity must be a whole number from 0 to 4294967295"));
+    CHECK(logged("nan false emf.marker: icon must be a whole number from 0 to 4294967295"));
+    CHECK(logged("inf false emf.marker: game_icon must be a whole number from 0 to 4294967295"));
+    CHECK(logged("colour false emf.marker: colour must be 0xRRGGBBAA"));
+    REQUIRE(r.fake.markers.count("mn:ok") == 1);
+    REQUIRE(r.fake.markers.size() == 1);
+    CHECK(r.fake.markers["mn:ok"].m.entity == 4294967295u);
+    CHECK(r.fake.markers["mn:ok"].m.icon == 3u);
+    CHECK(r.fake.markers["mn:ok"].m.rgba == 0xFFFFFFFFu);  // as before: -1 is every bit
+}
+
 TEST_CASE("lua 1.25: emf.remove_marker and emf.clear_markers touch only the script's own markers") {
     Rig r(L"marker_remove");
     add_script(r.dir, "ma", "emf.marker('x', {x = 1})\nemf.marker('y', {x = 2})\n");

@@ -40,6 +40,8 @@ int door_set(lua_State* L, bool open) {
     EmfWorld* w = lua_world_arg(L, 1);
     const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 2));
     uint32_t side = 0;
+    if (!open && !lua_isnoneornil(L, 3))  // a side given to a close would be dropped without a word
+        return luaL_error(L, "emf.door_close(world, id) takes no side: a side is for emf.door_open");
     if (open && !lua_isnoneornil(L, 3)) {
         const std::string word = luaL_checkstring(L, 3);
         if (word == "front") side = 1;
