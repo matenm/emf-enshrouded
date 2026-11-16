@@ -567,6 +567,93 @@ void cmd_move_stop(EmfWorld*, int argc, const char* const* argv, void* u) {
     command_reply_line(ok ? fmt("move %u ended", id) : fmt("no move %u", id));
 }
 
+// vmove <villager> <x> <y> <z> [hold <seconds | always>] | vmove <villager> <entity | me> [hold ...] (API v46): the
+// villager walks there inside its own area; how its move ended comes later, to the reply the command had.
+struct LateVillagerMove {
+    ReplyFn reply;
+    uint32_t villager = 0;
+    bool hold = false;
+};
+void villager_move_done(EmfWorld*, uint32_t id, uint32_t status, void* user) {
+    const std::unique_ptr<LateVillagerMove> late(static_cast<LateVillagerMove*>(user));  // each move ends exactly once
+    if (!late->reply) return;
+    const char* how = status == EMF_MOVE_ARRIVED   ? (late->hold ? "arrived and holds there" : "arrived")
+                      : status == EMF_MOVE_STUCK   ? "is stuck (no way on, or the game sent it home)"
+                      : status == EMF_MOVE_TIMEOUT ? "ran out of time"
+                      : status == EMF_MOVE_GONE    ? "is gone"
+                                                   : "was stopped";
+    late->reply(fmt("villager move %u: villager %u %s", id, late->villager, how));
+}
+
+void cmd_vmove(EmfWorld* w, int argc, const char* const* argv, void* u) {
+    auto& c = ctx_of(u);
+    std::vector<std::string> words = emf::coordinate_words({argv + 1, argv + argc});
+    const char* usage =
+        "usage: vmove <villager> <x> <y> <z> [hold <seconds | always>] | vmove <villager> <entity | me> [hold <seconds | always>]";
+    double hold = 0;
+    bool always = false, ok = true;
+    if (words.size() >= 2 && lower(words[words.size() - 2]) == "hold") {
+        const std::string h = lower(words.back());
+        if (h == "always") always = true;
+        else ok = parse_coord(h.c_str(), &hold) && hold > 0 && hold <= 3600;
+        words.resize(words.size() - 2);
+    } else if (!words.empty() && lower(words.back()) == "hold") {
+        ok = false;
+    }
+    uint32_t villager = 0;
+    double p[3] = {};
+    ok = ok && (words.size() == 2 || words.size() == 4) && parse_uint(words[0].c_str(), 0xffffffffu, &villager);
+    if (ok && words.size() == 4) {
+        for (int i = 0; ok && i < 3; ++i) ok = parse_coord(words[1 + i].c_str(), &p[i]);
+    } else if (ok) {  // to where an entity (or the player who typed it) stands now
+        uint32_t to = 0;
+        if (lower(words[1]) == "me") to = c.player ? c.player() : 0;
+        else ok = parse_uint(words[1].c_str(), 0xffffffffu, &to);
+        if (ok && (!to || !player_pos(c, w, to, p))) {
+            command_reply_line(fmt("vmove: entity %s has no position", words[1].c_str()));
+            return;
+        }
+    }
+    if (!ok) {
+        command_reply_line(usage);
+        return;
+    }
+    if (c.api->size < offsetof(EmfApi, villager_moving) + sizeof(c.api->villager_moving) || !c.api->villager_move) {
+        command_reply_line("vmove: this core has no villager moves");
+        return;
+    }
+    EmfPathPoint pt{static_cast<float>(p[0]), static_cast<float>(p[1]), static_cast<float>(p[2]), 0};
+    EmfMoveOrder o{};
+    o.size = sizeof o;
+    o.enemy = villager;
+    o.flags = always ? EMF_MOVE_HOLD : 0;
+    o.hold_seconds = static_cast<float>(hold);
+    o.count = 1;
+    o.points = &pt;
+    auto* late = new LateVillagerMove{current_reply(), villager, always || hold > 0};  // freed by the end callback
+    const uint32_t id = c.api->villager_move(w, &o, villager_move_done, late);
+    if (!id) {
+        delete late;  // a refused move never calls back
+        command_reply_line(fmt("villager %u not moved: %s", villager, o.why[0] ? o.why : "villager moves are off"));
+        return;
+    }
+    const std::string then = always ? ", then holds until vmove.stop" : hold > 0 ? fmt(", then holds %.0f s", hold) : "";
+    command_reply_line(fmt("villager move %u: villager %u walks to (%.1f, %.1f, %.1f)%s (vmove.stop %u)", id, villager, pt.x,
+                           pt.y, pt.z, then.c_str(), id));
+}
+
+void cmd_vmove_stop(EmfWorld*, int argc, const char* const* argv, void* u) {
+    auto& c = ctx_of(u);
+    uint32_t id = 0;
+    if (argc != 2 || !parse_uint(argv[1], 0xffffffffu, &id)) {
+        command_reply_line("usage: vmove.stop <id>");
+        return;
+    }
+    const bool ok = c.api->size >= offsetof(EmfApi, villager_moving) + sizeof(c.api->villager_moving) &&
+                    c.api->villager_move_cancel && c.api->villager_move_cancel(id);
+    command_reply_line(ok ? fmt("villager move %u ended", id) : fmt("no villager move %u", id));
+}
+
 // hud <id> [place 0-2] [text]: a line kept on screen (API v12), to try a layout; no text removes it.
 void cmd_hud(EmfWorld*, int argc, const char* const* argv, void* u) {
     auto& c = ctx_of(u);
@@ -1610,6 +1697,10 @@ bool add_builtin_commands(BuiltinContext& ctx) {
         {"move", "<enemy> <x> <y> <z> [peaceful] | <enemy> <entity | me> [peaceful]: the enemy walks there (its own way, "
                  "jumps if its kind can); peaceful: it ignores players (host)", cmd_move},
         {"move.stop", "<id>: end a move (host)", cmd_move_stop},
+        {"vmove", "<villager> <x> <y> <z> | <villager> <entity | me> [hold <seconds | always>]: the villager walks there "
+                  "inside its own area (30 m around its home for the game's villagers) and may hold there (host)",
+         cmd_vmove},
+        {"vmove.stop", "<id>: end a villager move or its hold (host)", cmd_vmove_stop},
         {"entities", ": count the entities in the server world", cmd_entities},
         {"inspect", "<entity>: list the entity's components (template ones marked)", cmd_inspect},
         {"tpl", "<entity> <component> [bytes 1-256] [offset]: hex dump of the entity's template data", cmd_tpl},

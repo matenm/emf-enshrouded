@@ -1502,6 +1502,64 @@ TEST_CASE("builtin commands: move walks an enemy to a point or to an entity (pea
     CHECK(bsaid("move 62: entity 70 is stuck (no way on for 15 s)"));
 }
 
+namespace {
+std::vector<SeenMove> g_vmoves;
+std::vector<uint32_t> g_vmove_cancels;
+uint32_t fake_vmove(EmfWorld*, EmfMoveOrder* o, EmfMoveCallback cb, void* user) {
+    if (o->enemy == 13) {
+        std::snprintf(o->why, sizeof o->why, "a point is 40 m from the villager's home, outside its walk area (30 m around its home)");
+        return 0;
+    }
+    g_vmoves.push_back({*o, {o->points, o->points + o->count}, cb, user});
+    return 80 + static_cast<uint32_t>(g_vmoves.size());
+}
+bool fake_vmove_cancel(uint32_t id) {
+    g_vmove_cancels.push_back(id);
+    return id == 81;
+}
+}  // namespace
+
+TEST_CASE("builtin commands: vmove walks a villager to a point or to an entity, with a hold of seconds or always; its end is said; vmove.stop") {
+    BFixture f;
+    EmfApi api = *api_table();
+    api.villager_move = fake_vmove;
+    api.villager_move_cancel = fake_vmove_cancel;
+    f.ctx.api = &api;
+    g_vmoves.clear();
+    g_vmove_cancels.clear();
+    ItemsWorld iw;
+    MapStore ents;
+    emf::test::plant_entities(iw.w, ents, {42, 70, 900});
+    f.center.enqueue("vmove 70 100 20 -30.5");
+    f.center.enqueue("vmove 70 100 20 -30.5 hold 30");
+    f.center.enqueue("vmove 70 100 20 -30.5 hold always");
+    f.center.enqueue("vmove 13 1 2 3");
+    f.center.enqueue("vmove 70");
+    f.center.enqueue("vmove 70 1 2 3 hold");
+    f.center.enqueue("vmove.stop 81");
+    f.center.enqueue("vmove.stop 7");
+    f.run(iw.w);
+    CHECK(bsaid("villager move 81: villager 70 walks to (100.0, 20.0, -30.5) (vmove.stop 81)"));
+    CHECK(bsaid("villager move 82: villager 70 walks to (100.0, 20.0, -30.5), then holds 30 s (vmove.stop 82)"));
+    CHECK(bsaid("villager move 83: villager 70 walks to (100.0, 20.0, -30.5), then holds until vmove.stop (vmove.stop 83)"));
+    CHECK(bsaid("villager 13 not moved: a point is 40 m from the villager's home, outside its walk area (30 m around its home)"));
+    CHECK(bsaid("usage: vmove <villager> <x> <y> <z> [hold <seconds | always>] | vmove <villager> <entity | me> [hold <seconds | always>]"));
+    CHECK(bsaid("villager move 81 ended"));
+    CHECK(bsaid("no villager move 7"));
+    REQUIRE(g_vmoves.size() == 3u);
+    CHECK(g_vmoves[0].o.flags == 0u);
+    CHECK(g_vmoves[0].o.hold_seconds == 0.0f);
+    CHECK(g_vmoves[1].o.hold_seconds == 30.0f);
+    CHECK(g_vmoves[2].o.flags == EMF_MOVE_HOLD);
+    REQUIRE(g_vmoves[0].cb != nullptr);
+    g_vmoves[0].cb(nullptr, 81, EMF_MOVE_ARRIVED, g_vmoves[0].user);
+    CHECK(bsaid("villager move 81: villager 70 arrived"));
+    g_vmoves[1].cb(nullptr, 82, EMF_MOVE_ARRIVED, g_vmoves[1].user);
+    CHECK(bsaid("villager move 82: villager 70 arrived and holds there"));
+    g_vmoves[2].cb(nullptr, 83, EMF_MOVE_STUCK, g_vmoves[2].user);
+    CHECK(bsaid("villager move 83: villager 70 is stuck (no way on, or the game sent it home)"));
+}
+
 TEST_CASE("api remove_building (v36): no request, a small size field, or a call outside a world callback is refused") {
     BFixture f;
     CHECK_FALSE(api_table()->remove_building(nullptr, nullptr));
