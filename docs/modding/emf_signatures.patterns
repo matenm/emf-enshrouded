@@ -305,3 +305,6 @@ BlockBrickDecode = 48 89 6C 24 18 48 89 74 24 20 48 89 4C 24 08 57 41 54 41 55 4
 
 # BlockColumnRelease: optional; 1287369=0x10cc750 1287369s=0x851430
 BlockColumnRelease = 4C 8B C9 85 D2 75 05 45 33 C9 EB 5F 48 8B 89 B8 01 00 00 8B C2 25 FF FF
+
+# HudScreenRead: optional; 1287369=0xcdc3dc (client only)
+HudScreenRead = 44 0F B6 BF ?? ?? ?? ?? 41 80 FF ?? 44 88 BD ?? ?? ?? ?? 48 C7 44 24 78 0E 00 00 00 41 0F 94 C5 0F 94 C0

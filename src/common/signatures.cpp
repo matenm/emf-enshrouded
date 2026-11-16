@@ -281,6 +281,7 @@ constexpr SigDef kSignatures[] = {
     {Sig::BlockBrickSeek, "BlockBrickSeek", "48 83 EC 28 8B 41 4C 48 89 5C 24 30 48 8B D9 48 89 6C 24 38 8D 6A 01 48", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x10c6170u, 0x84adc0u}, false},
     {Sig::BlockBrickDecode, "BlockBrickDecode", "48 89 6C 24 18 48 89 74 24 20 48 89 4C 24 08 57 41 54 41 55 41 56 41 57 49 8B 30 48 8B FA 49 8B", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x10cc7d0u, 0x8514b0u}, false},
     {Sig::BlockColumnRelease, "BlockColumnRelease", "4C 8B C9 85 D2 75 05 45 33 C9 EB 5F 48 8B 89 B8 01 00 00 8B C2 25 FF FF", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x10cc750u, 0x851430u}, false},
+    {Sig::HudScreenRead, "HudScreenRead", "44 0F B6 BF ?? ?? ?? ?? 41 80 FF ?? 44 88 BD ?? ?? ?? ?? 48 C7 44 24 78 0E 00 00 00 41 0F 94 C5 0F 94 C0", {kRvaUnchecked, kRvaUnchecked, 0u, kRvaUnchecked, 0u, kRvaUnchecked, 0u, 0xcdc3dcu, 0u}, false},
 };
 static_assert(std::size(kSignatures) == kSigCount, "one entry per Sig");
 }  // namespace

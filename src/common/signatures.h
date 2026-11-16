@@ -74,6 +74,9 @@ enum class Sig : size_t {
     // saved changes): acquire a column, seek a brick, decode it, release the column (private research
     // ruin_blocks_2026-11-16.md 4.1)
     BlockColumnAcquire, BlockBrickSeek, BlockBrickDecode, BlockColumnRelease,
+    // the chat key gate: the chat window's read of the HUD screen byte in UiPlayData (movzx r15d, byte [rdi+off];
+    // cmp r15b, TextChat): the offset is the u32 at +4, TextChat (0x2b) the byte at +11. Client only.
+    HudScreenRead,
     _Count
 };
 constexpr size_t kSigCount = static_cast<size_t>(Sig::_Count);
