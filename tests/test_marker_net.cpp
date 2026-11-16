@@ -157,6 +157,31 @@ TEST_CASE("marker receiver: a server's markers go into the store as received; re
     CHECK(store.size() == 0);
 }
 
+// A position whose place was no number read as 0: the marker jumped to the world's origin.
+TEST_CASE("marker receiver: a position entry whose id is no text or whose place is not three numbers refuses the message") {
+    for (const char* bad : {R"({"o":"lua","p":[["a","9",8,7]]})", R"({"o":"lua","p":[["a",9,null,7]]})",
+                            R"({"o":"lua","p":[["a",9,8,{}]]})", R"({"o":"lua","p":[["a",9,8,[1]]]})",
+                            R"({"o":"lua","p":[["a",9,8,true]]})", R"({"o":"lua","p":[[5,9,8,7]]})",
+                            R"({"o":"lua","p":[["a",9,8,7],["a","x",8,7]]})"}) {
+        CAPTURE(bad);
+        DecodedMarkers d;
+        CHECK_FALSE(decode_markers(bad, &d));
+        MarkerStore store;
+        MarkerReceiver rx(nullptr);
+        REQUIRE(rx.on_message(encode_markers("lua", {mk("a", 1, 2, 3)}, {}), store));
+        CHECK_FALSE(rx.on_message(bad, store));
+        const auto all = store.snapshot();
+        REQUIRE(all.size() == 1);
+        CHECK(all[0].x == 1);  // where it was
+        CHECK(all[0].y == 2);
+        CHECK(all[0].z == 3);
+    }
+    DecodedMarkers ok;
+    REQUIRE(decode_markers(R"({"o":"lua","p":[["a",9,8,7]]})", &ok));
+    REQUIRE(ok.positions.size() == 1);
+    CHECK(ok.positions[0].x == 9);
+}
+
 TEST_CASE("marker sender: when a player's game links up, what that player should have is sent again") {
     Sent s;
     MarkerSender snd(s.fn(), nullptr);

@@ -314,7 +314,11 @@ bool decode_markers(const std::string& text, DecodedMarkers* out) {
     if (const json::Value* p = top.get("p")) {
         if (!p->is(json::Value::Type::Array) || p->arr.size() > kMarkersPerMessage) return false;
         for (const json::Value& v : p->arr) {
+            // [id, x, y, z]: a place that is not three numbers would read as 0 (the marker to the world's origin)
             if (!v.is(json::Value::Type::Array) || v.arr.size() != 4) return false;
+            if (!v.arr[0].is(json::Value::Type::String)) return false;
+            for (size_t i = 1; i < 4; ++i)
+                if (!v.arr[i].is(json::Value::Type::Number)) return false;
             MarkerPosition q;
             q.id = field_str(&v.arr[0]);
             q.x = field_num(&v.arr[1]);

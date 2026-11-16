@@ -62,9 +62,10 @@ local function wanted(self, world, account, ids, stables)
 	local want = {}
 	if self:wants(account, "markers") then
 		for id, o in pairs(ids) do
-			if o.account == account and o.beast then
-				local x, y, z = world:position(id)
-				local spec = { entity = id, x = x or 0, y = y or 0, z = z or 0, height = TALL[o.beast.species] or HEIGHT,
+			-- a beast with no position (not placed yet, or out of the world) gets none: it would show at the world's origin
+			local x, y, z = world:position(id)
+			if o.account == account and o.beast and x then
+				local spec = { entity = id, x = x, y = y, z = z, height = TALL[o.beast.species] or HEIGHT,
 					text = o.beast.name, shape = "diamond", game_map = true, edge_arrow = true }
 				want["beast." .. id] = { spec = spec, sig = o.beast.name .. "@" .. id }
 			end

@@ -6885,6 +6885,23 @@ TEST_CASE("beastmaster 1.16: beast markers on: the owner gets a marker over each
     CHECK(unsent_to(b.r.fake, 1, "beastmaster:beast.1234"));
 }
 
+// A beast with no position (not placed yet, or out of the world) was sent at (0, 0, 0): a marker at the world's origin.
+TEST_CASE("beastmaster: a beast with no position gets no marker; it gets one where it is once it has a place") {
+    BeastRig b;
+    wolf_out(b);  // markers off (the default)
+    b.seconds(1);
+    b.r.fake.components.erase({ecs::CurrentTransform::kHash, 1234u});  // no place now
+    REQUIRE(b.reply("beastmaster markers on").find("on") != std::string::npos);
+    b.host->tick(kServer);  // the same second: the markers' step runs at once, the beasts' check is not due yet
+    CHECK(sent_to(b.r.fake, 1, "beastmaster:beast.1234") == nullptr);
+    place(b.r.fake, 1234, 3, 10, 1);
+    b.seconds(1);
+    const auto* m = sent_to(b.r.fake, 1, "beastmaster:beast.1234");
+    REQUIRE(m != nullptr);
+    CHECK(m->m.x == doctest::Approx(3));
+    CHECK(m->m.z == doctest::Approx(1));
+}
+
 TEST_CASE("beastmaster 1.16: /beastmaster markers on|off is the player's own choice over the setting") {
     BeastRig b;
     b.reply("beastmaster.give wolf");

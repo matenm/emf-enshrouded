@@ -123,9 +123,9 @@ struct DecodedMarkers {
 std::string encode_markers(const std::string& owner, const std::vector<EmfMarker>& markers,
                            const std::vector<std::string>& removes);
 std::string encode_positions(const std::string& owner, const std::vector<MarkerPosition>& positions);
-// False for text that is not such an object, an owner that is not 1-48 characters, or more than kMarkersPerMessage
-// markers, removes or positions. Fields of a marker that are missing take their defaults; a marker's own checks are
-// the store's.
+// False for text that is not such an object, an owner that is not 1-48 characters, more than kMarkersPerMessage
+// markers, removes or positions, or a position that is not [text, number, number, number]. Fields of a marker that are
+// missing take their defaults; a marker's own checks are the store's.
 bool decode_markers(const std::string& text, DecodedMarkers* out);
 
 }  // namespace emf::core

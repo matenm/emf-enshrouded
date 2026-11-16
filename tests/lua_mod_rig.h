@@ -155,6 +155,7 @@ struct ModRig {
     std::unique_ptr<Host> host;
     std::wstring folder, data;
     std::vector<std::wstring> others_data;  // the world data files of the mods loaded beside it
+    std::vector<std::wstring> players_data;  // the player data files of the mod and of those beside it
     std::string id;
     // `also`: more shipped mods loaded beside it, at their default settings (e.g. two class mods sharing a wheel).
     // `api`: changes to the core's function table made before the mods load (e.g. with_net: a mod registers its message
@@ -178,6 +179,10 @@ struct ModRig {
             others_data.push_back(r.dir + L"\\..\\config\\" + std::wstring(other.begin(), other.end()) + L"\\0001.txt");
             DeleteFileW(others_data.back().c_str());
         }
+        // the player data beside each (lua 1.20: <slot>.players.txt): a player's choice in an earlier test must not load
+        players_data.push_back(data.substr(0, data.size() - 4) + L".players.txt");
+        for (const auto& d : others_data) players_data.push_back(d.substr(0, d.size() - 4) + L".players.txt");
+        for (const auto& p : players_data) DeleteFileW(p.c_str());
         if (api) api(r.api);
         host = std::make_unique<Host>(&r.api, r.dir);
         host->set_file_clock(&rig_file_ms);
@@ -191,6 +196,7 @@ struct ModRig {
     ~ModRig() {
         DeleteFileW(data.c_str());
         for (const auto& d : others_data) DeleteFileW(d.c_str());
+        for (const auto& p : players_data) DeleteFileW(p.c_str());
     }
     // Copies the shipped mod `mid` into the mods folder and lists it as a script mod, its settings at their defaults.
     // The folder is emptied first: a file an earlier test of this run added there (a species_extra.lua) must not load.
