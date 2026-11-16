@@ -483,7 +483,12 @@ void do_haul(emf::World w, const jobs::Job& j) {
     move_items(w, j.villager, j.chest, j.chest2, item, (std::min)(have, g_work.haul_per_trip), false);
 }
 
+// A villager another mod walks or holds (API v46 villager_move): no GoToPosition from a job meanwhile (the game takes
+// one command per villager per step, so the two would fight); the job waits until the move ends.
+bool moved_elsewhere(emf::World w, uint32_t villager) { return emf::has_v46() && emf::villager_moving(w, villager) != 0; }
+
 void send_npc_to(emf::World w, uint32_t villager, const jobs::Vec3& pos) {
+    if (moved_elsewhere(w, villager)) return;
     const uint8_t* npc = npc_template(w, villager);
     auto* t = w.get<gen::ecs::CurrentTransform>(villager);
     uint32_t npc_id = 0;
@@ -825,7 +830,7 @@ void run_jobs(emf::World w, uint64_t now) {
                 const uint8_t* npc = npc_template(w, a.job.villager);
                 auto* t = w.get<gen::ecs::CurrentTransform>(a.job.chest);
                 uint32_t npc_id = 0;
-                if (npc && t && guarded_copy(&npc_id, npc, 4) && npc_id) {
+                if (!moved_elsewhere(w, a.job.villager) && npc && t && guarded_copy(&npc_id, npc, 4) && npc_id) {
                     std::lock_guard<std::mutex> l(g_m);
                     g_gotos.push_back({npc_id, t->transform});
                 }

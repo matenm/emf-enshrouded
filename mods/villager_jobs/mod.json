@@ -1,7 +1,7 @@
 {
   "id": "villager_jobs",
   "name": "Villager Jobs",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Villagers farm, tend animals, haul between chests, craft at a chest and gather the wild pickables around it. K on a villager, then on a chest, opens the job wheel; players who joined use K too (admins give jobs). Saved per world. Installed switched off.",
   "authors": ["EMF"],
   "emf": 20,
