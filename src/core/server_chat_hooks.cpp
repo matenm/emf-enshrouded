@@ -132,10 +132,11 @@ bool take_line(const ChatText* text, uint8_t kind, uint32_t handle, uint64_t acc
     const std::string_view typed(buf, n);
     std::string line;
     const ChatAction action = g_deps.run && g_deps.is_command
-                                  ? judge_chat(typed, account, g_deps.policy, g_deps.is_command, &line, g_deps.for_players)
+                                  ? judge_chat(typed, account, g_deps.policy, g_deps.is_command, &line, g_deps.for_players,
+                                               handle)
                                   : ChatAction::Pass;
     if (action != ChatAction::Pass && g_deps.debug) g_deps.debug(t_server, handle, account);
-    if (action != ChatAction::Pass && !g_deps.policy.allows(account)) {
+    if (action != ChatAction::Pass && !g_deps.policy.allows(account, handle)) {
         const uint64_t now = g_deps.now_ms ? g_deps.now_ms() : GetTickCount64();
         switch (g_limit.check(account, now)) {
             case ChatRateLimit::Verdict::Ok: break;
@@ -171,7 +172,7 @@ bool take_line(const ChatText* text, uint8_t kind, uint32_t handle, uint64_t acc
             s.from_chat = true;
             s.account = account;
             s.handle = handle;  // the entity is looked up when the command runs, on the world's thread
-            s.restricted = !g_deps.policy.allows(account);  // a players' command: checked again when it runs
+            s.restricted = !g_deps.policy.allows(account, handle);  // a players' command: checked again when it runs
             if (g_deps.log)
                 g_deps.log("chat command from account " + account_text(account) + " (handle 0x" + hex(handle) +
                            "): " + printable(line));

@@ -56,7 +56,7 @@ struct NetDeps {
     // server side, for remote peers (the chat transport)
     std::function<std::optional<std::pair<uint32_t, uint64_t>>(uint32_t entity)> connection_of;  // entity -> (handle, account)
     std::function<uint32_t(uint64_t account)> entity_of;  // the server world's thread: account -> player entity (0: none)
-    std::function<bool(uint64_t account)> is_admin;       // as EmfCommandSender.admin
+    std::function<bool(uint32_t handle, uint64_t account)> is_admin;  // as EmfCommandSender.admin (handle: the connection)
 };
 
 // The game-facing parts of the two ends of the chat transport (the service adds the channels and the delivery).

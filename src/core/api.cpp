@@ -3232,7 +3232,7 @@ net::NetDeps net_deps(CoreState* s) {
         return s->net_connection_of ? s->net_connection_of(entity) : std::nullopt;
     };
     d.entity_of = [s](uint64_t account) { return s->net_entity_of ? s->net_entity_of(account) : 0u; };
-    d.is_admin = [s](uint64_t account) { return s->net_is_admin && s->net_is_admin(account); };
+    d.is_admin = [s](uint32_t handle, uint64_t account) { return s->net_is_admin && s->net_is_admin(handle, account); };
     return d;
 }
 

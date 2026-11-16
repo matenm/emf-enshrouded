@@ -257,16 +257,21 @@ uint32_t chat_sender_entity(uint64_t account) {
 }
 
 // ---- API v27 mod messages: what the chat transport asks of the server world ----
-// A player entity's account (its BasicPlayerInfos entry's), or 0.
-uint64_t net_account_of(uint32_t entity) {
+// A player entity's entry in the server world's BasicPlayerInfos (their connection handle and account), or nothing.
+std::optional<emf::core::PlayerInfo> server_player_info(uint32_t entity) {
     const EmfApi* api = emf::core::api_table();
     EmfWorld* w = api->server_world();
     const auto* infos = static_cast<const uint8_t*>(w ? api->singleton(w, "BasicPlayerInfos") : nullptr);
-    if (!infos || entity == 0 || entity > emf::core::kPlayerInfoCount) return 0;
+    if (!infos || entity == 0 || entity > emf::core::kPlayerInfoCount) return std::nullopt;
     uint8_t entry[emf::core::kPlayerInfoSize];
     if (!emf::seh_read(infos + static_cast<size_t>(entity - 1) * emf::core::kPlayerInfoSize, entry, sizeof entry))
-        return 0;
-    const auto info = emf::core::read_player_info(entry, entity);
+        return std::nullopt;
+    return emf::core::read_player_info(entry, entity);
+}
+
+// A player entity's account (its BasicPlayerInfos entry's), or 0.
+uint64_t net_account_of(uint32_t entity) {
+    const auto info = server_player_info(entity);
     return info ? info->account : 0;
 }
 
@@ -314,15 +319,16 @@ bool net_is_local(uint32_t, uint64_t account) {
 
 emf::core::ChatPolicy g_net_policy;  // [chat] admins / everyone: who is an admin for a message's sender
 
-// The game counts this connected player as an admin (CanKickBan in their connection record: a dedicated server's Admin
-// group, or a host's admins). Any thread (a guarded copy of the server's records); false when not connected.
-bool game_admin_account(uint64_t account) {
+// The game counts this connected player as an admin (CanKickBan in the record of their connection `handle`, 0 when not
+// known: a dedicated server's Admin group, or a host's admins). Any thread (a guarded copy of the server's records);
+// false when not connected, or not known (a quick reconnect's two records disagree).
+bool game_admin_account(uint32_t handle, uint64_t account) {
     uint8_t* const server = emf::core::chat_server();
     std::vector<uint8_t> records(
         static_cast<size_t>(emf::core::server_layout::kConnectionSize) * emf::core::server_layout::kConnectionCount, 0);
     if (!server || !emf::seh_read(server + emf::core::server_layout::kConnections, records.data(), records.size()))
         return false;
-    return emf::core::connection_is_admin(records.data(), account).value_or(false);
+    return emf::core::connection_is_admin(records.data(), handle, account).value_or(false);
 }
 
 // Switches the chat transport on (the chat hooks are in place): the server end everywhere (a game that hosts, the
@@ -346,7 +352,7 @@ void start_net_transport(bool known, const std::wstring& ini) {
     senv.greet = GetPrivateProfileIntW(L"net", L"greet", 1, ini.c_str()) != 0;
     net->enable_server(std::move(senv));
     g_state->net_connection_of = net_connection_of;
-    g_state->net_is_admin = [](uint64_t account) { return g_net_policy.allows(account); };
+    g_state->net_is_admin = [](uint32_t handle, uint64_t account) { return g_net_policy.allows(account, handle); };
     g_state->net_entity_of = chat_sender_entity;
     if (g_state->exe.server) {
         emf::logf("mod messages: on the server end ([net] greet=%d)", senv.greet ? 1 : 0);
@@ -2162,11 +2168,12 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
                     return s->mods;
                 },
                 [] { return g_mods_check ? g_mods_check->mine() : std::vector<emf::core::ModEntry>{}; },
-                [](uint32_t, uint64_t account) {
+                [](uint32_t entity, uint64_t account) {
                     // the game's CanKickBan (its kick skips them anyway), or an account in [chat] admins
                     for (uint64_t a : g_net_policy.admins)
                         if (a == account) return true;
-                    return game_admin_account(account);
+                    const auto info = server_player_info(entity);  // their connection: its own record's bit
+                    return game_admin_account(info && info->account == account ? info->handle : 0, account);
                 },
                 [](uint32_t entity, uint64_t account, const std::string& text) {
                     const auto c = net_connection_of(entity);

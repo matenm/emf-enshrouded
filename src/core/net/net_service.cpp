@@ -244,7 +244,7 @@ void NetService::enable_client(ClientEnv env) {
     client_.store(client_owned_.get());
 }
 
-void NetService::remote_to_server(uint32_t, uint64_t account, const std::string& channel, uint32_t peer_version,
+void NetService::remote_to_server(uint32_t handle, uint64_t account, const std::string& channel, uint32_t peer_version,
                                   const std::string& data) {
     NetHandler handler;
     NetFrom from;
@@ -278,7 +278,7 @@ void NetService::remote_to_server(uint32_t, uint64_t account, const std::string&
         return;
     }
     if (!handler) return;
-    from.admin = d_.is_admin ? d_.is_admin(account) : false;
+    from.admin = d_.is_admin ? d_.is_admin(handle, account) : false;
     auto entity_of = d_.entity_of;
     d_.post(EMF_WORLD_SERVER, [handler, from, data, entity_of](EmfWorld* w) mutable {
         if (entity_of) from.player = entity_of(from.account);  // on the server world's thread

@@ -235,7 +235,7 @@ struct CoreState {
     // (the server world's thread) and whether an account is an admin
     std::function<std::optional<std::pair<uint32_t, uint64_t>>(uint32_t entity)> net_connection_of;
     std::function<uint32_t(uint64_t account)> net_entity_of;
-    std::function<bool(uint64_t account)> net_is_admin;
+    std::function<bool(uint32_t handle, uint64_t account)> net_is_admin;
     // player_name: a copy of the server's connection records (empty: read from chat_server(); false: none to read)
     std::function<bool(std::vector<uint8_t>* records)> read_connections;
     using RequestSaveFn = void (*)(void* game_server_instance);

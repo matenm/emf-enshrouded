@@ -53,21 +53,59 @@ TEST_CASE("game kick: the handler gets the server and the event; nothing without
     CHECK_FALSE(emf::core::kick_account(&faulting_handler, server, 0xABCDull));
 }
 
-TEST_CASE("game kick: the admin bit is read from the record that holds that connection only") {
-    using namespace emf::core::server_layout;
-    std::vector<uint8_t> records(kConnectionSize * kConnectionCount, 0);
-    const auto put = [&](uint32_t i, uint32_t handle, uint64_t account, uint8_t perms) {
-        uint8_t* r = records.data() + i * kConnectionSize;
+namespace {
+struct Records {
+    std::vector<uint8_t> bytes = std::vector<uint8_t>(emf::core::server_layout::kConnectionSize *
+                                                          emf::core::server_layout::kConnectionCount,
+                                                      0);
+    void put(uint32_t i, uint32_t handle, uint64_t account, uint8_t perms) {
+        using namespace emf::core::server_layout;
+        uint8_t* r = bytes.data() + i * kConnectionSize;
         std::memcpy(r, &handle, 4);
         std::memcpy(r + kConnectionAccount, &account, 8);
         r[kConnectionPerms] = perms;
-    };
-    put(1, 0x41, 0xAA, 0x00);  // a player
-    put(2, 0x42, 0xBB, 0x3F);  // an admin (CanKickBan and the rest)
-    put(3, 0x45, 0xCC, 0x01);  // a stale record: its handle names record 5, not 3
-    CHECK(emf::core::connection_is_admin(records.data(), 0xAA) == std::optional<bool>(false));
-    CHECK(emf::core::connection_is_admin(records.data(), 0xBB) == std::optional<bool>(true));
-    CHECK_FALSE(emf::core::connection_is_admin(records.data(), 0xCC).has_value());
-    CHECK_FALSE(emf::core::connection_is_admin(records.data(), 0xDD).has_value());
-    CHECK_FALSE(emf::core::connection_is_admin(records.data(), 0).has_value());
+    }
+};
+}  // namespace
+
+TEST_CASE("game kick: the admin bit is read from the record that holds that connection only") {
+    using emf::core::connection_is_admin;
+    Records rs;
+    rs.put(1, 0x41, 0xAA, 0x00);  // a player
+    rs.put(2, 0x42, 0xBB, 0x3F);  // an admin (CanKickBan and the rest)
+    rs.put(3, 0x45, 0xCC, 0x01);  // a stale record: its handle names record 5, not 3
+    const uint8_t* r = rs.bytes.data();
+    CHECK(connection_is_admin(r, 0x41, 0xAA) == std::optional<bool>(false));
+    CHECK(connection_is_admin(r, 0x42, 0xBB) == std::optional<bool>(true));
+    CHECK(connection_is_admin(r, 0, 0xAA) == std::optional<bool>(false));  // the handle not known: by the account
+    CHECK(connection_is_admin(r, 0, 0xBB) == std::optional<bool>(true));
+    CHECK_FALSE(connection_is_admin(r, 0x45, 0xCC).has_value());
+    CHECK_FALSE(connection_is_admin(r, 0, 0xCC).has_value());
+    CHECK_FALSE(connection_is_admin(r, 0, 0xDD).has_value());
+    CHECK_FALSE(connection_is_admin(r, 0x41, 0).has_value());
+    CHECK_FALSE(connection_is_admin(r, 0, 0).has_value());
+    CHECK_FALSE(connection_is_admin(nullptr, 0x41, 0xAA).has_value());
+}
+
+TEST_CASE("game kick: after a quick reconnect the admin bit is the new connection's, never the old record's") {
+    using emf::core::connection_is_admin;
+    Records rs;
+    const uint8_t* r = rs.bytes.data();
+    // the old connection (record 1, an admin then) is not cleared yet; the player is back on record 4, demoted
+    rs.put(1, 0x41, 0xAA, 0x3F);
+    rs.put(4, 0x44, 0xAA, 0x2E);
+    CHECK(connection_is_admin(r, 0x44, 0xAA) == std::optional<bool>(false));  // the line's own connection
+    CHECK(connection_is_admin(r, 0x41, 0xAA) == std::optional<bool>(true));   // the old one, when asked for it
+    // without a handle the two records disagree: not known (an admin check says no), never the first record's bit
+    CHECK_FALSE(connection_is_admin(r, 0, 0xAA).has_value());
+    // a handle whose record holds no such connection: by the account (the same two records)
+    CHECK_FALSE(connection_is_admin(r, 0x47, 0xAA).has_value());
+    // promoted on the new connection instead: both records say admin
+    rs.put(4, 0x44, 0xAA, 0x3F);
+    CHECK(connection_is_admin(r, 0, 0xAA) == std::optional<bool>(true));
+    // the old record cleared: the new one alone
+    rs.put(1, 0, 0, 0);
+    rs.put(4, 0x44, 0xAA, 0x2E);
+    CHECK(connection_is_admin(r, 0, 0xAA) == std::optional<bool>(false));
+    CHECK(connection_is_admin(r, 0x41, 0xAA) == std::optional<bool>(false));  // the old handle: by the account
 }

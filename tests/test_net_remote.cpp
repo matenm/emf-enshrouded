@@ -67,6 +67,7 @@ ChannelDef def(const char* name, uint32_t version, uint32_t flags, std::vector<S
 struct Pair {
     std::vector<std::pair<std::pair<uint32_t, uint64_t>, std::string>> chat_to_player;  // what the server queued
     bool admin = false;
+    uint32_t admin_asked_handle = 0;
     Side server;
     Side client;
     std::vector<Seen> at_server, at_client;
@@ -77,7 +78,10 @@ struct Pair {
                   return std::nullopt;
               };
               d.entity_of = [](uint64_t account) { return account == kAcct ? kEntity : 0u; };
-              d.is_admin = [this](uint64_t) { return admin; };
+              d.is_admin = [this](uint32_t handle, uint64_t) {
+                  admin_asked_handle = handle;
+                  return admin;
+              };
           }) {
         server.local = host_local;
         std::string why;

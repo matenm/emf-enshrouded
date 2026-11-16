@@ -25,10 +25,11 @@ struct ChatPolicy {
     bool everyone = false;         // everyone=1: any player
     std::vector<uint64_t> admins;  // admins=0x...,0x...: these accounts
     // game_admins=1: the game's own admins too (CanKickBan: a dedicated server's Admin group, a host's admins), as
-    // is_game_admin tells (empty or false: not one)
+    // is_game_admin tells for the player's connection (handle 0: not known) (empty or false: not one)
     bool game_admins = false;
-    std::function<bool(uint64_t account)> is_game_admin;
-    bool allows(uint64_t account) const;
+    std::function<bool(uint32_t handle, uint64_t account)> is_game_admin;
+    // `handle`: the connection the line or message came on (0: not known); the game's admin bit is that record's
+    bool allows(uint64_t account, uint32_t handle = 0) const;
 };
 // `admins`: comma-separated account hashes in hex ("0x" optional); anything else is skipped and, when `skipped` is
 // given, added to it (trimmed; empty entries are not).
@@ -42,9 +43,10 @@ enum class ChatAction { Pass, Run, Refuse };
 // One player's chat line: Pass = ordinary chat (also "/word" that is no EMF command); Run = an allowed player's
 // command (*line = the command without the slash); Refuse = a command from a player who may not. The policy's accounts
 // may run every command; `for_players` (lower-case name; API v17 EMF_COMMAND_PLAYERS) names those any player may run.
+// `handle`: the line's connection (0: not known), for the policy's game admin check.
 ChatAction judge_chat(std::string_view text, uint64_t account, const ChatPolicy& policy,
                       const std::function<bool(std::string_view)>& is_command, std::string* line,
-                      const std::function<bool(std::string_view)>& for_players = {});
+                      const std::function<bool(std::string_view)>& for_players = {}, uint32_t handle = 0);
 
 // Since any player may run some commands (v17), a player who is no admin gets at most `max` command lines (run or
 // refused) per `window_ms`: the first line over it is answered once (Warn), the others are dropped (no reply, no log

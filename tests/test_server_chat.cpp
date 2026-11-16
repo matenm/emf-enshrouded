@@ -442,13 +442,31 @@ TEST_CASE("chat policy: [chat] game_admins=1 makes the game's own admins EMF adm
     ChatPolicy p = parse_chat_policy("0xaa", false);
     CHECK_FALSE(p.game_admins);  // off unless the server owner says so
     const uint64_t game_admin = 0xbb;
-    p.is_game_admin = [&](uint64_t a) { return a == game_admin; };
+    uint32_t asked_handle = 99;
+    p.is_game_admin = [&](uint32_t handle, uint64_t a) {
+        asked_handle = handle;
+        return a == game_admin;
+    };
     CHECK(p.allows(0xaa));
     CHECK_FALSE(p.allows(0xbb));  // the game's admin, but the switch is off
     p.game_admins = true;
     CHECK(p.allows(0xbb));
+    CHECK(asked_handle == 0);  // no connection given: the game's records are asked by the account
+    CHECK(p.allows(0xbb, 0x43));
+    CHECK(asked_handle == 0x43);  // the line's connection: its own record's admin bit
     CHECK_FALSE(p.allows(0xcc));  // no admin anywhere
     CHECK(p.allows(0xaa));
     p.is_game_admin = nullptr;  // no way to tell (no connection records): no
     CHECK_FALSE(p.allows(0xbb));
+}
+
+TEST_CASE("chat policy: a command line is judged by the game's admin bit of the line's own connection") {
+    ChatPolicy p = parse_chat_policy("", false);
+    p.game_admins = true;
+    // a quick reconnect: the old connection 0x41 (an admin) is not cleared yet, the new one 0x44 is no admin
+    p.is_game_admin = [](uint32_t handle, uint64_t a) { return a == 0xbb && handle == 0x41; };
+    const auto known = [](std::string_view w) { return w == "give"; };
+    std::string line;
+    CHECK(judge_chat("/give Wood 5", 0xbb, p, known, &line, {}, 0x44) == ChatAction::Refuse);
+    CHECK(judge_chat("/give Wood 5", 0xbb, p, known, &line, {}, 0x41) == ChatAction::Run);
 }

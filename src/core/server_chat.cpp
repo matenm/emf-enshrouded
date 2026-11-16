@@ -9,11 +9,11 @@
 
 namespace emf::core {
 
-bool ChatPolicy::allows(uint64_t account) const {
+bool ChatPolicy::allows(uint64_t account, uint32_t handle) const {
     if (everyone) return true;
     for (uint64_t a : admins)
         if (a == account) return true;
-    return game_admins && is_game_admin && is_game_admin(account);
+    return game_admins && is_game_admin && is_game_admin(handle, account);
 }
 
 ChatPolicy parse_chat_policy(std::string_view admins, bool everyone, std::vector<std::string>* skipped) {
@@ -64,10 +64,10 @@ std::string account_text(uint64_t account) {
 
 ChatAction judge_chat(std::string_view text, uint64_t account, const ChatPolicy& policy,
                       const std::function<bool(std::string_view)>& is_command, std::string* line,
-                      const std::function<bool(std::string_view)>& for_players) {
+                      const std::function<bool(std::string_view)>& for_players, uint32_t handle) {
     std::string cmd;
     if (!chat_line_command(text, is_command, &cmd)) return ChatAction::Pass;
-    if (!policy.allows(account)) {
+    if (!policy.allows(account, handle)) {
         std::string word = cmd.substr(0, cmd.find_first_of(" \t"));
         for (char& c : word) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         if (!for_players || !for_players(word)) return ChatAction::Refuse;

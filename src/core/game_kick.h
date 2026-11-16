@@ -22,9 +22,12 @@ using HandleAccountActionFn = void(__fastcall*)(uint8_t* game_server, const uint
 // an account, or when the call faulted.
 bool kick_account(HandleAccountActionFn fn, uint8_t* game_server, uint64_t account);
 
-// Whether the player on the connection that holds `account` has the game's CanKickBan (an admin; the handler skips
+// Whether the player on connection `handle` with `account` has the game's CanKickBan (an admin; the handler skips
 // them), from a copy of the server's connection records (server_layout::kConnectionCount records from
-// Server+kConnections). nullopt when no record holds that account (or its handle names another record).
-std::optional<bool> connection_is_admin(const uint8_t* records, uint64_t account);
+// Server+kConnections). The record of `handle` when it holds that connection; else (handle 0: not known, or the record
+// holds another connection now) the records that hold the account, whose handle names their own record. A player who
+// reconnected can have two such records for a moment: when their bits disagree the answer is nullopt, never the first
+// record's bit. nullopt also when no record holds that account.
+std::optional<bool> connection_is_admin(const uint8_t* records, uint32_t handle, uint64_t account);
 
 }  // namespace emf::core
