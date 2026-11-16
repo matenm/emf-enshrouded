@@ -60,6 +60,29 @@ std::vector<Sphere> hole_spheres(float x, float y, float z, float radius, float 
     return out;
 }
 
+int world_verdict(uint16_t cur, bool base_known, uint16_t base) {
+    const uint8_t m = static_cast<uint8_t>(cur & 0xFF);
+    if (m < 0x80) return 0;
+    if (!base_known) return -1;
+    return static_cast<uint8_t>(base & 0xFF) == m ? 1 : 0;
+}
+
+std::string block_origin_line(const BlockOrigin& o) {
+    char b[200];
+    char shipped[48];
+    if (o.base_known)
+        std::snprintf(shipped, sizeof shipped, "0x%04x", o.base);
+    else
+        std::snprintf(shipped, sizeof shipped, "not known (its column is not loaded)");
+    const char* verdict = o.world == 1    ? "the world's own (a ruin: never broken)"
+                          : o.world == -1 ? "not known: counts as the world's own (never broken)"
+                          : (o.cur & 0xFF) >= 0x80 ? "a player's"
+                                                   : "no building block";
+    std::snprintf(b, sizeof b, "origin at %.2f %.2f %.2f: now 0x%04x, shipped %s: %s", o.x, o.y, o.z, o.cur, shipped,
+                  verdict);
+    return b;
+}
+
 std::string break_check(const EmfBreakBlocks& r) {
     if (r.size < kBreakBlocksV44Size) return "the request's size is too small (set size = sizeof(EmfBreakBlocks))";
     if (r.flags & ~(EMF_BREAK_INSTANT | EMF_BREAK_DROPS)) return "unknown flags";

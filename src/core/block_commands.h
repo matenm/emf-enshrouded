@@ -18,6 +18,8 @@ struct BlockCommandDeps {
     std::function<bool(EmfWorld* w, const float from[3], const float to[3], EmfBlockInfo* out)> find_wall;
     std::function<bool(EmfWorld* w, float x, float y, float z, EmfBlockInfo* out)> block_at;
     std::function<uint32_t(EmfWorld* w, EmfBreakBlocks* req, EmfBreakCallback cb, void* user)> break_blocks;
+    // `blocks origin`: the line for the cell at a point (block_origin_line), "" when nothing was read
+    std::function<std::string(EmfWorld* w, float x, float y, float z)> origin;
 };
 
 bool add_block_commands(CommandCenter& commands, BlockCommandDeps deps);

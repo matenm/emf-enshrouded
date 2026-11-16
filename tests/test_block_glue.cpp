@@ -2,6 +2,7 @@
 // a fake world (its singletons, the program's iterator).
 #include <doctest.h>
 
+#include <algorithm>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -150,6 +151,71 @@ uint8_t f_damage_get(void* store, const uint32_t cell[3]) {
     return cell[0] == 20 ? 34 : 0;
 }
 
+// The shipped world's voxels (the base layer) read through the game's column reader: a handle EMF passes zeroed (0xA0
+// bytes), filled by ColumnAcquire as the game's does (research ruin_blocks 4.1); g_base by cell, the loaded columns by
+// (bx, bz).
+std::map<std::tuple<int, int, int>, uint16_t> g_base;
+std::vector<std::pair<int, int>> g_base_columns;
+int g_column_released = 0, g_column_acquired = 0;
+struct FakeBrick {
+    int bx, by, bz;
+};
+FakeBrick g_fake_brick{};
+void f_column_acquire(void* h, void* editor, uint32_t level, uint64_t column) {
+    CHECK(editor == g_editor);
+    CHECK(level == 6);
+    auto* p = static_cast<uint8_t*>(h);
+    const int bx = static_cast<int>(static_cast<uint32_t>(column)), bz = static_cast<int>(static_cast<uint32_t>(column >> 32));
+    p[0x90] = 1;  // available (the game sets it first, clears it for a resource that is not loaded)
+    if (std::find(g_base_columns.begin(), g_base_columns.end(), std::make_pair(bx, bz)) == g_base_columns.end()) return;
+    ++g_column_acquired;
+    void* data = &g_fake_brick;
+    std::memcpy(p + 0x20, &data, 8);
+    void* loader = &g_column_released;
+    std::memcpy(p + 0x10, &loader, 8);
+    const uint32_t id = 77;
+    std::memcpy(p + 0x18, &id, 4);
+    std::memcpy(p + 0x38, &bx, 4);  // the fake's own notes, inside the part BrickSeek gets
+    std::memcpy(p + 0x3C, &bz, 4);
+}
+bool f_brick_seek(void* h30, uint32_t by) {
+    auto* p = static_cast<uint8_t*>(h30) - 0x30;
+    int bx = 0, bz = 0;
+    std::memcpy(&bx, p + 0x38, 4);
+    std::memcpy(&bz, p + 0x3C, 4);
+    g_fake_brick = {bx, static_cast<int>(by), bz};
+    void* start = &g_fake_brick;
+    std::memcpy(p + 0x50, &start, 8);
+    const uint32_t size = sizeof g_fake_brick;
+    std::memcpy(p + 0x60, &size, 4);  // end offset of the current brick
+    std::memcpy(p + 0x88, &size, 4);  // its size
+    p[0x80] = 0;                      // not uniform
+    return true;
+}
+void f_brick_decode(uint8_t res[8], void* dst, void* src) {
+    struct D {
+        uint16_t* p;
+        uint64_t n;
+    };
+    struct S {
+        const uint8_t* p;
+        uint64_t n;
+    };
+    auto* d = static_cast<D*>(dst);
+    const auto* s = static_cast<const S*>(src);
+    REQUIRE(d->n == 512);
+    const auto* b = reinterpret_cast<const FakeBrick*>(s->p);
+    for (int i = 0; i < 512; ++i) {
+        const auto it = g_base.find({b->bx * 8 + (i & 7), b->by * 8 + ((i >> 3) & 7), b->bz * 8 + (i >> 6)});
+        d->p[i] = it == g_base.end() ? 0 : it->second;
+    }
+    res[0] = 0;
+}
+void f_column_release(void* loader, uint32_t id) {
+    CHECK(id == 77);
+    ++*static_cast<int*>(loader);
+}
+
 std::vector<std::string> g_log;
 struct Drop {
     uint8_t guid0;
@@ -208,6 +274,13 @@ struct Fixture {
         d.fns.config_find = f_config;
         d.fns.region_read = with_region ? f_region : nullptr;
         d.fns.damage_get = f_damage_get;
+        d.fns.column_acquire = f_column_acquire;
+        d.fns.brick_seek = f_brick_seek;
+        d.fns.brick_decode = f_brick_decode;
+        d.fns.column_release = f_column_release;
+        g_base.clear();
+        g_base_columns.clear();
+        g_column_released = g_column_acquired = 0;
         d.log = [](const std::string& s) { g_log.push_back(s); };
         d.after_step = [this](std::function<void(EmfWorld*)> fn) { after.push_back(std::move(fn)); };
         d.now_ms = [] { return g_now; };
@@ -512,4 +585,55 @@ TEST_CASE("api table (v44): break_blocks, block_at and find_wall appended; versi
     CHECK(api->find_wall != nullptr);
     CHECK(kBlockInfoV44Size == sizeof(EmfBlockInfo));
     CHECK(kBreakResultV44Size == sizeof(EmfBreakResult));
+}
+
+TEST_CASE("blocks origin: a building cell equal to the shipped world's is the world's own; one on air or of another material is a player's; an unloaded column is unknown; every column read is released") {
+    Fixture f;
+    g_base_columns = {{2, 7}};  // cell (20, 40, 60): brick (2, 5, 7), column bx 2, bz 7
+    g_voxels[{20, 40, 60}] = 0xFF87;
+    g_base[{20, 40, 60}] = 0x7F87;  // stone as shipped (another paint byte)
+    BlockOrigin o{};
+    std::string why;
+    bool ok = false;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_origin(w, 10.2f, 20.2f, 30.2f, &o, &why); });
+    REQUIRE_MESSAGE(ok, why);
+    CHECK(o.cur == 0xFF87);
+    CHECK(o.base_known);
+    CHECK(o.base == 0x7F87);
+    CHECK(o.world == 1);
+    g_base[{20, 40, 60}] = 0;  // built on air
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_origin(w, 10.2f, 20.2f, 30.2f, &o, &why); });
+    REQUIRE(ok);
+    CHECK(o.world == 0);
+    g_voxels[{100, 40, 60}] = 0xFF87;  // a column that is not loaded: unknown
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_origin(w, 50.2f, 20.2f, 30.2f, &o, &why); });
+    REQUIRE(ok);
+    CHECK_FALSE(o.base_known);
+    CHECK(o.world == -1);
+    CHECK(g_column_acquired == 2);
+    CHECK(g_column_released == 2);
+    // below the world (y < 0): terrain there, so no building cell is the world's own
+    g_voxels[{20, -2, 60}] = 0xFF87;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_origin(w, 10.2f, -0.8f, 30.2f, &o, &why); });
+    REQUIRE(ok);
+    CHECK(o.base_known);
+    CHECK(o.world == 0);
+    // off the server world: refused
+    f.w.put<uint8_t>(off::kKind, EMF_WORLD_CLIENT);
+    run_in_callback(f.world(), EMF_WORLD_CLIENT, [&](EmfWorld* w) { ok = blocks_origin(w, 10.2f, 20.2f, 30.2f, &o, &why); });
+    CHECK_FALSE(ok);
+}
+
+TEST_CASE("blocks origin: without the column reader signatures every building cell is unknown (protected)") {
+    Fixture f;
+    g_voxels[{20, 40, 60}] = 0xFF87;
+    blocks_base_reader_off_for_test(true);
+    BlockOrigin o{};
+    std::string why;
+    bool ok = false;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_origin(w, 10.2f, 20.2f, 30.2f, &o, &why); });
+    blocks_base_reader_off_for_test(false);
+    REQUIRE(ok);
+    CHECK_FALSE(o.base_known);
+    CHECK(o.world == -1);
 }

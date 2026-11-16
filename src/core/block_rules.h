@@ -54,6 +54,24 @@ struct DropStack {
     uint32_t building_id = 0;
     uint32_t count = 0;
 };
+// Whose a voxel is (ruin protection): the game keeps the shipped world (its ruins in it) as a base layer under the
+// saved changes, so a building cell whose material byte equals the base cell's is the world's own: 1. One that differs
+// (built on air or terrain, another material) is a player's: 0. Base not known (not loaded, not readable): -1, which
+// breaking treats as the world's own. A cell that is no building block (empty, terrain): 0. Only the low byte counts:
+// decay and overgrowth paint change the high one.
+int world_verdict(uint16_t cur, bool base_known, uint16_t base);
+
+// One cell read for the `blocks origin` probe: what it is now, what the shipped world has there, and the verdict.
+struct BlockOrigin {
+    uint16_t cur = 0;
+    bool base_known = false;
+    uint16_t base = 0;
+    int world = 0;              // world_verdict
+    float x = 0, y = 0, z = 0;  // the cell's centre, metres
+};
+// "origin at x y z: now 0xff87, shipped 0xff87: the world's own (a ruin: never broken)"
+std::string block_origin_line(const BlockOrigin& o);
+
 // The items the removed blocks give: per building material, (removed + carry) / loot_rate items, the rest kept in
 // carry for the next break (the game keeps such a remainder per player for its pickaxes). removed: per voxel material.
 std::vector<DropStack> break_drops(const float removed[256], const MaterialFacts facts[128], float carry[128]);

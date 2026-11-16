@@ -45,12 +45,37 @@ bool looked_at(EmfWorld* w, EmfBlockInfo* out, float ray_end[3], std::string* wh
     return g_deps.find_wall && g_deps.find_wall(w, o, ray_end, out);
 }
 
+// blocks origin [at x y z]: whether the block where you look (or at a point) is the world's own or a player's
+void blocks_origin_cmd(EmfWorld* w, int argc, const char* const* argv) {
+    float p[3];
+    if (argc == 2) {
+        EmfBlockInfo b{};
+        float end[3];
+        std::string why;
+        if (!looked_at(w, &b, end, &why)) {
+            command_reply_line(why.empty() ? "no building block within 12 m where you look" : why);
+            return;
+        }
+        p[0] = b.x, p[1] = b.y, p[2] = b.z;
+    } else if (argc != 6 || std::strcmp(argv[2], "at") != 0 || !parse_float(argv[3], &p[0]) ||
+               !parse_float(argv[4], &p[1]) || !parse_float(argv[5], &p[2])) {
+        command_reply_line("usage: blocks [origin] [at <x> <y> <z>]");
+        return;
+    }
+    const std::string line = g_deps.origin ? g_deps.origin(w, p[0], p[1], p[2]) : "";
+    command_reply_line(line.empty() ? "nothing read there (not loaded, or not the server world)" : line);
+}
+
 void cmd_blocks(EmfWorld* w, int argc, const char* const* argv, void*) {
+    if (argc > 1 && std::strcmp(argv[1], "origin") == 0) {
+        blocks_origin_cmd(w, argc, argv);
+        return;
+    }
     if (argc > 1) {  // blocks at x y z: what is at that point (no camera needed)
         float p[3];
         if (argc != 5 || std::strcmp(argv[1], "at") != 0 || !parse_float(argv[2], &p[0]) || !parse_float(argv[3], &p[1]) ||
             !parse_float(argv[4], &p[2])) {
-            command_reply_line("usage: blocks [at <x> <y> <z>]");
+            command_reply_line("usage: blocks [origin] [at <x> <y> <z>]");
             return;
         }
         EmfBlockInfo e{};
@@ -166,8 +191,9 @@ std::string block_info_line(const EmfBlockInfo& b) {
 
 bool add_block_commands(CommandCenter& commands, BlockCommandDeps deps) {
     g_deps = std::move(deps);
-    bool ok = commands.add("blocks", "[at <x> <y> <z>]: the player-built block where you look, or what is at a point "
-                                     "(material, hardness, health, damage so far; host or dedicated server)",
+    bool ok = commands.add("blocks", "[origin] [at <x> <y> <z>]: the player-built block where you look, or what is at a "
+                                     "point (material, hardness, health, damage so far); origin: whether it is the "
+                                     "world's own (a ruin as the game shipped it) or a player's (host or dedicated server)",
                            cmd_blocks, nullptr, nullptr);
     ok &= commands.add("break", "[radius 0.25-3.5] [instant] [drops] [height <m>] [at <x> <y> <z>]: break the "
                                 "player-built blocks where you look, or around a point (never the ground; the hole stays "

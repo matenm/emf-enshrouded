@@ -70,6 +70,10 @@ enum class Sig : size_t {
     // breaking blocks (API v44), both exes: the building-mining kernel, the voxel region read, the building config
     // lookup and the damage store's get (private research wall_damage_2026-11-15.md section 13)
     BlockKernel, VoxelRegionRead, BuildingConfigFind, VoxelDamageGet,
+    // ruin protection, both exes: the game's column reader of the shipped world's voxels (the base layer under the
+    // saved changes): acquire a column, seek a brick, decode it, release the column (private research
+    // ruin_blocks_2026-11-16.md 4.1)
+    BlockColumnAcquire, BlockBrickSeek, BlockBrickDecode, BlockColumnRelease,
     _Count
 };
 constexpr size_t kSigCount = static_cast<size_t>(Sig::_Count);

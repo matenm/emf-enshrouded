@@ -27,6 +27,12 @@ struct BlockFns {
     bool (*region_read)(const void* slice, void* editor) = nullptr;  // false: part of the box is not loaded
     const uint8_t* (*config_find)(void* registry, uint8_t building_id) = nullptr;
     uint8_t (*damage_get)(void* store, const uint32_t cell[3]) = nullptr;
+    // the shipped world's column reader (ruin protection; private research ruin_blocks_2026-11-16.md 4.1): acquire fills
+    // a zeroed 0xA0-byte handle; seek and decode give one 8x8x8 brick; release frees the column's resource
+    void (*column_acquire)(void* handle, void* editor, uint32_t level, uint64_t column) = nullptr;
+    bool (*brick_seek)(void* handle_at_0x30, uint32_t by) = nullptr;
+    void (*brick_decode)(uint8_t result[8], void* out_slice, void* in_slice) = nullptr;
+    void (*column_release)(void* loader, uint32_t id) = nullptr;
 };
 
 // What one step's program call holds.
@@ -74,6 +80,12 @@ void blocks_stop(const std::string& why = "off (the emf_blocks program could not
 // point, the first building block on a line. False and *why when refused ("" with false: find_wall's line is clear).
 bool blocks_block_at(EmfWorld* w, float x, float y, float z, EmfBlockInfo* out, std::string* why);
 bool blocks_find_wall(EmfWorld* w, const float from[3], const float to[3], EmfBlockInfo* out, std::string* why);
+
+// The `blocks origin` probe (ruin protection): one cell now, the shipped world's cell there, and the verdict; on the
+// server world's thread between steps (inside a world callback). False and *why when refused or not loaded.
+bool blocks_origin(EmfWorld* w, float x, float y, float z, BlockOrigin* out, std::string* why);
+// Tests: the column reader as if its signatures were missing.
+void blocks_base_reader_off_for_test(bool off);
 
 // The material facts of every building id through the config lookup (false: the lookup is missing or faulted).
 bool blocks_read_facts(void* efficiency_registry, MaterialFacts out[128]);

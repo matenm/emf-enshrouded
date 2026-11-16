@@ -275,6 +275,12 @@ constexpr SigDef kSignatures[] = {
     {Sig::VoxelRegionRead, "VoxelRegionRead", "48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 60 48 8B 71 08 48", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x10b20e0u, 0x836910u}, false},
     {Sig::BuildingConfigFind, "BuildingConfigFind", "48 8B 41 38 48 85 C0 74 3A 44 8B 50 0C 33 C9 4D 85 D2 74 2F 4C 63 48 08 4C 8D 58 08 45 33 C0 90 45 85 C9 75 04 33 C0 EB 04 4B 8D 04 0B 49 03 C0 38 10 74 11", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0xe8c9b0u, 0x933af0u}, false},
     {Sig::VoxelDamageGet, "VoxelDamageGet", "48 89 5C 24 08 57 48 83 EC 30 F2 0F 10 02 48 8B FA 44 8B 4A", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x4a9cf0u, 0x2426c0u}, false},
+    // the shipped world's column reader (ruin protection): ColumnAcquire(handle, editor, level, bz << 32 | bx),
+    // BrickSeek(handle + 0x30, by), BrickDecode(result, out slice, brick bytes), ColumnRelease(loader, resource id)
+    {Sig::BlockColumnAcquire, "BlockColumnAcquire", "48 89 5C 24 18 4C 89 4C 24 20 56 57 41 54 41 56 41 57 48 83 EC 30 0F 10", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x10ab270u, 0x82f840u}, false},
+    {Sig::BlockBrickSeek, "BlockBrickSeek", "48 83 EC 28 8B 41 4C 48 89 5C 24 30 48 8B D9 48 89 6C 24 38 8D 6A 01 48", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x10c6170u, 0x84adc0u}, false},
+    {Sig::BlockBrickDecode, "BlockBrickDecode", "48 89 6C 24 18 48 89 74 24 20 48 89 4C 24 08 57 41 54 41 55 41 56 41 57 49 8B 30 48 8B FA 49 8B", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x10cc7d0u, 0x8514b0u}, false},
+    {Sig::BlockColumnRelease, "BlockColumnRelease", "4C 8B C9 85 D2 75 05 45 33 C9 EB 5F 48 8B 89 B8 01 00 00 8B C2 25 FF FF", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x10cc750u, 0x851430u}, false},
 };
 static_assert(std::size(kSignatures) == kSigCount, "one entry per Sig");
 }  // namespace

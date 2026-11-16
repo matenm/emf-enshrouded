@@ -248,6 +248,121 @@ bool call_damage(decltype(BlockFns::damage_get) fn, void* store, const uint32_t 
 }
 std::atomic<bool> g_reads_off{false};
 
+// ---- the shipped world's voxels (ruin protection, private research ruin_blocks_2026-11-16.md 4.1) ----
+constexpr size_t kColumnHandle = 0xA0;
+constexpr uint32_t kBaseLevel = 6;  // the level every VoxelWorld caller reads (the full 0.5 m cells)
+std::atomic<bool> g_base_off{false};  // a fault: every building cell counts unknown (protected) until a restart
+std::atomic<bool> g_base_test_off{false};
+
+bool base_reader_usable() {
+    return !g_base_test_off.load() && !g_base_off.load() && g_deps.fns.column_acquire && g_deps.fns.brick_seek &&
+           g_deps.fns.brick_decode && g_deps.fns.column_release;
+}
+
+int32_t floor_div8(int32_t c) { return c >= 0 ? c / 8 : -((-c + 7) / 8); }
+
+// One base brick (512 cells, x + 8y + 64z) through the game's column reader, as its own region read does when a brick
+// was never changed; false when unknown (a column not loaded, a decode that failed). *faulted on a fault.
+bool base_brick_raw(void* editor, int32_t bx, int32_t by, int32_t bz, uint16_t out[512], bool* faulted) {
+    *faulted = false;
+    __try {
+        alignas(16) uint8_t h[kColumnHandle] = {};
+        g_deps.fns.column_acquire(h, editor, kBaseLevel,
+                                  (static_cast<uint64_t>(static_cast<uint32_t>(bz)) << 32) | static_cast<uint32_t>(bx));
+        void* data = nullptr;
+        std::memcpy(&data, h + 0x20, 8);
+        bool ok = h[0x90] != 0 && data != nullptr;  // a tile outside the world: available but no data (read as air)
+        if (ok) {
+            if (!g_deps.fns.brick_seek(h + 0x30, static_cast<uint32_t>(by))) {
+                for (int i = 0; i < 512; ++i) out[i] = 0;  // above the column's bricks: air
+            } else if (h[0x80]) {                          // one material for the whole brick
+                const uint8_t* mp = nullptr;
+                const uint8_t* fp = nullptr;
+                std::memcpy(&mp, h + 0x68, 8);
+                std::memcpy(&fp, h + 0x70, 8);
+                const uint8_t m = mp ? *mp : 0;
+                const uint16_t f = fp ? *fp : static_cast<uint16_t>(m ? 0xFF : 0);
+                for (int i = 0; i < 512; ++i) out[i] = static_cast<uint16_t>(m | (f << 8));
+            } else {
+                uint32_t end = 0, size = 0;
+                const uint8_t* start = nullptr;
+                std::memcpy(&end, h + 0x60, 4);
+                std::memcpy(&size, h + 0x88, 4);
+                std::memcpy(&start, h + 0x50, 8);
+                struct {
+                    uint16_t* p;
+                    uint64_t n;
+                } dst{out, 512};
+                struct {
+                    const uint8_t* p;
+                    uint64_t n;
+                } src{start + (end - size), size};
+                uint8_t res[8] = {};
+                g_deps.fns.brick_decode(res, &dst, &src);
+                ok = res[0] == 0;
+            }
+        }
+        if (data) {
+            void* loader = nullptr;
+            uint32_t id = 0;
+            std::memcpy(&loader, h + 0x10, 8);
+            std::memcpy(&id, h + 0x18, 4);
+            g_deps.fns.column_release(loader, id);
+        }
+        long* lock = nullptr;
+        std::memcpy(&lock, h, 8);
+        if (lock) {
+            if (h[8] == 1)
+                _InterlockedDecrement(lock);
+            else if (h[8] == 2)
+                _InterlockedExchangeAdd(lock, 0x7FFF0000);
+        }
+        return ok;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *faulted = true;
+        return false;
+    }
+}
+
+// The base bricks one read touches (a break sphere: at most 3x3x3), each read once.
+struct BaseCache {
+    struct Entry {
+        int32_t bx, by, bz;
+        bool known;
+        uint16_t cells[512];
+    };
+    void* editor = nullptr;
+    std::vector<std::unique_ptr<Entry>> entries;
+    // The shipped world's cell; false when not known.
+    bool cell(int32_t cx, int32_t cy, int32_t cz, uint16_t* base) {
+        if (!base_reader_usable()) return false;
+        const int32_t bx = floor_div8(cx), by = floor_div8(cy), bz = floor_div8(cz);
+        Entry* e = nullptr;
+        for (auto& x : entries)
+            if (x->bx == bx && x->by == by && x->bz == bz) e = x.get();
+        if (!e) {
+            entries.push_back(std::make_unique<Entry>());
+            e = entries.back().get();
+            e->bx = bx, e->by = by, e->bz = bz;
+            if (bx < 0 || bz < 0) {
+                e->known = false;
+            } else if (by < 0) {  // below the world: all terrain
+                e->known = true;
+                for (auto& c : e->cells) c = 0xFF01;
+            } else {
+                bool faulted = false;
+                e->known = base_brick_raw(editor, bx, by, bz, e->cells, &faulted);
+                if (faulted && !g_base_off.exchange(true))
+                    say("ruin protection: the game's column reader faulted; every building block counts as the world's own "
+                        "(never broken) until a restart");
+            }
+        }
+        if (!e->known) return false;
+        *base = e->cells[(cx - bx * 8) + 8 * (cy - by * 8) + 64 * (cz - bz * 8)];
+        return true;
+    }
+};
+
 struct Reads {
     void* editor = nullptr;
     void* damage_store = nullptr;
@@ -318,6 +433,37 @@ bool blocks_block_at(EmfWorld* w, float x, float y, float z, EmfBlockInfo* out, 
     return true;
 }
 
+bool blocks_origin(EmfWorld* w, float x, float y, float z, BlockOrigin* out, std::string* why) {
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+        if (why) *why = "the point is not a number";
+        return false;
+    }
+    auto r = std::make_unique<Reads>();
+    if (!reads_for(w, *r, why)) return false;
+    const auto cx = static_cast<int32_t>(std::floor(x * 2.0f)), cy = static_cast<int32_t>(std::floor(y * 2.0f)),
+               cz = static_cast<int32_t>(std::floor(z * 2.0f));
+    uint16_t v = 0;
+    if (!reader_of(*r)(cx, cy, cz, &v)) {
+        if (why) *why = "that place is not loaded";
+        return false;
+    }
+    BlockOrigin o;
+    o.cur = v;
+    o.x = (static_cast<float>(cx) + 0.5f) / 2.0f;
+    o.y = (static_cast<float>(cy) + 0.5f) / 2.0f;
+    o.z = (static_cast<float>(cz) + 0.5f) / 2.0f;
+    auto cache = std::make_unique<BaseCache>();
+    cache->editor = r->editor;
+    uint16_t base = 0;
+    o.base_known = cache->cell(cx, cy, cz, &base);
+    o.base = o.base_known ? base : 0;
+    o.world = world_verdict(v, o.base_known, base);
+    *out = o;
+    return true;
+}
+
+void blocks_base_reader_off_for_test(bool off) { g_base_test_off = off; }
+
 bool blocks_find_wall(EmfWorld* w, const float from[3], const float to[3], EmfBlockInfo* out, std::string* why) {
     if (why) why->clear();
     for (int a = 0; a < 3; ++a)
@@ -374,6 +520,7 @@ ProgramSpec blocks_setup(BlockGlueDeps deps) {
     g_drops.clear();
     g_watchdog_said = g_cb_fault_said = g_kernel_said = g_factor_said = false;
     g_reads_off = false;
+    g_base_off = false;
     g_last_run_ms = now();
     const bool usable = g_deps.fns.kernel && g_deps.fns.config_find;
     {

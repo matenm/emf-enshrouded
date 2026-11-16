@@ -217,3 +217,15 @@ TEST_CASE("block rules (review I2): a hit worth less than 1/255 of a block's hea
     build_break_table(f, s, 0.75f, t);               // the Survival mining factor
     CHECK(t[128 + 7] == 0.0f);
 }
+
+TEST_CASE("block rules: world_verdict: a building cell whose material equals the shipped world's is the world's own; a new or another one is a player's; an unknown base is unknown; no building cell is 0") {
+    CHECK(world_verdict(0x0000, true, 0x0000) == 0);   // empty
+    CHECK(world_verdict(0xFF05, true, 0xFF05) == 0);   // terrain
+    CHECK(world_verdict(0xFF8A, true, 0xFF8A) == 1);   // a ruin's stone as the game shipped it
+    CHECK(world_verdict(0x7F8A, true, 0xFF8A) == 1);   // the same with other paint (decay, overgrowth: the high byte)
+    CHECK(world_verdict(0xFF8A, true, 0x0000) == 0);   // placed on air
+    CHECK(world_verdict(0xFF8F, true, 0xFF8A) == 0);   // another material than the shipped one
+    CHECK(world_verdict(0xFF8A, true, 0xFF05) == 0);   // built where terrain was
+    CHECK(world_verdict(0xFF8A, false, 0) == -1);      // the base is not known (not loaded)
+    CHECK(world_verdict(0xFF05, false, 0) == 0);       // terrain: no building block, whatever the base
+}

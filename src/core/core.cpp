@@ -1393,6 +1393,12 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
         bd.break_blocks = [](EmfWorld* w, EmfBreakBlocks* r, EmfBreakCallback cb, void* u) {
             return emf::core::api_table()->break_blocks(w, r, cb, u);
         };
+        bd.origin = [](EmfWorld* w, float x, float y, float z) -> std::string {
+            emf::core::BlockOrigin o;
+            std::string why;
+            if (!emf::core::blocks_origin(w, x, y, z, &o, &why)) return why.empty() ? "" : "nothing read there (" + why + ")";
+            return emf::core::block_origin_line(o);
+        };
         if (!emf::core::add_block_commands(g_state->commands, std::move(bd)))
             emf::logf("commands: blocks and break could not be added");
     }
@@ -1717,6 +1723,11 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
         deps.fns.region_read = reinterpret_cast<decltype(deps.fns.region_read)>(addr(emf::Sig::VoxelRegionRead));
         deps.fns.config_find = reinterpret_cast<decltype(deps.fns.config_find)>(addr(emf::Sig::BuildingConfigFind));
         deps.fns.damage_get = reinterpret_cast<decltype(deps.fns.damage_get)>(addr(emf::Sig::VoxelDamageGet));
+        // ruin protection: the shipped world's column reader (all four, or none)
+        deps.fns.column_acquire = reinterpret_cast<decltype(deps.fns.column_acquire)>(addr(emf::Sig::BlockColumnAcquire));
+        deps.fns.brick_seek = reinterpret_cast<decltype(deps.fns.brick_seek)>(addr(emf::Sig::BlockBrickSeek));
+        deps.fns.brick_decode = reinterpret_cast<decltype(deps.fns.brick_decode)>(addr(emf::Sig::BlockBrickDecode));
+        deps.fns.column_release = reinterpret_cast<decltype(deps.fns.column_release)>(addr(emf::Sig::BlockColumnRelease));
         deps.after_step = [](std::function<void(EmfWorld*)> fn) {
             auto* job = new std::function<void(EmfWorld*)>(std::move(fn));
             g_state->dispatcher.post(EMF_WORLD_SERVER, [](EmfWorld* w, void* u) {

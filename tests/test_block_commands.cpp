@@ -185,3 +185,22 @@ TEST_CASE("blocks and break are admin commands (no player flag)") {
         }
     CHECK(found == 2);
 }
+
+TEST_CASE("blocks origin: says whether the block where you look, or at a point, is the world's own (a ruin) or a player's") {
+    g_out.clear();
+    CommandCenter c;
+    Fake f;
+    auto d = f.deps();
+    d.origin = [](EmfWorld*, float x, float, float) -> std::string {
+        return x > 12 ? "origin at 13.25 20.25 30.25: now 0xff87, shipped 0xff87: the world's own (a ruin)" : "";
+    };
+    REQUIRE(add_block_commands(c, d));
+    run(c, "blocks origin");  // where you look: the wall at 13.25
+    CHECK(said("the world's own"));
+    g_out.clear();
+    run(c, "blocks origin at 1 2 3");
+    CHECK(said("nothing read there"));
+    g_out.clear();
+    run(c, "blocks origin at 1 2");
+    CHECK(said("usage: blocks"));
+}
