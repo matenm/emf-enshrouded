@@ -408,7 +408,12 @@ where
         event.record(&mut message);
         let mut list = self.0.lock().unwrap_or_else(|e| e.into_inner());
         if list.len() < MAX_MOD_WARNINGS {
-            list.push(ModWarningInfo { id, warning: warning_text(&message.value.unwrap_or_default()) });
+            let mut warning = warning_text(&message.value.unwrap_or_default());
+            // a mod's own "<id>:" in front of its line (creature packs log so): the id is in `id` already
+            if let Some(rest) = warning.strip_prefix(&format!("{id}:")) {
+                warning = rest.trim_start().to_string();
+            }
+            list.push(ModWarningInfo { id, warning });
         }
     }
 }
@@ -910,7 +915,7 @@ mod tests {
         });
         assert_eq!(warnings.len(), 2, "{:?}", warnings.iter().map(|w| &w.warning).collect::<Vec<_>>());
         assert_eq!(warnings[0].id, "emf_beastmaster_bear");
-        assert_eq!(warnings[0].warning, "emf_beastmaster_bear: Bear: not added: out of references");
+        assert_eq!(warnings[0].warning, "Bear: not added: out of references");  // its own "<id>:" prefix goes: the id is in id
         assert_eq!(warnings[1].id, "failing");
         assert!(lines.iter().any(|(level, line)| *level == 1 && line.contains("not added")), "{lines:?}");
     }
