@@ -8,7 +8,8 @@
 //   if (edge.pressed(emf::keys::down(vk))) { ... }
 //
 // While EMF's console or a mod's wheel holds the input, mods' GetAsyncKeyState reads keys as up (and a wheel's hold
-// key stays up until released after the wheel closed), so hotkeys pause by themselves.
+// key stays up until released after the wheel closed), so hotkeys pause by themselves. The same while the player types
+// in the game's chat or a rename box (a key held then reads as up until released).
 #include <windows.h>
 
 #include <cstdint>

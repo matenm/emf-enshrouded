@@ -375,6 +375,11 @@ mod's key press. Every mod's key can
 be changed in the console's Mods tab or in EMF.exe (click the key, then press the new one). When a mod's default key
 changes, a key you chose yourself stays.
 
+While you type in the game's chat (or its social screen's chat, or a rename box), mods' keys are paused: typing K does
+not open the Villager Jobs wheel, and the console key types its character into the chat instead of opening the console.
+A key still held when the chat closes counts again once you let go of it. The console's `screen` command says which
+game screen is open and whether mods' keys are paused.
+
 ### Commands in the game's chat
 You can also type a command into the game's own text chat with a `/` in front: `/give Material_T1_Wood_Logs 5`,
 `/time 12`, `/help`. EMF runs it and does not send it, so other players never see it. The reply shows for a few
