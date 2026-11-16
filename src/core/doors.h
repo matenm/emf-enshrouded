@@ -24,7 +24,9 @@ constexpr const char* kDoorsProgramName = "emf_doors";
 constexpr size_t kMaxDoorOrders = 256;   // waiting for the next step
 constexpr size_t kMaxLockedDoors = 1024;
 constexpr uint64_t kLockLookMs = 3000;    // saved places whose door is not loaded yet are looked for this often,
-constexpr uint64_t kLockLookSlowMs = 30000;  // and after kLockLooksFast looks this often (a door that was broken)
+// and after kLockLooksFast looks this often (a door that was broken, or one that streams in late: a raid mod's locked
+// gate stays unlocked until the next look finds it; one look lists the doors once for every saved place)
+constexpr uint64_t kLockLookSlowMs = 10000;
 constexpr uint32_t kLockLooksFast = 20;
 // A locked door that goes while a player is this near was broken or taken down: its lock is forgotten. With nobody near
 // it streamed out: its place is looked for again (entities far from every player are not loaded on the server).

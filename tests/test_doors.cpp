@@ -378,6 +378,23 @@ TEST_CASE("door locks: a saved place without its door yet is looked for again la
     CHECK(r.list_calls == 2);
 }
 
+TEST_CASE("door locks: after a minute of looks a saved place is still looked for every 10 s (a door that streams in late is locked soon)") {
+    Rig r;
+    r.doors_there = false;  // not loaded for a long while
+    r.service.load_saved("lock 500.00 20.00 30.00\n");
+    uint64_t t = 1000;
+    for (int i = 0; i < 21; ++i, t += 3000) r.service.server_tick(r.world(), t);  // every 3 s for a minute
+    CHECK(r.list_calls == 21);
+    const uint64_t last = t - 3000;
+    r.service.server_tick(r.world(), last + 9999);
+    CHECK(r.list_calls == 21);
+    r.doors_there = true;  // the door streams in
+    r.service.server_tick(r.world(), last + 10000);
+    CHECK(r.list_calls == 22);
+    r.step();
+    CHECK(r.service.locked_count() == 1u);
+}
+
 TEST_CASE("door locks: a save that fails is tried again at the next tick") {
     Rig r;
     r.save_ok = false;
