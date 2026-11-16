@@ -270,6 +270,10 @@ inline int32_t gate_damage(int32_t max_health, double scale) {
     return static_cast<int32_t>((std::min)(100000.0, (std::max)(1.0, d)));
 }
 
+// The three wall settings plus the scale of the (effective) difficulty: a preset's while one is chosen.
+inline WallSettings wall_settings(bool on, const std::string& hole_size, bool drops, const std::string& preset_name,
+                                  const std::string& difficulty);
+
 struct Gate {
     uint32_t door = 0;
     Vec3 pos;
@@ -1115,5 +1119,16 @@ private:
     bool spawn_pending_ = false, failed_wave_ = false;
     int waves_spawned_ = 0, spawned_total_ = 0, kills_ = 0, cooldown_left_ = 0;
 };
+
+inline WallSettings wall_settings(bool on, const std::string& hole_size, bool drops, const std::string& preset_name,
+                                  const std::string& difficulty) {
+    WallSettings s;
+    s.on = on;
+    s.hole_radius = hole_radius_of(hole_size);
+    s.drops = drops;
+    const auto p = preset(preset_name);
+    s.damage_scale = wall_damage_scale(p ? p->difficulty : difficulty);
+    return s;
+}
 
 }  // namespace raids

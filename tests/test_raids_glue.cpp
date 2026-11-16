@@ -3,6 +3,8 @@
 #include <doctest.h>
 
 #include <map>
+#include <string>
+#include <cstring>
 #include <vector>
 
 #include "../mods/raids/raids_glue.h"
@@ -162,4 +164,92 @@ TEST_CASE("raids glue: the per-world switch's setting follows the world's file; 
     REQUIRE(switch_step(true, 1, false).has_value());       // switched on in the Mods tab
     CHECK(*switch_step(true, 1, false) == true);
     CHECK(*switch_step(true, 0, true) == false);
+}
+
+
+// ---- walls (API v44) ----
+namespace {
+std::vector<EmfRemoveBuilding> g_removes;
+bool f_remove(EmfWorld*, EmfRemoveBuilding* r) {
+    g_removes.push_back(*r);
+    return true;
+}
+}  // namespace
+
+TEST_CASE("raids glue: chest_line starts 1.2 m up and points at the altar, flat") {
+    const auto [from, to] = raids::chest_line({0, 10, 0}, {10, 50, 0}, 4.0);
+    CHECK(from.x == 0);
+    CHECK(from.y == doctest::Approx(11.2));
+    CHECK(to.x == doctest::Approx(4.0));
+    CHECK(to.y == doctest::Approx(11.2));
+    CHECK(to.z == doctest::Approx(0.0));
+    const auto [f2, t2] = raids::chest_line({5, 0, 5}, {5, 0, 5}, 4.0);  // at the altar: no direction
+    CHECK(t2.x == f2.x);
+    CHECK(t2.z == f2.z);
+}
+
+TEST_CASE("raids glue: nearest_gate takes the first door point within 6 m, skips a farther one and points without a door") {
+    const EmfPathPoint pts[4] = {{1, 0, 0, 0}, {2, 0, 0, 0}, {3, 0, 0, 5}, {8, 0, 0, 5}};
+    const uint32_t doors[4] = {0, 55, 77, 88};  // 55 on a point that is no door point: ignored
+    const auto g = raids::nearest_gate(pts, 4, doors, {0, 0, 0}, 6.0);
+    REQUIRE(g);
+    CHECK(g->first == 77);
+    CHECK(g->second.x == 3);
+    CHECK_FALSE(raids::nearest_gate(pts, 4, doors, {0, 0, 0}, 2.5));
+    CHECK_FALSE(raids::nearest_gate(pts, 4, nullptr, {0, 0, 0}, 6.0));
+    const auto far = raids::nearest_gate(pts, 4, doors, {6, 0, 0}, 6.0);
+    REQUIRE(far);
+    CHECK(far->first == 77);  // the first door point along the path within range
+}
+
+TEST_CASE("raids glue: a door's health: its Health once hit, else its template's maximum") {
+    Rig rig;
+    emf::World w(kW);
+    alignas(4) static uint8_t destructible[2];
+    const uint16_t max = 600;
+    std::memcpy(destructible, &max, 2);
+    g_tpl[{gen::Destructible::kHash, 40}] = reinterpret_cast<uintptr_t>(destructible);
+    CHECK(raids::door_max_health(w, 40) == 600);
+    CHECK(raids::door_health(w, 40) == 600);  // not hit yet: full
+    plant<gen::Health>(40).dataStorage[0] = 450;
+    CHECK(raids::door_health(w, 40) == 450);
+    CHECK(raids::door_max_health(w, 41) == 0);
+    CHECK(raids::door_health(w, 41) == 0);
+}
+
+TEST_CASE("raids glue: a gate at or below one hit is removed with the drop setting's refund") {
+    Rig rig;
+    rig.api.remove_building = f_remove;
+    g_removes.clear();
+    emf::World w(kW);
+    CHECK(raids::gate_finish_due(100, 100));
+    CHECK(raids::gate_finish_due(1, 100));
+    CHECK_FALSE(raids::gate_finish_due(101, 100));
+    CHECK_FALSE(raids::gate_finish_due(0, 100));  // already broken (or no health known): the game handles it
+    std::string why;
+    CHECK(raids::remove_gate(w, 40, true, &why));
+    REQUIRE(g_removes.size() == 1);
+    CHECK(g_removes[0].entity == 40);
+    CHECK(g_removes[0].refund == EMF_REFUND_DROP);
+    CHECK(g_removes[0].flags == EMF_REMOVE_FORCE);
+    CHECK(raids::remove_gate(w, 41, false, &why));
+    CHECK(g_removes[1].refund == EMF_REFUND_NONE);
+}
+
+TEST_CASE("raids glue: breaking walls needs EMF API v44") {
+    Rig rig;
+    CHECK(raids::walls_available());
+    rig.api.size = static_cast<uint32_t>(offsetof(EmfApi, break_blocks));
+    CHECK_FALSE(raids::walls_available());
+}
+
+TEST_CASE("raids glue: the hit's damage is the default pickaxe times the scale, whole and capped") {
+    int32_t d[5];
+    raids::wall_hit_damage(1.0, d);
+    const int32_t def[5] = EMF_BREAK_DEFAULT_DAMAGE;
+    for (int i = 0; i < 5; ++i) CHECK(d[i] == def[i]);
+    raids::wall_hit_damage(2.5, d);
+    CHECK(d[0] == def[0] * 5 / 2);
+    raids::wall_hit_damage(1e9, d);
+    CHECK(d[0] == 100000);
 }

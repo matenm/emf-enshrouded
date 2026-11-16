@@ -9,6 +9,11 @@
 #include <windows.h>
 
 #include <atomic>
+#include <cmath>
+#include <cstddef>
+#include <map>
+#include <memory>
+#include <optional>
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
@@ -41,6 +46,7 @@ struct Config {
     raids::RewardKind reward = raids::RewardKind::Materials;
     raids::Targets targets = raids::Targets::Allies;
     std::string preset = "custom";  // the "Raid strength" setting
+    raids::WallSettings walls;      // "Raiders break walls", "Hole size", "Broken blocks drop items" (and the difficulty)
     uint32_t corner = EMF_HUD_TOP_RIGHT;
     uint32_t rgba = 0;
 };
@@ -83,6 +89,9 @@ void read_settings() {
     c.targets = raids::targets_mode(emf::setting_text(kMod, "targets", "allies"));
     c.preset = emf::setting_text(kMod, "preset", "custom");
     if (!raids::apply_preset(c.preset, c.s, c.reward)) c.preset = "custom";  // a preset replaces its settings
+    c.walls = raids::wall_settings(emf::setting_bool(kMod, "break_walls", false), emf::setting_text(kMod, "hole_size", "small"),
+                                   emf::setting_bool(kMod, "wall_drops", false), c.preset,
+                                   emf::setting_text(kMod, "difficulty", "normal"));
     c.custom = emf::setting_text(kMod, "templates", "verified") == "custom";
     std::vector<std::string> bad;
     c.custom_pool = raids::parse_custom_templates(emf::setting_text(kMod, "custom_templates", ""), &bad);
@@ -163,6 +172,38 @@ std::map<uint32_t, raids::RaiderId> g_ids;  // who each raider is (template, lev
 std::map<uint32_t, uint32_t> g_targets;     // each raider's last target (it keeps it while it lives and is near)
 raids::StuckWatch g_stuck;
 
+// ---- walls ("Raiders break walls", EMF API v44): a raider held up by a wall or a closed gate breaks through it ----
+raids::WallWork g_walls;
+std::map<uint32_t, uint32_t> g_wall_targets;  // spot -> its hidden target (a TestTransform at the wall point)
+std::map<uint32_t, uint32_t> g_wall_orders;   // raider -> its enemy order (on the hidden target or the gate)
+std::set<uint32_t> g_wall_looking;            // raiders whose gate path query is out
+std::set<std::string> g_wall_said;            // refusals logged once per session
+bool g_walls_v44_said = false;
+uint8_t g_waypoint_guid[16] = {};
+bool g_waypoint_ok = false;
+constexpr const char* kWaypointGuid = "6d71f70d-602c-4d55-9de2-73e5b84133b5";  // TestTransform (DoNotSave)
+constexpr double kFoeNear = 4.0;  // a worker fights a foe this near instead of the wall
+
+void wall_say_once(const std::string& key, const std::string& line) {
+    if (g_wall_said.insert(key).second) EMF_LOG(kMod, "%s", line.c_str());
+}
+void wall_cancel_order(uint32_t raider) {
+    auto it = g_wall_orders.find(raider);
+    if (it == g_wall_orders.end()) return;
+    if (emf::has_v39() && emf::api()->enemy_order_cancel) emf::api()->enemy_order_cancel(it->second);
+    g_wall_orders.erase(it);
+}
+void wall_drop_target(emf::World w, uint32_t spot) {
+    auto it = g_wall_targets.find(spot);
+    if (it == g_wall_targets.end()) return;
+    emf::api()->destroy(w.raw(), it->second);
+    g_wall_targets.erase(it);
+}
+void wall_forget(uint32_t raider) {
+    wall_cancel_order(raider);
+    g_walls.forget(raider);
+}
+
 // Puts one raider of template `t` at `p` (level written soon, marching on `altar`). 0 when the game refused it.
 uint32_t spawn_raider(emf::World w, const raids::Template& t, const raids::Vec3& p, uint32_t level, uint32_t altar,
                       bool vet) {
@@ -217,6 +258,226 @@ void show(const std::string& text, const Config& c) {
 bool ours(emf::World w, uint32_t id) {
     auto it = g_ids.find(id);
     return it != g_ids.end() && raids::is_raider(w, id, it->second);
+}
+
+// ---- walls: the look, the hits, the orders ----
+void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, const Config& c);
+
+struct HitCtx {
+    uint32_t spot, session;
+};
+// A hit's answer: damage seen holds the stuck clock; once blocks went, the spot is through when a worker's line to the
+// altar is clear.
+void on_wall_hit(EmfWorld* raw, uint32_t, const EmfBreakResult* res, void* user) {
+    const std::unique_ptr<HitCtx> ctx(static_cast<HitCtx*>(user));
+    if (!raw || !res || ctx->session != emf::server_session()) return;
+    emf::World w(raw);
+    g_walls.on_hit(ctx->spot, res->damaged, res->removed, GetTickCount64());
+    if (res->status != EMF_BREAK_DONE || !res->removed) return;
+    const raids::Vec3 altar = g_director.base().pos;
+    for (const auto& sp : g_walls.spots()) {
+        if (sp.id != ctx->spot) continue;
+        for (uint32_t r : sp.workers) {
+            const auto p = pos_of(w, r);
+            if (!p) continue;
+            const auto line = raids::chest_line(*p, altar, raids::WallWork::kReach);
+            const float f[3] = {float(line.first.x), float(line.first.y), float(line.first.z)};
+            const float t[3] = {float(line.second.x), float(line.second.y), float(line.second.z)};
+            if (emf::find_wall(w, f, t)) continue;
+            EMF_LOG(kMod, "raider %u: the wall at (%.1f, %.1f, %.1f) is open; on to the altar", r, sp.point.x, sp.point.y,
+                    sp.point.z);
+            wall_actions(w, g_walls.wall_clear(sp.id), config());
+            return;
+        }
+    }
+}
+
+void wall_assign(emf::World, uint32_t id, const raids::Vec3& p, std::optional<raids::Vec3> wall,
+                 std::optional<raids::Gate> gate, const Config& c) {
+    if (!c.walls.on || g_director.phase() != raids::Phase::Fighting || (!wall && !gate)) return;
+    const auto spot = g_walls.assign(id, p, wall, gate, c.walls, GetTickCount64());
+    if (!spot) {
+        wall_say_once("spots", "a raider found a wall, but 4 wall spots are worked already");
+        return;
+    }
+    for (const auto& sp : g_walls.spots())
+        if (sp.id == *spot) {
+            if (sp.gate)
+                EMF_LOG(kMod, "raider %u held up at (%.1f, %.1f, %.1f): it breaks gate %u (%d added to each hit)", id, p.x,
+                        p.y, p.z, sp.door, sp.gate_damage);
+            else
+                EMF_LOG(kMod, "raider %u held up at (%.1f, %.1f, %.1f): it breaks the wall at (%.1f, %.1f, %.1f)", id, p.x,
+                        p.y, p.z, sp.point.x, sp.point.y, sp.point.z);
+        }
+}
+
+struct LookCtx {
+    uint32_t raider, session;
+    std::optional<raids::Vec3> wall;
+};
+void on_gate_path(EmfWorld* raw, uint32_t, const EmfPathResult* r, const EmfPathPoint* pts, void* user) {
+    const std::unique_ptr<LookCtx> ctx(static_cast<LookCtx*>(user));
+    g_wall_looking.erase(ctx->raider);
+    if (!raw || ctx->session != emf::server_session()) return;
+    emf::World w(raw);
+    if (!ours(w, ctx->raider)) return;
+    const auto p = pos_of(w, ctx->raider);
+    if (!p) return;
+    std::optional<raids::Gate> gate;
+    const uint32_t* doors = r && r->size >= offsetof(EmfPathResult, doors) + sizeof(r->doors) ? r->doors : nullptr;
+    if (r && r->status == EMF_PATH_FOUND)
+        if (const auto g = raids::nearest_gate(pts, r->count, doors, *p, raids::WallWork::kGateRange)) {
+            const uint32_t st = emf::has_v38() && emf::api()->door_state ? emf::api()->door_state(raw, g->first) : 0;
+            if ((st & 0xFu) == EMF_DOOR_CLOSED) gate = raids::Gate{g->first, g->second, raids::door_max_health(w, g->first)};
+        }
+    wall_assign(w, ctx->raider, *p, ctx->wall, gate, config());
+}
+
+// Looks for the wall in front of a held-up raider (now) and the first closed door on its way (a path query: the answer
+// comes after a step), then assigns it the nearer of the two.
+void wall_look(emf::World w, uint32_t id, const raids::Vec3& p, const Config& c) {
+    const raids::Vec3 altar = g_director.base().pos;
+    const auto line = raids::chest_line(p, altar, raids::WallWork::kReach);
+    const float f[3] = {float(line.first.x), float(line.first.y), float(line.first.z)};
+    const float t[3] = {float(line.second.x), float(line.second.y), float(line.second.z)};
+    std::optional<raids::Vec3> wall;
+    if (const auto b = emf::find_wall(w, f, t)) wall = raids::Vec3{b->x, b->y, b->z};
+    if (emf::has_v42() && emf::api()->path_find && !g_wall_looking.count(id)) {
+        EmfPathQuery q{};
+        q.size = sizeof q;
+        q.owner = id;
+        q.from[0] = float(p.x), q.from[1] = float(p.y), q.from[2] = float(p.z);
+        q.to[0] = float(altar.x), q.to[1] = float(altar.y), q.to[2] = float(altar.z);
+        q.moves = EMF_PATH_WALK | EMF_PATH_OPEN_DOOR;
+        q.closest = 1;
+        q.max_nodes = 5000;
+        auto* ctx = new LookCtx{id, emf::server_session(), wall};
+        if (emf::api()->path_find(w.raw(), &q, on_gate_path, ctx)) {
+            g_wall_looking.insert(id);
+            return;
+        }
+        delete ctx;
+    }
+    wall_assign(w, id, p, wall, std::nullopt, c);
+}
+
+void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, const Config& c) {
+    const EmfApi* a = emf::api();
+    for (const auto& x : acts) {
+        switch (x.kind) {
+            case raids::WallAction::Hit: {
+                EmfBreakBlocks r{};
+                r.x = float(x.hole.centre.x), r.y = float(x.hole.centre.y), r.z = float(x.hole.centre.z);
+                r.radius = float(x.hole.radius);
+                r.height = float(x.hole.height);
+                raids::wall_hit_damage(x.damage_scale, r.damage);
+                if (c.walls.drops) r.flags |= EMF_BREAK_DROPS;
+                auto* ctx = new HitCtx{x.spot, emf::server_session()};
+                if (!emf::break_blocks(w, r, on_wall_hit, ctx)) {
+                    delete ctx;
+                    wall_say_once("hit", std::string("a wall hit was refused: ") + r.why);
+                }
+                break;
+            }
+            case raids::WallAction::OrderWall: {
+                if (!emf::has_v39()) break;
+                auto t = g_wall_targets.find(x.spot);
+                if (t == g_wall_targets.end() && g_waypoint_ok) {
+                    const uint32_t id = a->spawn(w.raw(), g_waypoint_guid, x.at.x, x.at.y, x.at.z);
+                    if (id) t = g_wall_targets.emplace(x.spot, id).first;
+                }
+                EmfEnemyOrder o{};
+                o.size = sizeof o;
+                o.enemy = x.raider;
+                o.target = t == g_wall_targets.end() ? 0 : t->second;
+                o.seconds = 3.5f;
+                const uint32_t oid = o.target ? a->enemy_order(w.raw(), &o) : 0;
+                if (oid) {
+                    g_wall_orders[x.raider] = oid;
+                    break;
+                }
+                wall_say_once("target", std::string("a raider takes no order on the wall's hidden target (") + o.why +
+                                            "): it stands at the wall while it cracks");
+                const auto p = pos_of(w, x.raider);
+                if (p && emf::has_v40() && raids::horizontal_distance(*p, x.at) > raids::WallWork::kWorkRange &&
+                    !a->enemy_moving(w.raw(), x.raider)) {  // walk it up to 1.5 m in front of the wall point
+                    const double dx = p->x - x.at.x, dz = p->z - x.at.z, len = std::hypot(dx, dz);
+                    const EmfPathPoint pt{float(x.at.x + dx / len * 1.5), float(p->y), float(x.at.z + dz / len * 1.5), 0};
+                    EmfMoveOrder m{};
+                    m.size = sizeof m;
+                    m.enemy = x.raider;
+                    m.count = 1;
+                    m.points = &pt;
+                    m.arrive = 1.5f;
+                    m.seconds = 10.0f;
+                    a->enemy_move(w.raw(), &m, nullptr, nullptr);
+                }
+                break;
+            }
+            case raids::WallAction::OrderGate: {
+                if (!emf::has_v39()) break;
+                EmfEnemyOrder o{};
+                o.size = sizeof o;
+                o.enemy = x.raider;
+                o.target = x.door;
+                o.seconds = 3.5f;
+                o.damage = x.gate_damage;
+                const uint32_t oid = a->enemy_order(w.raw(), &o);
+                if (oid) g_wall_orders[x.raider] = oid;
+                else wall_say_once("gate", std::string("a raider takes no order on a gate (") + o.why + ")");
+                break;
+            }
+            case raids::WallAction::Release:
+                wall_cancel_order(x.raider);
+                order(g_guards, x.raider, g_director.base().altar);  // on to the altar again
+                break;
+            case raids::WallAction::GiveUp:
+                wall_drop_target(w, x.spot);
+                EMF_LOG(kMod, "wall spot at (%.1f, %.1f, %.1f) given up", x.at.x, x.at.y, x.at.z);
+                break;
+            case raids::WallAction::Done: wall_drop_target(w, x.spot); break;
+        }
+    }
+}
+
+// Once a second while a raid fights: looks for held-up raiders, hits, orders, and watches the gates being broken.
+void walls_tick(emf::World w, uint64_t now, const Config& c) {
+    bool active = c.walls.on && g_director.phase() == raids::Phase::Fighting;
+    if (active && !raids::walls_available()) {
+        if (!g_walls_v44_said) {
+            g_walls_v44_said = true;
+            EMF_LOG(kMod, "Raiders break walls needs EMF API v44 (EMF 0.6.14 or newer): raids go on as before");
+        }
+        active = false;
+    }
+    raids::WallSettings s = c.walls;
+    s.on = active;
+    std::map<uint32_t, raids::Vec3> raiders;
+    for (uint32_t id : g_director.living())
+        if (const auto p = pos_of(w, id)) raiders[id] = *p;
+    if (active)
+        for (const auto& [id, p] : raiders)
+            if (g_walls.wants_look(id, p, g_director.base().pos, c.s.base_radius, now)) wall_look(w, id, p, c);
+    wall_actions(w, g_walls.tick(raiders, s, now), c);
+    if (!active) return;
+    for (const auto& sp : g_walls.spots()) {
+        if (!sp.gate) continue;
+        if (!w.get<gen::CurrentTransform>(sp.door)) {  // broken by the game, or taken away
+            EMF_LOG(kMod, "gate %u is gone; on to the altar", sp.door);
+            wall_actions(w, g_walls.wall_clear(sp.id), c);
+            continue;
+        }
+        const int32_t hp = raids::door_health(w, sp.door);
+        g_walls.on_gate_health(sp.id, hp, now);
+        if (!raids::gate_finish_due(hp, sp.gate_damage)) continue;
+        std::string why;
+        if (raids::remove_gate(w, sp.door, c.walls.drops, &why)) {
+            EMF_LOG(kMod, "gate %u broken%s", sp.door, c.walls.drops ? " (its item dropped)" : "");
+            wall_actions(w, g_walls.wall_clear(sp.id), c);
+        } else {
+            wall_say_once("remove", "a gate could not be taken away (" + why + "); the raiders' hits break it");
+        }
+    }
 }
 
 void spawn_wave(emf::World w, const raids::Action& a, const Config& c) {
@@ -276,6 +537,7 @@ void vet_bosses(emf::World w, uint64_t now) {
             emf::api()->destroy(w.raw(), id);
             g_director.on_gone(id);
             g_stuck.forget(id);
+            wall_forget(id);
             EMF_LOG(kMod, "raider %u (%s) is a boss or mini-boss from a custom template without a level: removed (Only "
                           "creatures you are ready for; write it as GUID@level, or switch the rule off)", id, v.guid.c_str());
             if (g_found_bosses.insert(v.guid).second)
@@ -337,7 +599,10 @@ void run(emf::World w, const std::vector<raids::Action>& actions, const Config& 
             case raids::Action::Reward: reward(w, a, c); break;
             case raids::Action::Destroy: {
                 const int n = raids::destroy_raiders(w, a.ids, g_ids);
-                for (uint32_t id : a.ids) g_stuck.forget(id);
+                for (uint32_t id : a.ids) {
+                    g_stuck.forget(id);
+                    wall_forget(id);
+                }
                 EMF_LOG(kMod, "%d of %zu raider(s) removed (the rest were gone, or their ids are someone else's now)", n,
                         a.ids.size());
                 break;
@@ -366,17 +631,21 @@ void upkeep(emf::World w, uint64_t now, const std::vector<raids::Player>& player
         if (!ours(w, id)) {  // gone (or its id is someone else's now)
             g_director.on_gone(id);
             g_stuck.forget(id);
+            wall_forget(id);
             continue;
         }
         const auto p = pos_of(w, id);
+        if (p && g_walls.holding(id, now)) g_stuck.hold(id, now);  // its wall spot takes damage: not stuck
         if (p && g_director.phase() == raids::Phase::Fighting && g_stuck.stuck(id, *p, g_director.base().pos, now)) {
             emf::api()->destroy(w.raw(), id);  // fell at its spawn, or found no way in: removed, no kill
             g_director.on_gone(id);
             g_stuck.forget(id);
+            wall_forget(id);
             EMF_LOG(kMod, "raider %u is stuck at (%.1f, %.1f, %.1f), %.0f m from the altar: removed (no kill)", id, p->x,
                     p->y, p->z, raids::horizontal_distance(*p, g_director.base().pos));
         }
     }
+    walls_tick(w, now, c);
     if (now - g_guard_ms < kGuardEveryMs || g_director.phase() != raids::Phase::Fighting) return;
     g_guard_ms = now;
     const uint32_t altar = g_director.base().altar;
@@ -388,9 +657,16 @@ void upkeep(emf::World w, uint64_t now, const std::vector<raids::Player>& player
             foes.push_back(a);
     std::map<uint32_t, uint32_t> targets;  // the living raiders' targets now (gone raiders drop out)
     for (uint32_t id : g_director.living()) {
+        const auto p = pos_of(w, id);
+        if (p && g_walls.working(id)) {  // at a wall or a gate: no guard or threat order, unless a foe is right there
+            bool foe_near = false;
+            for (const auto& f : foes) foe_near = foe_near || (f.alive && raids::horizontal_distance(f.pos, *p) <= kFoeNear);
+            if (!foe_near) continue;
+            g_walls.release(id);
+            wall_cancel_order(id);
+        }
         auto* ai = w.get<gen::DynamicEnemy01BehaviorState>(id);
         if (ai && ai->guardEntityId.id != altar) order(g_guards, id, altar);
-        const auto p = pos_of(w, id);
         if (!p) continue;
         const auto last = g_targets.find(id);
         const uint32_t target =
@@ -424,6 +700,11 @@ void sync_session(emf::World w) {
     g_targets.clear();
     g_ids.clear();
     g_stuck.clear();
+    g_walls.clear();  // the old world's raiders and hidden targets went with it
+    g_wall_targets.clear();
+    g_wall_orders.clear();
+    g_wall_looking.clear();
+    g_wall_said.clear();
     g_bases_ms = 0;
     {
         std::lock_guard<std::mutex> l(g_orders_lock);
@@ -451,6 +732,7 @@ void on_tick(emf::World w) {
         if (!g_stopped_for_switch) {
             g_stopped_for_switch = true;
             run(w, g_director.stop("Night Raids was switched off"), c);
+            wall_actions(w, g_walls.tick({}, raids::WallSettings{}, now), c);  // hidden targets go, workers released
             show("", c);
         }
         return;
@@ -568,6 +850,7 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         return false;
     }
     read_settings();
+    g_waypoint_ok = raids::parse_guid_text(kWaypointGuid, g_waypoint_guid);
     emf::on_setting_changed(kMod, [](emf::World, const std::string& key) {
         if (key == "enabled") g_switched_off = !switch_on();
         read_settings();
@@ -580,6 +863,7 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         sync_session(w);
         if (g_director.is_raider(e.deadEntityId.id)) g_director.on_died(e.deadEntityId.id);
         g_stuck.forget(e.deadEntityId.id);
+        wall_forget(e.deadEntityId.id);
     });
     // a kill counts for the reward only when a player or an ally (the companion, summons) hit the raider
     emf::on_event<gen::HitEvent>(EMF_WORLD_SERVER, [](emf::World w, const gen::HitEvent& e) {

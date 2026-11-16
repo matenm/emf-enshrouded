@@ -1046,3 +1046,57 @@ TEST_CASE("walls: the gate worker gets its order with the gate's per-hit damage,
     CHECK(of_kind(w.tick(raiders, s, 2000), WallAction::OrderGate).empty());
     CHECK(of_kind(w.tick(raiders, s, 3000), WallAction::OrderGate).size() == 1);
 }
+
+
+TEST_CASE("walls: the settings: hole size, drops and the difficulty scale (a preset's difficulty while it is chosen)") {
+    const WallSettings a = wall_settings(true, "medium", true, "custom", "easy");
+    CHECK(a.on);
+    CHECK(a.hole_radius == 1.75);
+    CHECK(a.drops);
+    CHECK(a.damage_scale == 0.5);
+    const WallSettings b = wall_settings(false, "large", false, "hard", "easy");  // the hard preset's difficulty
+    CHECK_FALSE(b.on);
+    CHECK(b.hole_radius == 2.5);
+    CHECK_FALSE(b.drops);
+    CHECK(b.damage_scale == 1.5);
+    CHECK(wall_settings(true, "small", false, "gentle", "deadly").damage_scale == 0.5);
+    CHECK(wall_settings(true, "?", false, "nonsense", "deadly").damage_scale == 2.0);  // not a preset: its own
+}
+
+TEST_CASE("raids: mod.json: Raiders break walls (off), Hole size (small), Broken blocks drop items (off); presets leave them") {
+    std::ifstream f(std::string(EMF_SOURCE_DIR) + "/mods/raids/mod.json", std::ios::binary);
+    REQUIRE(f.good());
+    std::stringstream ss;
+    ss << f.rdbuf();
+    const auto r = emf::core::parse_manifest(ss.str());
+    REQUIRE_MESSAGE(r.manifest, r.error);
+    const auto def = [&](const std::string& key) -> const emf::core::SettingDef* {
+        for (const auto& d : r.manifest->settings)
+            if (d.key == key) return &d;
+        return nullptr;
+    };
+    const auto* on = def("break_walls");
+    REQUIRE(on);
+    CHECK(on->label == "Raiders break walls");
+    CHECK(on->default_value == "0");
+    CHECK(on->when_key.empty());
+    const auto* hole = def("hole_size");
+    REQUIRE(hole);
+    CHECK(hole->label == "Hole size");
+    CHECK(hole->default_value == "small");
+    std::vector<std::string> values;
+    for (const auto& o : hole->options) values.push_back(o.value);
+    CHECK(values == std::vector<std::string>{"small", "medium", "large"});
+    CHECK(hole->when_key == "break_walls");
+    const auto* drops = def("wall_drops");
+    REQUIRE(drops);
+    CHECK(drops->label == "Broken blocks drop items");
+    CHECK(drops->default_value == "0");
+    CHECK(drops->when_key == "break_walls");
+    for (const auto& key : preset_keys()) {
+        CHECK(key != "break_walls");
+        CHECK(key != "hole_size");
+        CHECK(key != "wall_drops");
+    }
+    CHECK(emf::core::version_text(r.manifest->version) == "1.2.0");
+}
