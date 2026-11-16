@@ -657,8 +657,11 @@ errors.
 | `nodes` | how many nodes the search may spend (0 to 20000; default 2000) |
 | `owner` | an entity the query belongs to (default: the first player) |
 
-Use `closest = true` and check `reaches`. Without `closest`, a target the grid cannot match (on a rock, in the air) ends
-`"too_long"`. Long paths need more `nodes`: 2000 got about 36 m of a 141 m route, 20000 got about 90 m in about 1.3 s.
+Use `closest = true` and check `reaches`. A short path can mean blocked or ran out: without `closest`, `"no_path"` means
+the target is shut off for these moves, while `"too_long"` (all `nodes` spent) and `"no_memory"` (the game's fixed
+search memory full, usual above a few thousand nodes) mean the search ran out. With `closest` all three come back
+`"found"` with `reaches` false: ask again from the path's last point, and treat it as blocked when the answers stop
+getting nearer. Long paths need more `nodes`: 2000 got about 36 m of a 141 m route, 20000 got about 90 m in about 1.3 s.
 The grid exists only where the world is loaded, near players. Each query is a search in the game's own jobs, shared with
 every walking creature: do not ask every step. Details: [reference.md](reference.md), "v37".
 

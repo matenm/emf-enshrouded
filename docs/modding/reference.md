@@ -1183,10 +1183,19 @@ Each `EmfPathPoint` has `x`, `y`, `z` and `move`: 0 walk, 2 jump up, 3 jump down
 Seen live:
 
 - A 22 m path on open ground answered in about 0.2 s.
-- **Use `closest = 1` and check `reaches`.** Without `closest`, a target the grid cannot match (on a rock, in the air)
-  spends all its nodes and ends `TOO_LONG`. With `closest` the path ends at the nearest reachable point and `reaches`
+- **Use `closest = 1` and check `reaches`.** With `closest` the path ends at the nearest reachable point and `reaches`
   is false.
-- Long paths need more nodes: 2000 nodes got about 36 m of a 141 m route, 20000 got about 90 m in about 1.3 s.
+- **A short path can mean blocked or ran out.** Without `closest`, a search that does not reach the target ends
+  `NO_PATH` (it searched all the ground it could reach: the target is shut off for these moves), `TOO_LONG` (it spent
+  `max_nodes`) or `NO_MEMORY` (it filled the game's own fixed search memory first; a hard search with more than a few
+  thousand nodes usually ends this way). `TOO_LONG` and `NO_MEMORY` mean the search ran out, not that the way is
+  blocked. With `closest` all three come back `FOUND` with `reaches` false. To tell them apart, ask again from the
+  path's last point (a modder's way: go on while each answer gets at least 1 m nearer, 3 times at most), or once
+  without `closest`. A modder saw, from 158 m with 20000 nodes, `NO_MEMORY` after about 2.6 s with the base's gate open
+  and shut; with `closest` the path ended 7 m short (the stairs not searched yet), and one more question from its end
+  got within 1.2 m. With the gate shut the second answer got no nearer (65.4 m, then 65.1 m).
+- Long paths need more nodes: 2000 nodes got about 36 m of a 141 m route, 20000 got about 90 m in about 1.3 s (the
+  search ran out both times).
 - The grid exists only where the world is loaded (near players). Far ends give `NO_START` or `NO_TARGET`, or `OTHER`
   after 10 s with no answer.
 - The game's own march asks with "closest" and treats `FOUND` as success, which is why its enemies walk to a wall and

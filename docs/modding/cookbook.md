@@ -615,8 +615,9 @@ end
 Before a raid sends a raider at the base, ask the game's path grid whether it can get there. The grid knows terrain,
 buildings and doors (Lua 1.29).
 
-- Always pass `closest = true` and check `result.reaches`. Without it a target on a rock or in the air ends `too_long`.
-  With it the path ends at the nearest reachable point, and `reaches` is false: that raider is blocked.
+- Always pass `closest = true` and check `result.reaches`. With it the path ends at the nearest reachable point, and
+  `reaches` is false: that raider is blocked, or the search ran out on a long way. Ask again from the path's last
+  point; when the answers stop getting nearer, it is blocked.
 - The game's own enemies treat `found` as success and walk to a wall. Check `reaches` yourself.
 - The grid exists only near players, and each query is a search shared with every creature. Ask once per raider, not
   every step.

@@ -716,11 +716,11 @@ typedef struct EmfRemoveBuilding {
 #define EMF_PATH_OPEN_DOOR 0x0020u
 #define EMF_PATH_SWIM 0x0040u
 #define EMF_PATH_FOUND 1u     /* a path: see `reaches` (with `closest` it may end at the nearest reachable point) */
-#define EMF_PATH_NO_PATH 2u
-#define EMF_PATH_TOO_LONG 3u  /* the search ran out of nodes (raise max_nodes, or ask for a nearer point) */
+#define EMF_PATH_NO_PATH 2u   /* it searched all the ground it could reach: the target is shut off for these moves */
+#define EMF_PATH_TOO_LONG 3u  /* spent max_nodes: ran out, not blocked (raise max_nodes, or ask on from nearer) */
 #define EMF_PATH_NO_START 4u  /* no path grid at `from` (not loaded: too far from players, or inside something) */
 #define EMF_PATH_NO_TARGET 5u
-#define EMF_PATH_NO_MEMORY 6u
+#define EMF_PATH_NO_MEMORY 6u  /* filled the game's fixed search memory first: ran out, not blocked */
 #define EMF_PATH_CANCELLED 7u /* path_cancel, the owner went, or the session ended */
 #define EMF_PATH_OTHER 8u     /* the game gave another answer, or none in time */
 /* v38 doors: door_state's answer, with flags */
