@@ -23,9 +23,11 @@ struct ContentLines {
     std::string console;  // the in-game console and emf_core.log; "" for none
     std::string notice;   // on screen once, when the first world loads; "" for none
     bool backup = false;  // back up the saves now, whatever min_minutes says
+    const char* backup_label = nullptr;  // that backup's label (kContentBackupLabel or kContentPartBackupLabel)
 };
 
 constexpr const char* kContentBackupLabel = "before a start without EML content";
+constexpr const char* kContentPartBackupLabel = "before a start with part of the EML content missing";
 
 inline std::string content_seconds(uint64_t ms) {
     if (ms < 10000) {
@@ -51,6 +53,13 @@ inline ContentLines content_lines(const std::optional<emf::loader::ContentStatus
             l.console += "; a mod reported a problem: " + what;
             l.notice = "An EML mod reported a problem while its content was built: " + what +
                        ". The rest of the content is in; emf\\content.log has every line.";
+            // the missing part may be a placed object's template, which a loading world drops: a backup first, once
+            // (a current start has the same content as the start that made it, as failed_again)
+            if (s->kind == "built") {
+                if (backups_on) l.notice += " Your saves were backed up.";
+                l.backup = true;
+                l.backup_label = kContentPartBackupLabel;
+            }
         }
     } else if (s->kind == "failed" || s->kind == "failed_again") {
         std::string why = s->message.empty() ? std::string("an unknown error") : s->message;
@@ -75,6 +84,7 @@ inline ContentLines content_lines(const std::optional<emf::loader::ContentStatus
         } else {
             if (backups_on) l.console += " Your saves were backed up.";
             l.backup = true;
+            l.backup_label = kContentBackupLabel;
         }
         l.notice = l.console;
     } else if (s->kind == "off") {

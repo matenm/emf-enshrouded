@@ -66,12 +66,17 @@ TEST_CASE("content status: a good build whose mods warned: the console line and 
     CHECK(l.console == "EML content: 3 mods (built in 28 s); a mod reported a problem: emf_beastmaster_bear: Bear: not "
                        "added: out of references");
     CHECK(l.notice == "An EML mod reported a problem while its content was built: emf_beastmaster_bear: Bear: not added: "
-                      "out of references. The rest of the content is in; emf\\content.log has every line.");
-    CHECK_FALSE(l.backup);  // nothing to save the world from: the content is in
+                      "out of references. The rest of the content is in; emf\\content.log has every line. Your saves were "
+                      "backed up.");
+    // a part not added can be a placed object's template: the world drops those when it loads, so a backup first
+    CHECK(l.backup);
+    CHECK(std::string(l.backup_label) == "before a start with part of the EML content missing");
+    CHECK(content_lines(status("built", 3, 28000, "a: b"), false).notice.find("backed up") == std::string::npos);
     l = content_lines(status("current", 3, 28000, "a: b (and 1 more)"), true);
     CHECK(l.console == "EML content: 3 mods (unchanged since the last build); a mod reported a problem: a: b (and 1 more)");
     CHECK(l.notice == "An EML mod reported a problem while its content was built: a: b (and 1 more). The rest of the "
                       "content is in; emf\\content.log has every line.");
+    CHECK_FALSE(l.backup);  // the same content as the last start, which made its backup (as failed_again)
 }
 
 TEST_CASE("content status: off line") {

@@ -324,6 +324,33 @@ TEST_CASE("content warnings: the summary is the first warning and how many more"
     CHECK(emf::loader::warnings_summary({"a: b", "c: d", "e: f"}) == "a: b (and 2 more)");
 }
 
+// The status message holds 512 bytes: a long first warning in letters of 2 bytes each lost the count at its end.
+TEST_CASE("content warnings: a long first warning is cut between letters so the count still fits") {
+    std::string first = "bear: ";
+    for (int i = 0; i < 300; ++i) first += "\xc3\xa9";  // 600 bytes of letters
+    const std::string s = emf::loader::warnings_summary({first, "c: d"});
+    CHECK(s.size() <= emf::loader::kWarningsSummaryMaxBytes);
+    CHECK(s.size() + 64 < emf::loader::kContentStatusMaxMessage);  // room to spare in the status
+    CHECK(s.substr(s.size() - std::string(" (and 1 more)").size()) == " (and 1 more)");
+    const std::string kept = s.substr(0, s.size() - std::string(" (and 1 more)").size());
+    CHECK(kept.rfind("bear: ", 0) == 0);
+    CHECK((static_cast<unsigned char>(kept.back()) & 0xC0) != 0xC0);  // not the first byte of a letter left alone
+    CHECK((kept.size() - 6) % 2 == 0);                                  // whole two-byte letters
+}
+
+TEST_CASE("content start: a failed build logs its mods' warnings too") {
+    auto failed = built_ok();
+    failed.code = 2;
+    failed.message = "EML could not patch the bear";
+    failed.warnings = {"emf_beastmaster_bear: Bear: not added"};
+    Recorder r;
+    auto plan = emf::loader::plan_content(plan_steps(r, owned_facts(), std::nullopt));
+    auto steps = start_steps(r, true, failed);
+    CHECK(emf::loader::start_in_dllmain(plan, steps));
+    emf::loader::run_held_content(plan, steps);
+    CHECK(r.logged("EML content: a mod warned: emf_beastmaster_bear: Bear: not added"));
+}
+
 TEST_CASE("content start: failed build starts chain and core without redirect") {
     auto failed = built_ok();
     failed.code = 2;

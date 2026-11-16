@@ -966,7 +966,7 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
         GetModuleFileNameW(nullptr, self, MAX_PATH);
         const std::wstring exe_name = std::wstring(self).substr(std::wstring(self).find_last_of(L"\\/") + 1);
         if (_wcsicmp(exe_name.c_str(), L"enshrouded_server.exe") != 0)  // first: before any save
-            start_auto_backup(dir, g_content_lines.backup ? emf::core::kContentBackupLabel : nullptr);
+            start_auto_backup(dir, g_content_lines.backup ? g_content_lines.backup_label : nullptr);
     }
     std::thread([dir] {
         try {

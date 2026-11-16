@@ -114,12 +114,19 @@ inline std::string seconds_text(uint64_t ms) {
 
 inline std::string mods_text(size_t n) { return std::to_string(n) + (n == 1 ? " mod" : " mods"); }
 
-// The status message of a good build whose mods warned: the first warning, and how many more ("" for none).
+// The status message of a good build whose mods warned: the first warning, and how many more ("" for none). At most
+// kWarningsSummaryMaxBytes, well inside the status's message: a long first warning is cut between letters, the count kept.
+constexpr size_t kWarningsSummaryMaxBytes = 400;
 inline std::string warnings_summary(const std::vector<std::string>& warnings) {
     if (warnings.empty()) return {};
-    std::string out = warnings.front();
-    if (warnings.size() > 1) out += " (and " + std::to_string(warnings.size() - 1) + " more)";
-    return out;
+    const std::string more = warnings.size() > 1 ? " (and " + std::to_string(warnings.size() - 1) + " more)" : "";
+    std::string first = warnings.front();
+    if (first.size() + more.size() > kWarningsSummaryMaxBytes) {
+        size_t n = kWarningsSummaryMaxBytes - more.size();
+        while (n > 0 && (static_cast<unsigned char>(first[n]) & 0xC0) == 0x80) --n;  // not inside a UTF-8 letter
+        first.resize(n);
+    }
+    return first + more;
 }
 
 constexpr int kMaxBuildAttempts = 2;  // starts in a row a build may stop the game in before it is left alone
@@ -443,6 +450,7 @@ inline void run_held_content(const ContentPlan& plan, const StartSteps& s) {
         s.log("EML content could not be built: " + out.message + " (code " + std::to_string(out.code) +
               "); the game starts without it (emf\\content.log has the details)");
         for (const auto& e : out.errors) s.log("EML content: " + e);
+        for (const auto& w : out.warnings) s.log("EML content: a mod warned: " + w);
     }
     if (pictures && !pictures->call.unloaded) {
         // the build's state above stays the build's own; only this start goes without the chained DLLs and the core
