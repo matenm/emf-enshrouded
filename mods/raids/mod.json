@@ -59,7 +59,7 @@
      "live": true, "group": "Raiders", "enabledWhen": {"setting": "templates", "equals": "custom"},
      "help": "Template GUIDs separated by commas; GUID@12 comes from player level 12. Untested ones may spawn asleep."},
     {"key": "break_walls", "type": "bool", "default": false, "label": "Raiders break walls", "live": true, "group": "Walls",
-     "help": "A raider held up by a wall or a closed gate on its way to the flame altar breaks through it: cracks first, then a hole that stays (saved with the world, like mining). Straw and wood go quickly, stone takes a group about half a minute, metal mostly holds. Never the ground. Needs EMF 0.6.14 or newer."},
+     "help": "A raider held up by a wall or a closed gate on its way to the flame altar breaks through it: cracks first, then a hole that stays (saved with the world, like mining). Straw and wood go quickly, stone takes a group about half a minute, metal mostly holds. Never the ground, and never the world's own ruins (a hole next to a ruin is smaller). Needs EMF 0.6.14 or newer."},
     {"key": "hole_size", "type": "select", "default": "small", "label": "Hole size", "live": true, "group": "Walls",
      "enabledWhen": {"setting": "break_walls", "equals": true},
      "options": [{"value": "small", "label": "Small: about a door (2 m)"},

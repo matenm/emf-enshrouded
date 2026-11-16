@@ -182,6 +182,10 @@ inline bool player_near(const Vec3& p, const std::vector<Player>& players, doubl
 }
 // One raider hit on a wall: the game's T4 pickaxe (EMF_BREAK_DEFAULT_DAMAGE) times scale, whole, 1 to 100000 (all
 // 0 would ask break_blocks for the full default).
+// A wall raiders may work on: any building block on a core before API v45; from v45 not the world's own (a ruin as the
+// game shipped it) nor one whose origin is not known (EMF's breaks spare those anyway, so the raider would stand there).
+inline bool breakable_wall(const EmfBlockInfo& b, bool v45) { return !v45 || b.world == 0; }
+
 inline void wall_hit_damage(double scale, int32_t out[5]) {
     const int32_t def[5] = EMF_BREAK_DEFAULT_DAMAGE;
     for (int i = 0; i < 5; ++i)

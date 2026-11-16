@@ -277,6 +277,7 @@ void on_wall_hit(EmfWorld* raw, uint32_t, const EmfBreakResult* res, void* user)
             const float f[3] = {float(line.first.x), float(line.first.y), float(line.first.z)};
             const float t[3] = {float(line.second.x), float(line.second.y), float(line.second.z)};
             if (const auto b = emf::find_wall(w, f, t)) {
+                if (!raids::breakable_wall(*b, emf::has_v45())) continue;  // a ruin behind the hole: no deeper there
                 if (!deeper) {
                     deeper = raids::Vec3{b->x, b->y, b->z};
                     feet_y = p->y;
@@ -346,7 +347,13 @@ void wall_look(emf::World w, uint32_t id, const raids::Vec3& p, const Config& c)
     const float f[3] = {float(line.first.x), float(line.first.y), float(line.first.z)};
     const float t[3] = {float(line.second.x), float(line.second.y), float(line.second.z)};
     std::optional<raids::Vec3> wall;
-    if (const auto b = emf::find_wall(w, f, t)) wall = raids::Vec3{b->x, b->y, b->z};
+    if (const auto b = emf::find_wall(w, f, t)) {
+        if (raids::breakable_wall(*b, emf::has_v45()))
+            wall = raids::Vec3{b->x, b->y, b->z};
+        else
+            EMF_LOG(kMod, "raider %u: the wall at (%.1f, %.1f, %.1f) is the world's own (a ruin) or of unknown origin: left "
+                    "alone", id, b->x, b->y, b->z);
+    }
     if (emf::has_v42() && emf::api()->path_find && !g_wall_looking.count(id)) {
         EmfPathQuery q{};
         q.size = sizeof q;

@@ -288,3 +288,16 @@ TEST_CASE("raids glue (review): a gate is gone when its entity is, or when the i
     g_door_state = EMF_DOOR_NONE;  // the id belongs to something else now
     CHECK(raids::gate_gone(w, 40));
 }
+
+TEST_CASE("raids glue: a wall raiders may work on: any building block before API v45; from v45 not the world's own (a ruin) nor one of unknown origin") {
+    EmfBlockInfo b{};
+    b.size = sizeof b;
+    b.kind = EMF_BLOCK_BUILDING;
+    b.world = 0;
+    CHECK(raids::breakable_wall(b, true));
+    b.world = 1;
+    CHECK_FALSE(raids::breakable_wall(b, true));
+    b.world = -1;
+    CHECK_FALSE(raids::breakable_wall(b, true));
+    CHECK(raids::breakable_wall(b, false));  // a v44 core never wrote world
+}

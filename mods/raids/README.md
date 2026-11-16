@@ -60,6 +60,10 @@ raid comes when you sleep through nightfall.
 | Base radius (`base_radius`) | 30 m | 10-100. The game's own build zone is not readable (its size reads 0), so this is a fixed radius: a flame altar of a higher level builds a bigger zone, so raise it for an upgraded altar, or raiders may appear inside the zone's edge |
 | Reward when repelled (`reward`) | runes and furs | none / runes and furs / also a rare weapon |
 | Raid line on screen (`corner`, `color`) | top right, orange | |
+| Raiders break walls (`break_walls`) | off | a raider held up by a wall or a closed gate on its way to the flame altar breaks through it: cracks first, then a hole that stays (saved with the world, like mining; the game resets holes outside a flame altar's area). Straw and wood go quickly, stone takes a group about half a minute, metal mostly holds. Never the ground, and never the world's own ruins: a wall spot on a ruin is left alone, and a hole next to a ruin is smaller. A spot not broken after 2 minutes is given up. Needs EMF 0.6.14 |
+| Hole size (`hole_size`) | small | small (about a door, 2 m), medium (3.5 m), large (5 m) |
+| Wall strength (x hits) (`wall_strength`) | 1 | 0.5-10: how many hits walls and gates take, times the normal. At 1 a wood wall cracks at the first hit and breaks at the second or third, planks take 5, stone about 20, a gate about 6. Several raiders at one wall, and harder raids, hit harder |
+| Broken blocks drop items (`wall_drops`) | off | what a pickaxe would give for the broken blocks, and a broken gate's own item, at the hole |
 
 Every setting applies at once.
 
@@ -124,5 +128,6 @@ Switch the rule off to get the old behaviour.
   has no screen: players use `/raids.status`). There is no chat announcement.
 - **Not saved**: the game does not save spawned raiders. A reload or a world switch simply ends the raid.
 - Raiders never appear inside a base, but they do walk in: that is the attack.
-- They do not break walls.
+- They break walls only with **Raiders break walls** on, and never the world's own ruins (EMF 0.6.14 tells them from
+  what players built by comparing each block with the world as the game shipped it).
 - The log (`emf\emf_core.log`, lines `[raids]`) has every raider's id, position and level.
