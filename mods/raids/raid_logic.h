@@ -283,11 +283,11 @@ struct Gate {
 struct WallAction {
     enum Kind {
         Hit,        // break_blocks at `hole` with the default damage x damage_scale
-        OrderWall,  // send `raider` at the wall point `at` (a hidden target there), for 3 s
+        OrderWall,  // keep `raider` at the wall point `at` (renewed every 3 s; the mod walks it up from more than 3 m)
         OrderGate,  // send `raider` at `door` with gate_damage added to its hits, for 3 s
         Release,    // `raider` stops working: cancel its order, it marches on the altar again
-        GiveUp,     // spot `spot` ended without getting through (or nobody works it): its hidden target goes
-        Done,       // spot `spot` is through (the wall is open, the gate is gone): its hidden target goes
+        GiveUp,     // spot `spot` ended without getting through (or nobody works it)
+        Done,       // spot `spot` is through (the wall is open, the gate is gone)
     } kind = Hit;
     uint32_t spot = 0, raider = 0, door = 0;
     Hole hole;

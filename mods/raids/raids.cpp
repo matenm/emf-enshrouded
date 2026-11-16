@@ -174,14 +174,10 @@ raids::StuckWatch g_stuck;
 
 // ---- walls ("Raiders break walls", EMF API v44): a raider held up by a wall or a closed gate breaks through it ----
 raids::WallWork g_walls;
-std::map<uint32_t, uint32_t> g_wall_targets;  // spot -> its hidden target (a TestTransform at the wall point)
-std::map<uint32_t, uint32_t> g_wall_orders;   // raider -> its enemy order (on the hidden target or the gate)
+std::map<uint32_t, uint32_t> g_wall_orders;   // raider -> its enemy order on a gate
 std::set<uint32_t> g_wall_looking;            // raiders whose gate path query is out
 std::set<std::string> g_wall_said;            // refusals logged once per session
 bool g_walls_v44_said = false;
-uint8_t g_waypoint_guid[16] = {};
-bool g_waypoint_ok = false;
-constexpr const char* kWaypointGuid = "6d71f70d-602c-4d55-9de2-73e5b84133b5";  // TestTransform (DoNotSave)
 constexpr double kFoeNear = 4.0;  // a worker fights a foe this near instead of the wall
 
 void wall_say_once(const std::string& key, const std::string& line) {
@@ -192,12 +188,6 @@ void wall_cancel_order(uint32_t raider) {
     if (it == g_wall_orders.end()) return;
     if (emf::has_v39() && emf::api()->enemy_order_cancel) emf::api()->enemy_order_cancel(it->second);
     g_wall_orders.erase(it);
-}
-void wall_drop_target(emf::World w, uint32_t spot) {
-    auto it = g_wall_targets.find(spot);
-    if (it == g_wall_targets.end()) return;
-    emf::api()->destroy(w.raw(), it->second);
-    g_wall_targets.erase(it);
 }
 void wall_forget(uint32_t raider) {
     wall_cancel_order(raider);
@@ -380,24 +370,9 @@ void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, cons
                 break;
             }
             case raids::WallAction::OrderWall: {
-                if (!emf::has_v39()) break;
-                auto t = g_wall_targets.find(x.spot);
-                if (t == g_wall_targets.end() && g_waypoint_ok) {
-                    const uint32_t id = a->spawn(w.raw(), g_waypoint_guid, x.at.x, x.at.y, x.at.z);
-                    if (id) t = g_wall_targets.emplace(x.spot, id).first;
-                }
-                EmfEnemyOrder o{};
-                o.size = sizeof o;
-                o.enemy = x.raider;
-                o.target = t == g_wall_targets.end() ? 0 : t->second;
-                o.seconds = 3.5f;
-                const uint32_t oid = o.target ? a->enemy_order(w.raw(), &o) : 0;
-                if (oid) {
-                    g_wall_orders[x.raider] = oid;
-                    break;
-                }
-                wall_say_once("target", std::string("a raider takes no order on the wall's hidden target (") + o.why +
-                                            "): it stands at the wall while it cracks");
+                // A held-up raider already stands at the wall (pressing toward the altar), and stays there while it
+                // cracks. An enemy order on a hidden target at the wall was tried live: the Vukah stopped about 6 m
+                // short of it and never swung, so it would only pull raiders away. One more than 3 m off walks up.
                 const auto p = pos_of(w, x.raider);
                 if (p && emf::has_v40() && raids::horizontal_distance(*p, x.at) > raids::WallWork::kWorkRange &&
                     !a->enemy_moving(w.raw(), x.raider)) {  // walk it up to 1.5 m in front of the wall point
@@ -432,16 +407,15 @@ void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, cons
                 order(g_guards, x.raider, g_director.base().altar);  // on to the altar again
                 break;
             case raids::WallAction::GiveUp:
-                wall_drop_target(w, x.spot);
                 EMF_LOG(kMod, "wall spot at (%.1f, %.1f, %.1f) given up", x.at.x, x.at.y, x.at.z);
                 break;
-            case raids::WallAction::Done: wall_drop_target(w, x.spot); break;
+            case raids::WallAction::Done: break;
         }
     }
 }
 
 // Once a second while a raid fights: looks for held-up raiders, hits, orders, and watches the gates being broken.
-void walls_tick(emf::World w, uint64_t now, const Config& c) {
+void walls_tick(emf::World w, uint64_t now, const std::vector<raids::Player>& players, const Config& c) {
     bool active = c.walls.on && g_director.phase() == raids::Phase::Fighting;
     if (active && !raids::walls_available()) {
         if (!g_walls_v44_said) {
@@ -457,7 +431,9 @@ void walls_tick(emf::World w, uint64_t now, const Config& c) {
         if (const auto p = pos_of(w, id)) raiders[id] = *p;
     if (active)
         for (const auto& [id, p] : raiders)
-            if (g_walls.wants_look(id, p, g_director.base().pos, c.s.base_radius, now)) wall_look(w, id, p, c);
+            if (g_walls.wants_look(id, p, g_director.base().pos, c.s.base_radius, now) &&
+                !raids::player_near(p, players, kFoeNear))  // fighting a player: not held up by a wall
+                wall_look(w, id, p, c);
     wall_actions(w, g_walls.tick(raiders, s, now), c);
     if (!active) return;
     for (const auto& sp : g_walls.spots()) {
@@ -645,7 +621,7 @@ void upkeep(emf::World w, uint64_t now, const std::vector<raids::Player>& player
                     p->y, p->z, raids::horizontal_distance(*p, g_director.base().pos));
         }
     }
-    walls_tick(w, now, c);
+    walls_tick(w, now, players, c);
     if (now - g_guard_ms < kGuardEveryMs || g_director.phase() != raids::Phase::Fighting) return;
     g_guard_ms = now;
     const uint32_t altar = g_director.base().altar;
@@ -700,8 +676,7 @@ void sync_session(emf::World w) {
     g_targets.clear();
     g_ids.clear();
     g_stuck.clear();
-    g_walls.clear();  // the old world's raiders and hidden targets went with it
-    g_wall_targets.clear();
+    g_walls.clear();  // the old world's raiders went with it
     g_wall_orders.clear();
     g_wall_looking.clear();
     g_wall_said.clear();
@@ -732,7 +707,7 @@ void on_tick(emf::World w) {
         if (!g_stopped_for_switch) {
             g_stopped_for_switch = true;
             run(w, g_director.stop("Night Raids was switched off"), c);
-            wall_actions(w, g_walls.tick({}, raids::WallSettings{}, now), c);  // hidden targets go, workers released
+            wall_actions(w, g_walls.tick({}, raids::WallSettings{}, now), c);  // the wall work ends, workers released
             show("", c);
         }
         return;
@@ -850,7 +825,6 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         return false;
     }
     read_settings();
-    g_waypoint_ok = raids::parse_guid_text(kWaypointGuid, g_waypoint_guid);
     emf::on_setting_changed(kMod, [](emf::World, const std::string& key) {
         if (key == "enabled") g_switched_off = !switch_on();
         read_settings();

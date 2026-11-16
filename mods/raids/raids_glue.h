@@ -168,6 +168,12 @@ inline bool remove_gate(emf::World w, uint32_t door, bool drops, std::string* wh
     if (!ok && why) *why = r.why;
     return ok;
 }
+// A player within `range` metres across: a raider there is fighting, not held up by a wall.
+inline bool player_near(const Vec3& p, const std::vector<Player>& players, double range) {
+    for (const auto& pl : players)
+        if (horizontal_distance(pl.pos, p) <= range) return true;
+    return false;
+}
 // One raider hit on a wall: the game's T4 pickaxe (EMF_BREAK_DEFAULT_DAMAGE) times scale, whole, at most 100000.
 inline void wall_hit_damage(double scale, int32_t out[5]) {
     const int32_t def[5] = EMF_BREAK_DEFAULT_DAMAGE;

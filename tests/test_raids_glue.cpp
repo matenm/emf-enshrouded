@@ -253,3 +253,11 @@ TEST_CASE("raids glue: the hit's damage is the default pickaxe times the scale, 
     raids::wall_hit_damage(1e9, d);
     CHECK(d[0] == 100000);
 }
+
+TEST_CASE("raids glue: a raider with a player within 4 m is fighting, not held up by a wall") {
+    const std::vector<raids::Player> players = {{1, {10, 0, 10}, 5}, {2, {30, 0, 30}, 5}};
+    CHECK(raids::player_near({12, 0, 12}, players, 4.0));        // 2.8 m
+    CHECK_FALSE(raids::player_near({15, 0, 10}, players, 4.0));  // 5 m
+    CHECK(raids::player_near({30, 9, 33}, players, 4.0));        // across only: 3 m
+    CHECK_FALSE(raids::player_near({0, 0, 0}, {}, 4.0));
+}
