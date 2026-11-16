@@ -77,6 +77,12 @@ struct CoreState {
         uint64_t step = 0;
         std::vector<uint32_t> ids;
     } removed_this_step;
+    // the last remove_building call, when it removed something with EMF_REMOVE_FORCE (else entity 0): the stacks with
+    // items it held and how many of them were dropped (the console's remove says so; the server world's thread only)
+    struct {
+        uint32_t entity = 0;
+        uint32_t held = 0, dropped = 0;
+    } last_forced_remove;
     GetComponentFn get_component = nullptr;
     GetTemplateComponentFn get_template_component = nullptr;  // optional signature
     Dispatcher dispatcher;

@@ -1649,7 +1649,15 @@ void cmd_remove(EmfWorld* w, int argc, const char* const* argv, void* u) {
                        : r.refund == EMF_REFUND_DROP     ? fmt("removed entity %u; the item came back as a drop", r.entity)
                                                          : fmt("removed entity %u; the item came back to player %u (a drop "
                                                                "at the object if it did not fit)", r.entity, r.player));
-    if (r.flags & EMF_REMOVE_FORCE) command_reply_line("anything it held lies on the ground where it stood");
+    const CoreState* st = core_state();
+    if (!(r.flags & EMF_REMOVE_FORCE) || !st || st->last_forced_remove.entity != r.entity) return;
+    const uint32_t held = st->last_forced_remove.held, dropped = st->last_forced_remove.dropped;
+    if (held == 0) return;  // it held nothing
+    if (dropped == held)
+        command_reply_line(fmt("what it held (%u stack%s) lies on the ground where it stood", held, held == 1 ? "" : "s"));
+    else
+        command_reply_line(fmt("%u of the %u stacks it held lie%s on the ground where it stood; the rest could not be "
+                               "dropped (see the log)", dropped, held, dropped == 1 ? "s" : ""));
 }
 
 }  // namespace

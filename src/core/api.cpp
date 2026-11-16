@@ -895,13 +895,17 @@ bool drop_refund(EmfWorld* w, uint32_t item, const double pos[3]) {
     return false;
 }
 // force: what it held drops at its spot, a pickup per stack side by side (item, count, level, rarity; the owner saw a
-// forced chest's items lost). False when a stack could not be dropped (logged).
-bool drop_contents(EmfWorld* w, const RemoveFacts& f) {
+// forced chest's items lost). The stacks with items (*held) and how many of them were dropped whole (a stack that could
+// not be is logged).
+uint32_t drop_contents(EmfWorld* w, const RemoveFacts& f, uint32_t* held) {
     auto fn = reinterpret_cast<SpawnWrapperFn>(api_resolve("SpawnWrapper"));
     const uint8_t* reg = item_registry(w);
-    size_t dropped = 0;
+    uint32_t dropped = 0;
+    *held = 0;
     for (size_t i = 0; i < f.contents.size(); ++i) {
         const ContentStack& c = f.contents[i];
+        if (c.count == 0) continue;  // an empty slot: nothing to drop
+        ++*held;
         const auto rec = fn ? item_by_id(reg, c.item) : std::nullopt;
         const double a = 2.39996 * static_cast<double>(i);  // the golden angle: stacks spread round the spot
         const double r = 0.3 + 0.15 * std::sqrt(static_cast<double>(i));
@@ -918,9 +922,8 @@ bool drop_contents(EmfWorld* w, const RemoveFacts& f) {
         else
             core_log("remove_building: a stack of item " + std::to_string(c.item) + " could not be dropped (" + why + ")");
     }
-    core_log("remove_building: dropped " + std::to_string(dropped) + " of " + std::to_string(f.contents.size()) +
-             " stack(s) it held");
-    return dropped == f.contents.size();
+    core_log("remove_building: dropped " + std::to_string(dropped) + " of " + std::to_string(*held) + " stack(s) it held");
+    return dropped;
 }
 void refund_put_done(EmfWorld* w, uint32_t, uint32_t item, uint32_t, uint32_t added, void* user) {
     std::unique_ptr<RefundLater> r(static_cast<RefundLater*>(user));
@@ -940,6 +943,7 @@ bool api_remove_building(EmfWorld* w, EmfRemoveBuilding* req) {
     }
     req->refunded = 0;
     req->why[0] = 0;
+    g_state->last_forced_remove = {};
     auto refuse = [req](const std::string& why) {
         std::snprintf(req->why, sizeof(req->why), "%s", why.c_str());
         std::string line = "remove_building refused (entity " + std::to_string(req->entity) + "): " + why;
@@ -985,7 +989,11 @@ bool api_remove_building(EmfWorld* w, EmfRemoveBuilding* req) {
     if (!destroy_entity(fn, raw(w), req->entity)) return refuse("the game's destroy call failed (see the log)");
     removed.ids.push_back(req->entity);
     if (g_state && g_state->offers) g_state->offers->forget(req->entity);
-    if ((req->flags & EMF_REMOVE_FORCE) && !facts.contents.empty()) drop_contents(w, facts);
+    if (req->flags & EMF_REMOVE_FORCE) {
+        auto& said = g_state->last_forced_remove;
+        said.entity = req->entity;
+        if (!facts.contents.empty()) said.dropped = drop_contents(w, facts, &said.held);
+    }
     if (!plan.refund_item) return true;
     req->refunded = plan.refund_item;
     if (req->refund == EMF_REFUND_PLAYER) {

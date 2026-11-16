@@ -58,12 +58,14 @@ void* b_tpl(uint8_t*, uint32_t hash, uint32_t entity) {
 }  // (the game's getTemplateComponent; the size comes from the registry, unknown in these fake worlds)
 int g_bspawns = 0;
 std::vector<uint32_t> g_pickup_amounts;
+uint16_t g_pickup_fails = 0;  // != 0: a pickup of this amount is not created (the game's spawn gives no entity)
 uint32_t b_spawn(void*, const void*, const SpawnSlice* comps) {
     ++g_bspawns;
     for (uint64_t i = 0; i < comps->count; ++i)
         if (comps->ptr[i].hash == kHashPickupItem) {
             uint16_t a = 0;
             std::memcpy(&a, static_cast<const uint8_t*>(comps->ptr[i].data) + 26, 2);
+            if (g_pickup_fails && a == g_pickup_fails) return 0;
             g_pickup_amounts.push_back(a);
         }
     return 7000 + g_bspawns;
@@ -1046,14 +1048,14 @@ TEST_CASE("builtin commands: stack's reply names the item as the game shows it")
 
 namespace {
 // v36 remove: 60 a placed object (item 0x11), 61 a placed chest holding items, 62 a world object (no UsedItem),
-// 63 placed, for a refund to a player; 64 placed, holding an item the registry does not know; 50 another player, 42
-// the local player.
+// 63 placed, for a refund to a player; 64 placed, holding an item the registry does not know; 65 a placed chest
+// holding two stacks (3 x 0x11, 5 x 0x22); 50 another player, 42 the local player.
 int64_t g_rm_xf[7] = {int64_t(100) << 32, int64_t(900) << 32, int64_t(200) << 32, 0, 0, 0, 0};
 void* rm_gc(void* out, void* w, uint32_t hash, uint32_t entity) {
     namespace gen = emf::gen::ecs;
     b_gc(out, w, hash, entity);
     auto o = static_cast<uint64_t*>(out);
-    const bool ours = entity >= 60 && entity <= 64;
+    const bool ours = entity >= 60 && entity <= 65;
     if (hash == off::kHashCurrentTransform && ours) {
         o[0] = reinterpret_cast<uint64_t>(g_rm_xf);
         o[1] = 56;
@@ -1079,6 +1081,15 @@ void* rm_gc(void* out, void* w, uint32_t hash, uint32_t entity) {
     if (hash == gen::Inventory::kHash && entity == 64) {
         o[0] = reinterpret_cast<uint64_t>(&odd);
         o[1] = sizeof(odd);
+    }
+    static gen::Inventory two{};
+    two.slots[0].id.value = 0x11;
+    two.slots[0].data.count = 3;
+    two.slots[1].id.value = 0x22;
+    two.slots[1].data.count = 5;
+    if (hash == gen::Inventory::kHash && entity == 65) {
+        o[0] = reinterpret_cast<uint64_t>(&two);
+        o[1] = sizeof(two);
     }
     return out;
 }
@@ -1113,7 +1124,7 @@ TEST_CASE("builtin commands (v36): remove takes a placed object away like a pick
     CHECK(bsaid("removed entity 60; the item came back as a drop"));
     CHECK(bsaid("entity 61 not removed: it holds items (2 stacks)"));
     CHECK(bsaid("removed entity 61"));
-    CHECK(bsaid("anything it held lies on the ground where it stood"));
+    CHECK(bsaid("what it held (1 stack) lies on the ground where it stood"));
     CHECK(bsaid("entity 64 not removed: what it holds cannot be dropped"));
     CHECK(bsaid("entity 62 not removed: not something a player placed"));
     CHECK(bsaid("entity 50 not removed: that is a player"));
@@ -1121,6 +1132,40 @@ TEST_CASE("builtin commands (v36): remove takes a placed object away like a pick
     CHECK(bsaid("entity 63 not removed: the refund's player is not a player"));
     CHECK(g_pickup_amounts == std::vector<uint32_t>{1, 65535, 4465, 1});  // 60's drop, 61's 70000, 63's (no inventory)
     CHECK(bsaid("usage: remove <entity> [me|drop|<player>] [force]"));
+}
+
+TEST_CASE("builtin commands (v36): remove ... force says what became of what it held: nothing, all of it on the ground, or the stacks that could not be dropped") {
+    BFixture f;
+    f.state.get_component = rm_gc;
+    ItemsWorld iw;
+    MapStore ents;
+    emf::test::plant_entities(iw.w, ents, {42, 50, 60, 61, 63, 65});
+    g_pickup_fails = 0;
+    f.center.enqueue("remove 60 force");  // holds nothing
+    f.run(iw.w);
+    CHECK(bsaid("removed entity 60"));
+    CHECK_FALSE(bsaid("on the ground"));
+    CHECK_FALSE(bsaid("held"));
+    g_bout.clear();
+    f.center.enqueue("remove 61 force");  // one stack of 70000 (two pickups) and an empty slot
+    f.run(iw.w);
+    CHECK(bsaid("removed entity 61"));
+    CHECK(bsaid("what it held (1 stack) lies on the ground where it stood"));
+    g_bout.clear();
+    g_pickup_fails = 5;                   // 65's second stack cannot be dropped
+    f.center.enqueue("remove 65 force");
+    f.run(iw.w);
+    CHECK(bsaid("removed entity 65"));
+    CHECK(bsaid("1 of the 2 stacks it held lies on the ground where it stood; the rest could not be dropped (see the "
+                "log)"));
+    CHECK_FALSE(bsaid("what it held (2 stacks) lies on the ground"));
+    g_bout.clear();
+    g_pickup_fails = 0;
+    f.center.enqueue("remove 63 force");  // holds nothing: the last remove's stacks are not said again
+    f.run(iw.w);
+    CHECK(bsaid("removed entity 63"));
+    CHECK_FALSE(bsaid("held"));
+    CHECK(g_destroyed == std::vector<uint32_t>{60, 61, 65, 63});
 }
 
 namespace {
