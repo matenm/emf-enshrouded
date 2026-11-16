@@ -555,7 +555,7 @@ From the mods in the EMF zip (only while that mod runs):
 - lua.status: every Lua mod and whether it runs [lua]
 - lua.perf: how long each Lua mod took per world step since the last lua.perf [lua]
 - lua.reload: reload the Lua mods whose files changed (this also happens every second) [lua]
-- loot.toggle [on|off]: your Loot Magnet (corpses of creatures killed near you come to you) [loot_magnet]
+- loot.toggle [on|off]: your Loot Magnet (the loot of kills and what lies near you come to you) [loot_magnet]
 - loot.status: is your Loot Magnet on, and its rules [loot_magnet]
 - sleep.status: who is asleep, and whether the day is being skipped [sleep]
 - sleep.pretend [on|off]: every player counts as asleep (host, for tests) [sleep]
