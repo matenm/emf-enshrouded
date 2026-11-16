@@ -369,7 +369,7 @@ dedicated server; see [server.md](server.md)).
 | `types` | list of damage type names: `"cut"`, `"pierce"`, `"blunt"`, `"fire"`, `"ice"`, `"shroud"`, `"lightning"`, `"poison"`, `"wood"`, `"stone"`, `"metal"`, `"explosion"` |
 | `attack`, `attacks` | the attack's kind: `"melee"`, `"ranged"`, `"magic"`, `"tool"`, `"other"`, `"aoe"` or `"skillshot"` (nil for a `emf.damage` hit); `attacks` lists every kind the hit has (most have one) |
 | `weapon_item`, `weapon_category`, `program`, `impact`, `reaction` | the weapon's item id (0 = none or not known), the game's weapon category hash, the attack's impact program, the swing or projectile (hits of one share it), the hit reaction type |
-| `health_before`, `health_after` | the target's health around the hit; nil when not known |
+| `health_before`, `health_after` | the target's health before and after the hit; nil when not known. For an entity hit (`kind` `"hit"`) `health_before` is always nil (`fn` runs after the hit landed) and `health_after` is the health after the server's step |
 | `kind` | `"hit"` (an entity hit), `"fall"`, `"shroud"`, `"cold"` or `"drowning"`: see "Fall, shroud, cold and drowning" below |
 | `instant` | true when the game set health to 0 at once: deadly shroud, or a creature (not a player) out of air |
 | `from_mod` | true for a hit made by `emf.damage` |
@@ -382,7 +382,9 @@ a rule matches damage hits only, so "no PvP" does not stop a friend's heal), the
 dropped: no damage, number, reaction, aggro, XP credit or destruction), `scale` (amount times scale; a blocked hit's
 stamina too), `add` (added after the scale), `min_health` (the target keeps at least that much health: 1 = it cannot
 die from hits). A damage hit never becomes a heal and a heal never becomes damage. Rules apply in id order; cancel
-wins. An unknown field or a bad name is an error. A script's rules are removed when it reloads, unloads or pauses.
+wins. A hit the game passes up a target of several parts (from the part struck to its parent) meets the rules once, at
+the first level that takes hits: `min_health` guards that level's health. A cancelled hit never reaches `on_hit`. An
+unknown field or a bad name is an error. A script's rules are removed when it reloads, unloads or pauses.
 
 ### Fall, shroud, cold and drowning
 
@@ -400,7 +402,7 @@ error.
 - Fall is once per landing. Shroud, cold and drowning come every server step (about 60 a second) while the shroud timer is
   out, body heat is 0 while freezing, or oxygen is 0. `scale` is exact there (0.5 halves 1-point ticks: EMF carries the
   fraction). `add` is per event, so about 60 times a second on those three.
-- `min_health` works on every kind. A cancelled hit never reaches `on_hit` (entity hits too); a cancel gives back no mana or
+- `min_health` works on every kind, and a cancelled hit of any kind never reaches `on_hit`. A cancel gives back no mana or
   stamina the attacker spent. `add` on a healing rule is added to a negative amount: a positive `add` makes the heal smaller. A cancelled fall gives the health back, but the
   game's hard-landing stagger still plays.
 
@@ -560,7 +562,7 @@ Details: [reference.md](reference.md), "v35". The sample minimap in `mods/minima
 |---|---|
 | `emf.player_view()` | `{x, y, z, heading, camera_yaw, world_size}`, or nil when there is no player yet. Degrees: 0 north (+z), 90 east (+x). `camera_yaw` is nil until a frame of the 3D view was seen. |
 | `emf.fog_at(x, z)` | 0 (unexplored) .. 1 (explored) on this game's map, or nil. A copy refreshed twice a second. |
-| `emf.map_markers()` | a list of `{type, x, y, z, shown}`: the game's own map markers (altars, shrines, places found). `shown` is true when the game's map shows it. |
+| `emf.map_markers()` | a list of `{type, x, y, z, shown}`: the game's own map markers (altars, shrines, places found). `shown` is true when the game's map shows it. There is no label or name. |
 | `emf.canvas(id, spec)` | places a canvas. `spec` = `{corner = "top_left" \| "top_right" \| "bottom_left" \| "bottom_right", x, y, w, h, shape = "rect" \| "circle", hidden}`. `x`, `y` are measured from the corner, inward; all sizes are in units of a 1080-pixel-high screen; `w`, `h` are 8 to 1080. `spec` nil removes the canvas. Your canvases go when the script reloads, pauses or unloads (the core id is `"<mod id>:<id>"`). |
 | `emf.canvas_draw(id, list)` | the canvas's drawing, replacing the last one. At most 2048 items. |
 
@@ -585,7 +587,9 @@ the game's own world map, drawn by the game, so it looks like the map screen (re
 up: turn your own arrow and icons.
 
 Draw order: the game draws `"map"` before EMF draws anything else. Items before your last `"map"` are under it and are
-drawn only when the game cannot draw the map. Put the background first, then `"map"`, then the rest. The game clips its
+drawn only when the game cannot draw the map. Put the background first, then `"map"`, then the rest. Canvases that
+overlap: the maps of all of them come first, then the rest of each canvas (in the order they were made), so one canvas's
+shapes show over another canvas's map even where that canvas lies on top. The game clips its
 map to the canvas's rectangle, also for a round canvas. Canvases are hidden where markers are: on the map screen, in
 menus and in the console.
 

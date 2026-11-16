@@ -210,7 +210,7 @@ value that moves is reported to the mod as a change.
 
 | C++ | C | Rules |
 |---|---|---|
-| `emf::hud(id, text, place, rgba)` | `hud_set(id, text, place, rgba)` | keeps a line of text on screen until changed; empty text removes it. `id`: 1-48 of `A-Za-z0-9_.-` (prefix your mod); `place`: `EMF_HUD_TOP_RIGHT` (default), `EMF_HUD_BOTTOM_RIGHT`, `EMF_HUD_BOTTOM_LEFT`; `rgba` 0xRRGGBBAA (0 = default). At most 32 lines in all; hidden while the console is open and while no world runs (main menu, loading); text longer than 160 bytes is cut. The player can move, scale and hide each place in the HUD editor (parts `lines_top_right`, `lines_bottom_right`, `lines_bottom_left`). Any thread. |
+| `emf::hud(id, text, place, rgba)` | `hud_set(id, text, place, rgba)` | keeps a line of text on screen until changed; empty text removes it. `id`: 1-48 of `A-Za-z0-9_.-` (prefix your mod); `place`: `EMF_HUD_TOP_RIGHT` (default), `EMF_HUD_BOTTOM_RIGHT`, `EMF_HUD_BOTTOM_LEFT`; `rgba` 0xRRGGBBAA (0 = default). At most 32 lines in all; hidden while the console is open (except behind the HUD editor's page, where they show so the player can place them) and while no world runs (main menu, loading); text longer than 160 bytes is cut. The player can move, scale and hide each place in the HUD editor (parts `lines_top_right`, `lines_bottom_right`, `lines_bottom_left`). Any thread. |
 | `emf::has_v12()` | — | true when the core has it. |
 
 ## v13: settings and mod info
@@ -749,7 +749,7 @@ dedicated server); a joined player's game sees no hits and needs nothing.
 
 | C | C++ | What |
 |---|---|---|
-| `on_hit(cb, user)` | `api()->on_hit(cb, user)` | `cb(world, const EmfHit*, user)` after the server world's step, on its thread, once per hit the server applied to an entity, from the game's `HitEvent`: the final numbers, `EMF_HIT_KILLED` on the killing blow, `health_after` = the target's health then (`health_before` is -1). Not for terrain or building hits. Works on any game build where `on_event` works. False for a null `cb` or 16 callbacks already (logged). |
+| `on_hit(cb, user)` | `api()->on_hit(cb, user)` | `cb(world, const EmfHit*, user)` after the server world's step, on its thread, once per hit the server applied to an entity, from the game's `HitEvent`: the final numbers, `EMF_HIT_KILLED` on the killing blow, `health_after` = the target's health then (`health_before` is -1). A hit a rule or `on_hit_before` cancelled never comes. Not for terrain or building hits. Works on any game build where `on_event` works. False for a null `cb` or 16 callbacks already (logged). |
 | `on_hit_before(cb, user)` | `api()->on_hit_before(cb, user)` | `cb(world, EmfHit*, user)` inline for each landing entity hit, after the rules and before the game applies it: change `amount`, `stamina`, `reaction` or set `cancel`. It runs on the game's impact thread inside the world's step, so: **be fast**, change only the hit, read only the hit's entities (their `Health`, `Stamina`, `Mana`), no spawn, kill or component writes (`damage` only queues). Once per hit, also for a target of several parts. A callback that faults is switched off. False when the hook is not usable on this game build, for a null `cb` or 16 already (logged). |
 | `hit_rule_add(&rule)` | `emf::add_hit_rule(r)` | adds a rule the core applies to every landing entity hit before the `on_hit_before` callbacks, in id order, without calling the mod. Its id, or 0 when refused (logged: a bad rule, 64 rules already, the hook not usable on this game build). Any thread; it counts from the next hit. `emf::hit_rule()` returns a rule with the defaults (`size` set, `scale` 1). |
 | `hit_rule_remove(id)` | `emf::remove_hit_rule(id)` | removes a rule. False: no rule with that id. |
@@ -766,7 +766,10 @@ known), `program` (the attack's impact program), `impact` (the swing or projecti
 (the game's hit reaction type: 0 none, 2 light), `target_faction`, `from_mod` (1 = a `damage` hit), `health_before` and
 `health_after` (-1 = not known; before the hit `health_after` is what it will be as the hit stands), `position`
 (metres), `cancel` (before the hit: 1 drops it silently). `amount`, `stamina`, `reaction` and `cancel` are the fields
-`on_hit_before` may change. A blocked or parried hit changes stamina, not health: its `amount` is 0.
+`on_hit_before` may change. A blocked or parried hit changes stamina, not health: its `amount` is 0. A hit the game
+passes up a target of several parts (from the part struck to its parent) gets the rules and `on_hit_before` once, at
+the first level that takes hits (an entity whose `CombatFlags` has `handleHits`, or one without `CombatFlags`): there
+`part` is that level's entity and `health_before` its health, which `min_health` guards.
 
 Flags: `EMF_HIT_BLOCKED` 0x1, `EMF_HIT_PARRIED` 0x2, `EMF_HIT_CRIT` 0x8, `EMF_HIT_BACKSTAB` 0x20, `EMF_HIT_WEAKSPOT` 0x40,
 `EMF_HIT_KILLED` 0x2000 (after the hit only; also on a fall, shroud, cold or drowning hit that left no health), `EMF_HIT_HEALING` 0x4000, `EMF_HIT_INSTANT` 0x01000000 (kinds 1 to 4 only: see below). `EMF_HIT_TERRAIN` and `EMF_HIT_BUILDING` are
@@ -782,7 +785,7 @@ keeps at least that much health, only when its health is known), and `kinds` (a 
 `EMF_HIT_KINDS_ALL` 0x1F; 0 = entity hits only, so a rule made before v31 got kinds keeps its meaning). Rules apply in id order: a `cancel` wins; for every
 matching rule `amount = trunc(amount * scale) + add`, but a damage hit never becomes a heal and a heal never becomes
 damage; then the largest `min_health` caps the damage. A cancelled hit: no damage, no damage number, no reaction, no
-aggro, no XP credit, no destruction.
+aggro, no XP credit, no destruction, and no `on_hit`.
 
 EMF detours the game's `applyHitToEntity` (checked on game build 1287369, game and dedicated server). When it cannot be
 used on a build, `hit_rule_add` and `on_hit_before` are refused (logged once) and `on_hit` still works. The console
@@ -1000,7 +1003,7 @@ the surface and the bed. A player
 teleported there should land 0.5 m under `water_y` without `EMF_TELEPORT_FIND_GROUND` (the game's search would take the
 lake's bed; at the surface itself a player falls in, dives and sinks to the bed; 1 m under it they hang still, drowning:
 seen in game). The water comes from the game's own water simulation (`WaterSurfacePlane`); where this build has none, `water`
-stays 0.
+stays 0. Lakes were checked in game, the sea not yet: a spot at sea, above all far from the coast, may read as no water.
 
 ```cpp
 static void on_ground(EmfWorld*, const EmfGround* g, void* user) {
@@ -1034,7 +1037,8 @@ nothing, and these functions answer false or 0 there. The sample minimap (`mods/
   False at the main menu and before the player is known.
 - `fog_at` gives the fog of war at a point: 0 unexplored .. 1 explored. It reads a copy that is refreshed twice a second.
 - `map_markers` gives the game's own map markers (altars, shrines, places found) as its map list had them last: at
-  most 512. `EMF_GAME_MARKER_SHOWN` is set when the game's map shows one.
+  most 512. `EMF_GAME_MARKER_SHOWN` is set when the game's map shows one. Each has its icon type and position only, no
+  label or name.
 - `canvas_set` makes, changes or removes a canvas. `corner`, `x`, `y` (measured from the corner, inward) and `w`, `h`
   are in units of a 1080-pixel-high screen; `w` and `h` are 8..1080. `shape` is `EMF_CANVAS_RECT` or
   `EMF_CANVAS_CIRCLE`. A canvas belongs to the mod that made it (another mod cannot change it). 32 canvases at most.
@@ -1051,7 +1055,9 @@ nothing, and these functions answer false or 0 there. The sample minimap (`mods/
   It is north up: a mod turns its own arrow and icons.
 - Draw order: the game draws the MAP command before EMF draws anything else. What a list puts BEFORE its last MAP
   command is under the map, and EMF draws it only when the game cannot draw the map. Put a background first, then the
-  map, then what goes on top.
+  map, then what goes on top. Canvases that overlap: the game draws the maps of all of them first, then EMF draws the
+  rest of each canvas, in the order they were made, so one canvas's shapes show over another canvas's map even where
+  that canvas lies on top.
 - The game clips its map to the canvas's rectangle, also for a round canvas. A mod that wants a round look draws a ring
   over the corners.
 - EMF hides canvases where it hides markers: on the map screen, in menus and in the console.

@@ -1166,8 +1166,9 @@ typedef struct EmfApi {
     /* Keeps a line of text on screen until it is changed or removed: `id` names it (1-48 of A-Z a-z 0-9 _ . -; prefix it
      * with your mod, e.g. "clock.time"), `text` replaces it (up to 160 characters; NULL or "" removes the line), `place`
      * is EMF_HUD_TOP_RIGHT / _BOTTOM_RIGHT / _BOTTOM_LEFT (lines of one place are listed by id), rgba = 0xRRGGBBAA (0 =
-     * the default colour). At most 32 lines across all mods. Not shown while the console is open, while no world runs (main
-     * menu, loading) or when the overlay is off (the lines are kept). Text longer than 160 bytes is cut. False (logged) for a bad id or place, or when 32 other lines exist. Any thread. */
+     * the default colour). At most 32 lines across all mods. Not shown while the console is open (except behind the HUD
+     * editor's page, where the player places them), while no world runs (main menu, loading) or when the overlay is off
+     * (the lines are kept). Text longer than 160 bytes is cut. False (logged) for a bad id or place, or when 32 other lines exist. Any thread. */
     bool (*hud_set)(const char* id, const char* text, uint32_t place, uint32_t rgba);
 
     /* ---- v13: settings and mod info ---- */

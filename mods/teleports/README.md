@@ -59,9 +59,10 @@ Let go early, right-click or close the map to cancel; the click does not reach t
   When the shroud there cannot be read within 5 seconds, the teleport goes ahead; with a low Flame level the deadly
   shroud can then kill you before the way back.
   The ordinary shroud is allowed (its timer runs, as when you walk in).
-- **Water:** a spot in a lake (at least 1 m deep) puts you in the water at its surface, swimming, not on its bed (1.1.1;
-  the sea far out is not checked yet). A spot whose bed is in the deadly shroud is refused as on land. Teleporting out
-  of the water works as from land.
+- **Water:** a spot in a lake (at least 1 m deep) puts you in the water at its surface, swimming, not on its bed
+  (1.1.1). The sea has not been checked yet: a spot there, above all far from the coast, may not count as water, and
+  then you land on the bed. A spot whose bed is in the deadly shroud is refused as on land. Teleporting out of the water
+  works as from land.
 - Letting go early, right-clicking, closing the map or switching to another window cancels the hold.
 - **`/tp.mark`**: to your map waypoint (right-click a spot on the map, Set Waypoint), with the same rules. Admins:
   `tp.mark #k` sends player k to their own waypoint.
