@@ -758,8 +758,16 @@ and account. Never a corpse twice, a player's or an ally's body, a farm animal, 
 within the base radius of a flame altar; by default only corpses that hold nothing but materials. A full inventory
 loses nothing (what does not fit stays where it was). Most creatures leave their loot in a loot spot where they died
 (a loot container the game spawns as the body fades): the magnet takes that one, or the body when it keeps its loot.
+From 2.0 it also takes, once a second, what lies near each player whose magnet is on, each kind with its own switch and
+reach:
+- on by default: items on the ground (drops, sticks and stones after chopping or mining, loose stones and twig piles)
+  and collectibles;
+- off by default: mushrooms, fireflies and bait bugs, wild plants, chests in ruins (opened as you would, then emptied;
+  never a player's chest or one that needs a lockpick or key), and barrels, crates and urns to smash.
+Never inside a base (smashing 10 m more), never a quest item, never what is on its ignore list.
 Settings: reach, delay after the kill, how long it looks for loot (the loot appears 1-3 s after the death), what comes, arrows,
-default for new players, the host's key, base radius. Details: `mods/loot_magnet/README.md`.
+the groups and their reaches, the ignore list, default for new players, the host's key, base radius. Details:
+`mods/loot_magnet/README.md`.
 
 ## The champion mod (Wandering Champion, Lua)
 Installed switched off: switch it on in the Mods tab or EMF.exe. Every so often, while a player is outdoors at night, a champion (the Vukah brawler mini-boss, with its boss bar)

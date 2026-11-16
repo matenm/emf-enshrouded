@@ -1,11 +1,16 @@
 # Loot Magnet (`loot_magnet`)
 
-Kill a creature, and a moment later what it carried is in your inventory: the corpses of creatures killed near you are
-looted into you. It runs where the world runs, so on the host or a dedicated server it works for **every player**, also
-those who joined without EMF; each player switches their own magnet.
+Walk around, and the loot comes to you without pressing E:
+- the corpses of creatures killed near you are looted into you;
+- items on the ground and collectibles come too (from 2.0);
+- by choice also mushrooms, fireflies, wild plants, chests in ruins, and barrels, crates and urns to smash.
+
+It runs where the world runs, so on the host or a dedicated server it works for **every player**, also those who
+joined without EMF. Each player switches their own magnet.
 
 It answers the auto-loot request (3.2K votes on the official feature board) for the case no other mod covers: Auto
-Loot Plus and the others work for single player or the host only, and every player has to install them.
+Loot Plus and the others work for single player or the host only, and every player has to install them. 2.0 brings
+Auto Loot Plus's kinds of loot to EMF, with EMF's own code.
 
 ## Switch it on
 
@@ -62,11 +67,46 @@ those (Grave Keeper found that with tombstones). Plain stacks there are taken ou
 is dropped at your feet. **Gear there stays** (taking it out would lose its gems and perks): the log says so, the host
 gets a note, and you open the loot by hand.
 
+## Everything else near you (2.0)
+
+Once a second, for every player whose magnet is on, Loot Magnet looks at what lies near them and takes it the game's
+own way: the same loot event the game sends when you press E. Each group has its own switch and reach (0 = the
+general **Reach**):
+
+| Group (setting) | Default | What it takes |
+|---|---|---|
+| Items on the ground (`pick_ground`) | on | drops, sticks and stones after chopping or mining, what a smashed barrel drops, loose stones and twig piles; never keys, weapons or lore the game placed in the world |
+| Collectibles (`pick_collectibles`) | on | the collection items lying in the world |
+| Mushrooms (`pick_mushrooms`) | off | wild mushrooms |
+| Fireflies and bait bugs (`pick_fireflies`) | off | fireflies and the other critters that are fishing bait |
+| Wild plants (`pick_plants`) | off | herbs, flowers, bushes and wild crops you collect with E; a plant is gone once collected, as by hand |
+| Chests in ruins (`open_chests`) | off | the chests the game placed in the world: it opens them as you would (the game rolls their loot), then empties them |
+| Smash barrels, crates and urns (`smash`) | off | only those that drop loot: one hit with their own health; the drop lies on the ground, and Items on the ground picks it up |
+
+Never:
+- **Inside a base:** within **Never within (m) of a flame altar**. Smashing keeps 10 m more away. So your farm,
+  your chests and your buildings are never touched.
+- **A player's chest:** anything a player placed is never opened.
+- **A locked chest:** one that needs a lockpick or a key is never opened (that would use up the item); once a player
+  opened it with the item, it is.
+- **A quest item:** the game has no mark for them, so names that look like one (Quest, _NPC_, LoreText, MapPiece,
+  Key_) stay where they are. A chest that holds one is left to you.
+- **Items on the ignore list:** **Never pick up**, item names as `items <words>` in the console shows them, comma
+  separated. End one with * for every name that begins so (`Food_T1_raw_*`).
+- **Spawners, nests, bee hives, trees and rocks.**
+
+A full bag loses nothing: what does not fit stays where it is. An item is tried 5 times, 2 s apart, then left until
+you come back.
+
 ## Settings (Mods tab, EMF.exe, or `set loot_magnet <key> <value>`)
 
 | Setting | Default | What it does |
 |---|---|---|
-| Reach (`radius`) | 8 m | 2-20 |
+| Reach (`radius`) | 8 m | 2-20; also for every group whose own reach is 0 |
+| Items on the ground, Collectibles (`pick_ground`, `pick_collectibles`) | on | with their own reach (`pick_ground_reach`, ...: 0-20, 0 = Reach) |
+| Mushrooms, Fireflies and bait bugs, Wild plants (`pick_mushrooms`, `pick_fireflies`, `pick_plants`) | off | each with its own reach |
+| Never pick up (`ignore`) | empty | item names, comma separated; `*` at the end for a beginning |
+| Chests in ruins, Smash barrels, crates and urns (`open_chests`, `smash`) | off | each with its own reach |
 | After the kill (`delay`) | 1 s | 0-10: the loot comes no sooner |
 | Looks for loot for (`window`) | 15 s | 8-60 s after the kill; an older corpse is left to you |
 | What comes (`categories`) | materials | materials (and food) only, or everything |
@@ -74,7 +114,7 @@ gets a note, and you open the loot by hand.
 | On for players who never switched it (`default_on`) | on | |
 | Your key to switch it (`toggle_key`) | none | the host's own magnet |
 | Never within (m) of a flame altar (`base_radius`) | 30 m | 10-100 (a flame altar of a higher level builds a bigger zone: raise it to match) |
-| Log every decision (`debug_log`) | on | a log line per death noted and per corpse decided |
+| Log every decision (`debug_log`) | on | a log line per death noted and per corpse decided; a line for what each sweep took; once a minute, how long the sweep's look took |
 
 ## Why a corpse was not looted
 
