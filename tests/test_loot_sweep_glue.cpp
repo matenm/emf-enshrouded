@@ -281,3 +281,17 @@ TEST_CASE("sweep glue: a player has room while one of their generic slots (backp
     CHECK_FALSE(sweep::has_room(r.w(), 1));
     CHECK_FALSE(sweep::has_room(r.w(), 2));  // no inventory setup: no room known
 }
+
+// Seen in game: some barrels carry RandomLoot, RandomLootContainer and RandomLootOnDestroy as their own components,
+// not their template's; the walk looked at the template only and never saw them.
+TEST_CASE("sweep glue: a barrel whose RandomLootOnDestroy is its own component (not its template's) is found") {
+    Rig r;
+    at(30, 1, 0, 0);
+    comp<gen::RandomLoot>(30);
+    comp<gen::RandomLootContainer>(30);
+    comp<gen::RandomLootOnDestroy>(30);
+    tpl<gen::Destructible>(30).maxHealth = 8;
+    const auto near = sweep::things_near(r.w(), {{0, 0, 0}}, 10, names, {true, false});
+    REQUIRE(near.size() == 1);
+    CHECK(sweep::classify(near[0]) == sweep::Kind::Smash);
+}

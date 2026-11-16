@@ -133,7 +133,8 @@ inline std::vector<Thing> things_near(emf::World w, const std::vector<magnet::Ve
             return;
         }
         if (d > reach) return;
-        if (!w.get<gen::InteractionOfferRuntime>(id) && !(want.smash && template_of<gen::RandomLootOnDestroy>(w, id))) return;
+        // a barrel's RandomLootOnDestroy is its own component on some, its template's on others (both seen)
+        if (!w.get<gen::InteractionOfferRuntime>(id) && !(want.smash && has<gen::RandomLootOnDestroy>(w, id))) return;
         out.push_back(read_thing(w, id, name_of, want));
     });
     std::sort(stages.begin(), stages.end());

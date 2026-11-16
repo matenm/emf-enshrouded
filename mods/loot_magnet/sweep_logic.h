@@ -256,6 +256,7 @@ private:
         uint64_t seen_ms = 0, next_ms = 0, accepted_ms = 0;
         int tries = 0, accepts = 0;
         bool done = false;
+        bool emptied = false;  // a chest: its loot event was sent
         uint64_t fingerprint = 0;
     };
 
@@ -280,6 +281,10 @@ private:
             // the accept would use up a lockpick or a key: it waits for a player to open it with the item
             if ((t.lock_item || t.lock_item_ref) && !t.lock_item_used) return false;
             if (t.stacks.empty()) {
+                if (s.emptied) {  // the magnet took its loot: done, never opened again
+                    s.done = true;
+                    return false;
+                }
                 if (s.accepted_ms && now - s.accepted_ms < kRollMs) return false;  // the roll comes
                 if (s.accepts >= kMaxAccepts) {  // asked twice, nothing rolled: an empty chest, or one that is closed
                     s.done = true;
@@ -307,6 +312,7 @@ private:
                 s.done = true;
                 return false;
             }
+            s.emptied = true;
         } else if (t.pickup) {
             if (t.item.empty()) return false;  // the game names it a moment later
             if (!who.room) return false;       // a part that did not fit could be lost: wait for an empty slot

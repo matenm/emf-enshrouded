@@ -430,3 +430,19 @@ TEST_CASE("sweep: a pickup waits (no try spent) while the player's bag has no em
     REQUIRE(acts.size() == 1);
     CHECK(acts[0].first);
 }
+
+// Seen in game: a chest the magnet emptied was empty again 30 s later and was opened a second time (as if it had
+// rolled nothing): emptied by the magnet, it is done.
+TEST_CASE("sweep: a chest the magnet emptied is done, never opened again") {
+    Sweeper s;
+    const auto r = all_on();
+    Thing c = chest(20);
+    CHECK(s.tick(1000, 1, me(), {c}, {}, r).size() == 1);  // accept
+    c.stacks = {"Material_T1_Twigs"};
+    auto acts = s.tick(2000, 1, me(), {c}, {}, r);
+    REQUIRE(acts.size() == 1);
+    CHECK(acts[0].act == Act::Loot);
+    c.stacks.clear();
+    CHECK(s.tick(2500, 1, me(), {c}, {}, r).empty());
+    CHECK(s.tick(40000, 1, me(), {c}, {}, r).empty());  // no second accept
+}
