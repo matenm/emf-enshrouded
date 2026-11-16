@@ -102,6 +102,7 @@ version the additions need (empty: the v20 the `lua` mod needs is enough). Range
 | 1.35 | `door` on a path's door points | v42, from EMF 0.6.11 |
 | 1.36 | `world:permissions` | v43 |
 | 1.37 | `emf.break_blocks`, `emf.block_at`, `emf.find_wall` | v44 |
+| 1.38 | the world's own blocks (ruins) spared: a block's `world`, the break option `world` | v45 |
 
 ## What happens when a script fails
 
@@ -165,7 +166,7 @@ right away.
 | `emf.enemy_order_cancel(id)` / `emf.enemy_target(world, enemy)` | 1.32: end an order / what the enemy goes for now (or nil) |
 | `emf.enemy_move(world, enemy, points [, opts] [, fn])` | 1.33: the creature walks to a point or through a list of points; the move's id, or nil and why (see "Move orders" below) |
 | `emf.enemy_move_cancel(id)` / `emf.enemy_moving(world, enemy)` | 1.33: end a move / its move's id now (or nil) |
-| `emf.break_blocks(world, x, y, z [, opts], fn)` | 1.37: damages or breaks the player-built blocks around a point, never the ground; `fn(world, result)` after the step; id or nil (see "Breaking blocks" below) |
+| `emf.break_blocks(world, x, y, z [, opts], fn)` | 1.37: damages or breaks the player-built blocks around a point, never the ground and (1.38) never the world's own ruins; `fn(world, result)` after the step; id or nil (see "Breaking blocks" below) |
 | `emf.block_at(world, x, y, z)` / `emf.find_wall(world, from, to)` | 1.37: what is at a point / the first building block on a line, as a table, or nil |
 | `emf.kill(world, id)` | (1.4) kills a creature without a hit: its current health becomes 0 (1.5: through the game's attribute code) and the game's death program sends `EntityDiedEvent` the next step; the corpse keeps its loot. No attacker, no kill credit (`emf.damage` gives one); never a player; host only. true / false |
 | `emf.health(world, id)` | (1.5) the current and maximum health: `local cur, max = emf.health(w, id)`; the game's attributes in a world you host, else the replicated `NetworkHealth`; nil when neither is there |
@@ -776,8 +777,15 @@ end)
 breaks at once the building blocks in a sphere, or a column of spheres, around a point in metres. Never terrain: the
 ground stays. A hole is a normal building change, sent to every player and saved like mining: the game keeps it inside
 a flame altar's area and resets the world outside bases (after about 30 minutes or at a server restart), as it does for
-a pickaxe. The world's ruins are building blocks too. Host only (the server world). It returns an id, or nil (the
-reason is in the log). On a core older than API v44 it is nil.
+a pickaxe. Host only (the server world). It returns an id, or nil (the reason is in the log). On a core older than
+API v44 it is nil.
+
+**The world's own blocks (1.38, API v45).** The world's ruins are building blocks too. EMF tells them from what players
+built by comparing each block with the world as the game shipped it: a block of the shipped material in its shipped
+place is the world's own. A break never touches those, nor a block whose origin is not known (its place is not
+loaded): each sphere stops just short of the nearest one, and a sphere with less than 0.25 m left is skipped. So a hole
+next to a ruin is smaller. A ruin block a player broke and put back in the same material counts as the world's again.
+`world = true` breaks them too. On a 1.37 core (API v44) ruins break like any block.
 
 | `opts` field | What |
 |---|---|
@@ -787,6 +795,7 @@ reason is in the log). On a core older than API v44 it is nil.
 | `damage` | a number for all five hardness classes, or a list of five (Soft, SlightlyHard, ModeratelyHard, Hard, VeryHard), whole, 0 to 100000; default the game's T4 pickaxe (100, 100, 95, 60, 50) |
 | `drops` | `true`: removed blocks drop what a pickaxe gives (each material's item, so many blocks per item) at the hole |
 | `materials` | a list of building material ids 0 to 127 (`emf.block_at`'s `material`); default every one that can break |
+| `world` | 1.38: `true` breaks the world's own blocks too (its ruins); default `false`: they are spared |
 
 Any other key, or a value of the wrong type, is a Lua error. `fn(world, result)` comes once, after the server step that
 ran it: `result.status` is `"done"`, `"cancelled"` (the world ended first) or `"failed"` (breaking is off after a
@@ -796,7 +805,9 @@ finished heals 20 s after the last hit; the game's Unbreakable materials never b
 all mods; the rest wait.
 
 `emf.block_at(world, x, y, z)` and `emf.find_wall(world, from, to)` (positions `{x, y, z}` or `{x = , y = , z = }`; the
-line at most 64 m) give `{kind = "empty" | "terrain" | "building", material, fill, hardness, health, damage, x, y, z}`
+line at most 64 m) give `{kind = "empty" | "terrain" | "building", material, fill, hardness, health, damage, x, y, z,
+world}` (1.38: `world` is `true` for the world's own block, a ruin as shipped, `false` for a player's, nil when not known
+or not a building block)
 (`hardness` 0 Soft .. 4 VeryHard, 5 Unbreakable; `damage` 0..255 so far, nil when unknown; `x, y, z` the block's
 centre), or nil (the line is clear, the place is not loaded, not the server world, an older core). Inside a world
 callback on the server world, like `world:get`.

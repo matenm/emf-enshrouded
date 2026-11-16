@@ -1,7 +1,7 @@
 # EMF API reference
 
 The C API is one table of function pointers, `EmfApi`, declared in `sdk/include/emf/emf_api.h` and passed to your
-`emf_mod_load`. It only grows: each version appends functions at the end (`EMF_API_VERSION` 42 today), so a mod built
+`emf_mod_load`. It only grows: each version appends functions at the end (`EMF_API_VERSION` 45 today), so a mod built
 for an older version works with a newer core. Another framework that runs EMF mods: see [hosting.md](hosting.md). `sdk/include/emf/emf.hpp` wraps it in C++; prefer the wrappers.
 
 **Threads.** "World callback" below means: inside `on_tick`, `run_on_world`, `on_event`, a command, a put/take result
@@ -1363,7 +1363,7 @@ Player-built blocks are voxels with a building material; the ground is terrain. 
 code with a table of its own, so it never touches terrain: the ground under a hole stays. A removed block is a normal
 building change: sent to every player and saved like mining. The game keeps changes inside a flame altar's area and
 resets the world outside bases (after about 30 minutes, or at a server restart) as it does for a pickaxe; raids happen
-at bases. The world's ruins are building blocks too (the game keeps no owner per block). Server world only (a game you
+at bases. The world's ruins are building blocks too; from v45 breaks spare them (below). Server world only (a game you
 host or the dedicated server).
 
 | C | What |
@@ -1394,6 +1394,25 @@ Console (admins from the chat; host or dedicated server): `blocks [at <x> <y> <z
 along your camera, or at a point) and `break [radius 0.25-3.5] [instant] [drops] [height <m>] [at <x> <y> <z>]` (the
 answer, "damaged N, removed M, dropped K", follows after the step).
 
+## v45: the world's own blocks (ruins) are spared
+
+The game keeps the world as it shipped it (its ruins in it) under the changes the world saves. EMF reads both: a
+building block whose material is the shipped one in that place is the world's own; one that differs (built on air or
+terrain, another material) is a player's. Seen live on a ruin and on a player's house.
+
+- `break_blocks` spares the world's own blocks, and blocks whose origin is not known (their place is not loaded): each
+  sphere stops just short (0.01 m) of the nearest such block, because the game's code breaks every block whose centre
+  is within the radius; a sphere with less than 0.25 m left is skipped. A hole next to a ruin is smaller.
+  `EMF_BREAK_WORLD` (flag `0x4`) breaks them too; a v44 core refuses the flag.
+- `block_at` and `find_wall` fill `EmfBlockInfo.world` (appended; written when `size` covers it): 1 the world's own, 0 a
+  player's, -1 not known; 0 for terrain and empty. `find_wall` still returns the first building block on the line, with
+  its flag: a wall of ruin is no wall to break.
+- When the shipped world cannot be read (a signature missing after a game update), every building block counts as not
+  known: breaks spare everything (`EMF_BREAK_WORLD` still breaks). A ruin block a player broke and refilled with the same
+  material counts as the world's again. C++: `emf::has_v45()`.
+- Console: `blocks origin [at <x> <y> <z>]`: the block where you look (or at a point) now, the shipped one there, and
+  whether it is the world's own.
+
 ## SDK headers (header-only C++, no ABI)
 
 | Header | What |
@@ -1421,7 +1440,7 @@ every mod under a name, as in EMF.exe; a load applies at the next start), `hud.l
 for the server world's jobs and each mod), `goto [#k] <x> <y> <z> [ground]` / `goto [#k] <entity> [ground]`
 (v20: teleports you, or the k-th player, there or beside that entity; the result follows a few steps later). Coordinates for `goto`, `path`, `spawn ... at` and Teleports' `tp.pos` can be written many ways: `3 4 5`, `3, 4,5`, `(3, 4, 5)`, `[3 4 5]`, `<3> <4> <5>`, `3;4;5`, or a pasted `pos` line (`player 1 at (3.0, 4.0, 5.0) m`). For mod makers: `emf::coordinate_words(words)` in `emf.hpp` turns such words into plain numbers, `entities`, `near [radius]`, `inv <entity>`, `health <entity> [percent 1-100]` (read, or set to that share of the maximum; refused while it reads 0: dead, or a spawn not set up yet), `god [entity|me] [on|off]` (v31: the entity, you by default, keeps at least 1 health from hits, falls, the shroud, the cold and drowning, through one hit rule; `god` alone lists who has it; it ends with `off`, when a player leaves, when the entity is gone, and when a new world starts; refused while health reads 0), `ai <entity>` (the enemy01 state, the guarded entity, the combat target, the aggro entries and the faction),
 `inspect <entity>`, `tpl <entity> <component> [bytes] [offset]`, `tplset <entity> <component> <offset> <type> <value>`,
-`stack <item> <max>`, `destroy <entity>`, `remove <entity> [me|drop|<player>] [force]` (v36: removes a placed object like a pick-up; `me` (or `player`) gives the item back to whoever typed the command; `drop` leaves its item on the ground, a player number puts it in that player's inventory, `force` also removes a non-empty container), `path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000]` (v37: a path from you to that spot on the game's path grid; prints `path N: asked ...`, then the answer: found or why not, whether it reaches or stops short, the points, the metres, where it ends, and the jumps and doors; `doors` (0.6.11) lets it open doors, and each door point names its door entity), `path.door <entity>` (0.6.11, host: what the game's path grid knows about a door, after a step: whether it is in the grid's door table ("not in the path grid's door table (N doors registered)" if not), open or closed there (kind 1 or 2; 3 is a moving object), its box in metres, the door row (the box's lowest 1 m node layer: a closed door's ClosedDoor nodes), and for the node in the row's middle whether its cell is built, its node type (19 ClosedDoor), ground or not, and its room across and up; "not available on this game build" where EMF does not know the grid's layout), `blocks [at <x> <y> <z>]` and `break [radius 0.25-3.5] [instant] [drops] [height <m>] [at <x> <y> <z>]` (v44: the player-built block where you look or at a point; break the blocks there, never the ground; admins from the chat), `door <entity> [open|close|lock|unlock] [front|back]` (v38: without a word it prints the state: "closed", "open, locked", "driven by a switch" or "not a door"; `items door` lists door items and `spawn <guid>` puts one down for a test), `chat.players` (v19: the players of the world you host or of the
+`stack <item> <max>`, `destroy <entity>`, `remove <entity> [me|drop|<player>] [force]` (v36: removes a placed object like a pick-up; `me` (or `player`) gives the item back to whoever typed the command; `drop` leaves its item on the ground, a player number puts it in that player's inventory, `force` also removes a non-empty container), `path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000]` (v37: a path from you to that spot on the game's path grid; prints `path N: asked ...`, then the answer: found or why not, whether it reaches or stops short, the points, the metres, where it ends, and the jumps and doors; `doors` (0.6.11) lets it open doors, and each door point names its door entity), `path.door <entity>` (0.6.11, host: what the game's path grid knows about a door, after a step: whether it is in the grid's door table ("not in the path grid's door table (N doors registered)" if not), open or closed there (kind 1 or 2; 3 is a moving object), its box in metres, the door row (the box's lowest 1 m node layer: a closed door's ClosedDoor nodes), and for the node in the row's middle whether its cell is built, its node type (19 ClosedDoor), ground or not, and its room across and up; "not available on this game build" where EMF does not know the grid's layout), `blocks [origin] [at <x> <y> <z>]` and `break [radius 0.25-3.5] [instant] [drops] [height <m>] [at <x> <y> <z>]` (v44: the player-built block where you look or at a point; break the blocks there, never the ground; admins from the chat; v45: `origin` says whether the block is the world's own, a ruin as shipped, and breaks spare those), `door <entity> [open|close|lock|unlock] [front|back]` (v38: without a word it prints the state: "closed", "open, locked", "driven by a switch" or "not a door"; `items door` lists door items and `spawn <guid>` puts one down for a test), `chat.players` (v19: the players of the world you host or of the
 dedicated server, with their account hashes for `[chat] admins`, their connection and name), `world.get [setting]`,
 `world.set <setting> <value> [persist]`, `world.reset [setting|all] [persist]`, `world.list`, `world.export` (v21: the
 running world's settings, [world_settings.md](world_settings.md)). Commands go into the in-game console (the key under Esc), the optional
