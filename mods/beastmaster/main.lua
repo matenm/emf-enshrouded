@@ -943,6 +943,23 @@ emf.command("idle", ": what your beasts do while you stand still now", function(
 	emf.reply(account and pack.idle:text(world, account) or "Your account is not known yet.")
 end)
 
+-- Each player's movement as this world sees it, and whether their beasts count them in the air (for live checks: on a
+-- dedicated server, whether a joined player's glide reaches the server).
+emf.command("air", ": each player's movement state as this world sees it, and whether they count as in the air",
+	function(world, args)
+		local lines = {}
+		for _, id in ipairs(world:entities()) do
+			if world:get("PlayerState", id) then
+				local ok, loc = pcall(function() return world:get("DynamicLocomotion", id) end)
+				local x, y = world:position(id)
+				lines[#lines + 1] = string.format("player %d: movement state %s, near the ground %s, height %s, in the air %s",
+					id, tostring(ok and loc and loc.state), tostring(ok and loc and loc.isNearGround),
+					y and string.format("%.1f", y) or "?", tostring(pack.aside:in_air(id, now(world))))
+			end
+		end
+		emf.reply(#lines > 0 and table.concat(lines, "\n") or "No player in the world.")
+	end)
+
 -- Admin: set a beast's loyalty (console only, not from the chat; for tests and live checks).
 local function loyalty_command(world, args)
 	local sender = emf.sender()

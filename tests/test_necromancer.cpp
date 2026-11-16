@@ -857,3 +857,21 @@ TEST_CASE("necromancer: the undead step aside while their owner glides and come 
     for (const auto& [e, a, d] : n.r.fake.attr_adds) paid += e == 1 && a == EMF_ATTR_MANA && d == -25;
     CHECK(paid == 1);
 }
+
+// Seen live with Beastmaster: the game's EntityDiedEvent comes a step or two after the health reads 0; a check in between
+// took the dead minion for gone, so its body (with loot) stayed and its owner heard nothing.
+TEST_CASE("necromancer: a minion whose health reads 0 before the game's death event has fallen: its body goes and its owner hears it once") {
+    NecroRig n;
+    n.spawnable(2);
+    CHECK(n.reply("necromancer.raise").find("rises (1/3)") != std::string::npos);
+    n.seconds(2);
+    n.r.fake.attrs[{1234, EMF_ATTR_HEALTH}] = 0;  // dead, the event not here yet
+    n.seconds(3);
+    CHECK(has(n.r.fake.destroyed, 1234));  // its body: no loot from our own undead
+    deliver(n.r.fake, "EntityDiedEvent", died_event(1234));  // late
+    n.seconds(2);
+    size_t told = 0;
+    for (const auto& x : n.r.fake.notes) told += x.find("fell") != std::string::npos;
+    CHECK(told == 1);
+    CHECK(n.reply("necromancer.list").find("Skeletons 0/3") != std::string::npos);
+}

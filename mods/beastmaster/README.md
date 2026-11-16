@@ -63,7 +63,7 @@ page says who applies them). Without them everything else works and those beasts
    `/beastmaster list` shows them as "aside".
 10. **In the air:** beasts cannot glide, so while you are on the glider (or falling for more than 1.5 s, not a jump)
     your beasts step aside too, and come back beside you, free, a second after you land (the first time a note says
-    so). Before 1.18.0 a beast far from you was brought to your side while you glided, in the air, and fell to its
+    so). A fall counts once you dropped 6 m, a glide while your height changes. Before 1.18.0 a beast far from you was brought to your side while you glided, in the air, and fell to its
     death.
 
 ## The stable
@@ -333,6 +333,7 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 | `beastmaster.threat` | **console:** the monsters held on you or your beasts now, and for how long |
 | `beastmaster.idle` | **console:** what your beasts do while you stand still now (their scenes), or how long you have stood still |
 | `beastmaster.home` | **console:** where your beasts at home are (in a Large Stable) and whether they stroll or rest |
+| `beastmaster.air` | **console:** each player's movement state as this world sees it, and whether their beasts count them in the air (on a dedicated server: whether a joined player's glide reaches the server) |
 | `beastmaster.spawn <species>` | **console, admin:** puts a wild beast of that species 5 m in front of you, to try taming it. Since 1.16.1 a beast being tamed stops fighting you, a tamed beast loses its debuffs (a bleed no longer kills it after taming), and a beast brought back from far away drops its chase and follows you again |
 | `beastmaster.loyalty <name or number> <1-10>` | **host console only:** set a beast's loyalty (tests); the reply says its talent points |
 | `beastmaster.give <species>` | **host console only:** add a beast to your collection without taming it (wolf, boar, sabretooth, hound, bear, aurochs, snake, crimson_snake, golden_snake, albino_snake) |

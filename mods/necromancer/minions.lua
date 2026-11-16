@@ -465,7 +465,13 @@ function P:step(world)
 		for i = #list, 1, -1 do
 			local id = list[i]
 			local kind = self.kind_of[id]
-			if not ours(world, id) then
+			local cur = world:position(id) and emf.health(world, id)
+			local f = cur and cur <= 0 and self.ids[id] and world:get("Faction", id)
+			if f and f.faction == PLAYER_ALLY then
+				-- dead, the game's EntityDiedEvent not here yet (it comes a step or two after; seen live with
+				-- Beastmaster): it fell (its body goes, its owner hears it at the next check)
+				self:on_died(id)
+			elseif not ours(world, id) then
 				forget(self, account, id)  -- gone, or the id names another entity now: never touched again
 				lost(self, account, kind)
 			elseif not owner or away then

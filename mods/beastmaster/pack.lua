@@ -403,6 +403,7 @@ function P:call(world, owner, account, beast)
 	self.idle:stop(world, account)  -- the beasts out get up
 	self.last_call[account] = now
 	self.aside:release(account)  -- the beasts that stepped aside come back too
+	self.back[beast] = nil
 	self.env.save()
 	return string.format("%s the %s comes.", beast.name, species.word(beast.species))
 end
@@ -748,6 +749,8 @@ function P:step(world)
 					b.out = false
 					self.back[b] = nil
 					self.env.save()
+				elseif b.out and not b.entity then
+					self.back[b] = true  -- it comes back after its rest (also a save's beast after a reload)
 				end
 				b.rest = math.max(0, b.rest - dt)
 				any_rest = true
@@ -799,7 +802,7 @@ function P:step(world)
 	for _, e in ipairs(self.fallen) do
 		local owner = present[e.account]
 		if owner then
-			local back = e.beast.out and e.beast.rest > 0
+			local back = self.back[e.beast]
 			self.env.tell(world, owner, string.format(back and "%s fell; it comes back in %s." or "%s fell; it rests for %s.",
 				e.beast.name, mmss(e.beast.rest)))
 		end
@@ -814,11 +817,13 @@ function P:step(world)
 		local stepped = false
 		for _, b in ipairs(beasts:list(account)) do
 			local cur = b.out and b.entity and world:position(b.entity) and emf.health(world, b.entity)
-			if cur and cur <= 0 and self.ids[b.entity] then
-				-- dead, the game's EntityDiedEvent not here yet (it comes a step or two after; seen live): it fell
+			local f = cur and cur <= 0 and self.ids[b.entity] and world:get("Faction", b.entity)
+			local fell = f and f.faction == PLAYER_ALLY
+			if fell then
+				-- dead, the game's EntityDiedEvent not here yet (it comes a step or two after; seen live): it fell. Its
+				-- owner hears it at the next check, before it can come back
 				self:on_died(b.entity, world)
-			end
-			if b.out and b.entity then
+			elseif b.out and b.entity then
 				if not ours(world, b.entity) then
 					self.ids[b.entity] = nil  -- gone, or the id names another entity now: never touched again
 					b.entity = nil
@@ -888,13 +893,14 @@ function P:step(world)
 					if not sp or self.refused[b] >= REFUSALS then
 						self.refused[b] = nil
 						b.out = false
+						self.back[b] = nil
 						self.env.save()
 						self.env.tell(world, owner, string.format("%s stays home: %s.", b.name, why))
 					end
 				end
 			end
 		end
-		if owner and not away and self.env.mode and self.env.mode(account) == "aggressive" and self:out_count(account) > 0 then
+		if owner and not away and self.env.mode and self.env.mode(account) == "aggressive" and #self:spots(account) > 0 then
 			self:hunt(world, account, owner)
 		end
 		if stepped and why == "build" and self.aside:first(account, why) then

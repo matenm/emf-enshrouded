@@ -391,6 +391,48 @@ TEST_CASE("beastmaster: a beast whose health reads 0 before the game's death eve
     CHECK(b.noted("Wolf is back"));
 }
 
+TEST_CASE("beastmaster: a dead creature of another side on a beast's id is no fall (no rest, no body removed); with no rest the fall is told before the beast is back") {
+    {
+        BeastRig b;
+        b.reply("beastmaster.give wolf");
+        b.spawnable(2);
+        REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+        component<ecs::Faction>(b.r.fake, 1234).faction = static_cast<emf::gen::FactionType>(6);  // another creature's now
+        b.r.fake.attrs[{1234, EMF_ATTR_HEALTH}] = 0;
+        b.seconds(3);
+        CHECK(!b.noted("Wolf fell"));
+        CHECK(!contains(b.r.fake.destroyed, 1234));  // not ours: its loot stays
+        CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, at home") != std::string::npos);
+    }
+    {
+        BeastRig b({{"rest_s", "0"}});
+        b.reply("beastmaster.give wolf");
+        b.spawnable(2);
+        REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+        b.r.fake.attrs[{1234, EMF_ATTR_HEALTH}] = 0;  // dead, the game's event not here yet
+        b.seconds(3);
+        size_t fell = 0, back = 0;
+        for (size_t i = 0; i < b.r.fake.notes.size(); ++i) {
+            if (b.r.fake.notes[i].find("Wolf fell") != std::string::npos && !fell) fell = i + 1;
+            if (b.r.fake.notes[i].find("Wolf is back") != std::string::npos && !back) back = i + 1;
+        }
+        REQUIRE(fell > 0);
+        REQUIRE(back > 0);
+        CHECK(fell < back);
+    }
+    {
+        // a save with a beast resting and coming back: after the load its owner hears when it is back
+        BeastRig c;
+        write(c.data, "b 0x00000000000000aa wolf 20 1 Fang\n");
+        c.spawnable(1);
+        c.r.fake.session = 2;
+        fire_load(1);
+        c.seconds(25);
+        CHECK(c.r.fake.spawns.size() == 1);
+        CHECK(c.noted("Fang is back"));
+    }
+}
+
 TEST_CASE("beastmaster: a resting beast that comes back holds its slot, comes back after a reload, and stays home when the setting goes off meanwhile") {
     {
         BeastRig b;
@@ -2811,6 +2853,46 @@ TEST_CASE("beastmaster: a jump keeps the beasts out, a fall of 1.5 s sends them 
     place(b.r.fake, 2, 30, 50, 0);
     b.seconds(2);
     CHECK(!contains(b.r.fake.destroyed, 1235));
+}
+
+TEST_CASE("beastmaster: beastmaster.air prints each player's movement state and whether they count as in the air") {
+    BeastRig b;
+    b.seconds(1);  // seen on the ground first
+    moving_as(b.r.fake, 1, 4);
+    place(b.r.fake, 1, 0, 60, 0);
+    b.seconds(1);
+    const std::string text = b.reply("beastmaster.air");
+    CHECK(text.find("player 1: movement state 4") != std::string::npos);
+    CHECK(text.find("height 60.0, in the air true") != std::string::npos);
+    CHECK(text.find("player 2: movement state nil") != std::string::npos);  // no DynamicLocomotion
+}
+
+TEST_CASE("beastmaster: an air state while walking on flat ground (a state the game left over) keeps the beasts out; a fall must drop 6 m") {
+    BeastRig b;
+    wolf_out(b);
+    b.seconds(1);
+    moving_as(b.r.fake, 1, 2);  // falling, but walking on flat ground 2 m a second
+    for (int i = 1; i <= 4; ++i) {
+        place(b.r.fake, 1, 2.0 * i, 10, 0);
+        place(b.r.fake, 1234, 2.0 * i + 2, 10, 0);
+        b.seconds(1);
+    }
+    CHECK(!contains(b.r.fake.destroyed, 1234));
+    moving_as(b.r.fake, 1, 4);  // the glider's state, walking on flat ground
+    for (int i = 5; i <= 8; ++i) {
+        place(b.r.fake, 1, 2.0 * i, 10, 0);
+        place(b.r.fake, 1234, 2.0 * i + 2, 10, 0);
+        b.seconds(1);
+    }
+    CHECK(!contains(b.r.fake.destroyed, 1234));
+    moving_as(b.r.fake, 1, 2);  // a slow slide down a slope: 2 m in 2 s is no fall
+    place(b.r.fake, 1, 20, 9, 0);
+    b.seconds(1);
+    place(b.r.fake, 1, 22, 8, 0);
+    b.seconds(1);
+    place(b.r.fake, 1, 24, 7, 0);
+    b.seconds(1);
+    CHECK(!contains(b.r.fake.destroyed, 1234));
 }
 
 TEST_CASE("beastmaster: /beastmaster aside sends the beasts away until typed again; calling one brings them back") {

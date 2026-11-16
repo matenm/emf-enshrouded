@@ -14,9 +14,11 @@ A.__index = A
 local GRACE_S = 3   -- they come back this long after the building stopped (the hammer goes back and forth)
 local NEAR_M = 20   -- another player building this close to the summons, or to their owner, counts too
 local AIR_FALL_S = 1.5  -- a fall (or a hook swing) this long is being in the air; a jump is not
+local AIR_DROP_M = 6    -- and the owner dropped this far since it began (1.5 s of falling is about 11 m; a slide is not)
 local AIR_LAND_S = 1    -- they come back this long after their owner landed
-local AIR_MOVE_M = 0.5  -- in the air only while the owner moved this far in the last AIR_STILL_S (a glide or a fall
-local AIR_STILL_S = 2   --   always moves; a state the game left over on a player standing still does not count)
+local AIR_MOVE_M = 0.5  -- in the air only while the owner moved this far in the last AIR_STILL_S, and on the glider only
+local AIR_STILL_S = 2   --   while their height changed this much (a glide sinks or rises; a state the game left over on
+                        --   a player standing or walking on flat ground does not count)
 -- The game's movement states (DynamicLocomotion.state): in the air at once (Flying 3, HangGliding 4, BuildingFlying 11),
 -- or once it lasted AIR_FALL_S (Falling 2, HookPulling 5, HookSwinging 6).
 local GLIDE = { [3] = true, [4] = true, [11] = true }
@@ -35,8 +37,9 @@ function A:reset()
 	self.players = {}  -- the player entities present at the last check (their cursors are read every step)
 	self.away = {}     -- account -> why its summons are aside ("build", "near", "air", "command"), as of the last check
 	self.told = {}     -- "account why" -> true: told once
-	self.air = {}      -- player entity -> {x, y, z, moved, since, up}: where they were, when they last moved AIR_MOVE_M,
-	                   -- since when they are off the ground (and moving), when they were last counted in the air
+	self.air = {}      -- player entity -> {x, y, z, moved, vy, vmoved, since, since_y, up}: where they were, when they
+	                   -- last moved AIR_MOVE_M (and up or down), since when (and from which height) they are off the
+	                   -- ground and moving, when they were last counted in the air
 end
 
 -- The player holds something to build or place: the game's building cursor has an item (ServerCursor, which the
@@ -66,20 +69,26 @@ function A:watch_air(world, p, now)
 	local x, y, z = world:position(p)
 	if x then
 		if a.x == nil then
-			a.x, a.y, a.z = x, y, z
+			a.x, a.y, a.z, a.vy = x, y, z, y
 		elseif (x - a.x) ^ 2 + (y - a.y) ^ 2 + (z - a.z) ^ 2 >= AIR_MOVE_M * AIR_MOVE_M then
 			a.x, a.y, a.z, a.moved = x, y, z, now
 		end
+		if math.abs(y - a.vy) >= AIR_MOVE_M then a.vy, a.vmoved = y, now end
 	end
-	local loc = world:get("DynamicLocomotion", p)
-	local state = loc and loc.state
+	-- a component of another size (a game update) is no error that pauses the mod: just no air
+	local ok, loc = pcall(function() return world:get("DynamicLocomotion", p) end)
+	local state = ok and loc and loc.state or nil
 	local moving = a.moved ~= nil and now - a.moved <= AIR_STILL_S
 	if not (GLIDE[state] or FALL[state]) or not moving then  -- on the ground, or a state left over while standing still
 		a.since = nil
 		return false
 	end
-	a.since = a.since or now
-	if not (GLIDE[state] or now - a.since >= AIR_FALL_S) then return false end
+	if not a.since then a.since, a.since_y = now, y end
+	if GLIDE[state] then
+		if not a.vmoved or now - a.vmoved > AIR_STILL_S then return false end  -- its height does not change: no glide
+	elseif now - a.since < AIR_FALL_S or not y or a.since_y - y < AIR_DROP_M then
+		return false
+	end
 	local was = in_air(a, now)
 	a.up = now
 	return not was
