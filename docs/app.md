@@ -133,6 +133,7 @@ first"), and the banner says which process (or that Windows hides its folder bec
 then EMF assumes it is this folder). Settings still save; the running game uses them from its next start, and each
 setting says "From next start" then (the in-game Mods tab changes them at once: "Live in the in-game Mods tab").
 Settings are checked the same way as in the game: a value outside the mod's range is refused with the reason.
+Hovering a setting shows its default ("Default: on", an option's label, a key), as the in-game Mods tab does.
 
 ## Profiles
 

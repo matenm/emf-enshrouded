@@ -196,6 +196,13 @@ TEST_CASE("app bridge: a setting carries its control: options, step, slider, max
     CHECK(set[3].get("control")->s == "slider");
     CHECK(set[3].get("step")->n == 0.5);
     CHECK(set[3].get("type")->s == "float");
+    // the default as the in-game Mods tab shows it on hover (the page puts it in the setting's tooltip)
+    CHECK(set[0].get("default")->s == "0");
+    CHECK(set[0].get("default_shown")->s == "off");
+    CHECK(set[1].get("default_shown")->s == "");
+    CHECK(set[2].get("default")->s == "tr");
+    CHECK(set[2].get("default_shown")->s == "Top right");
+    CHECK(set[3].get("default_shown")->s == "0");
 }
 
 TEST_CASE("app bridge: the state is sent again only when it changed") {

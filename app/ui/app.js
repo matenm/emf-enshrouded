@@ -469,6 +469,10 @@ document.addEventListener('mousedown', (e) => {
 }, true);
 
 const sentence = (t) => t.charAt(0).toUpperCase() + t.slice(1) + '.';
+// A setting's default for its tooltip, as the in-game Mods tab shows it on hover (the host sends it shown: "on", an
+// option's label, a key's name); undefined from an older host.
+const defaultTip = (s) =>
+  typeof s.default_shown === 'string' ? 'Default: ' + (s.default_shown === '' ? '(empty)' : s.default_shown) : undefined;
 
 function settingControl(m, s) {
   const errKey = keyOf(m) + ':' + s.key;
@@ -536,7 +540,7 @@ function settingControl(m, s) {
     parts.push(input);
     if (s.max_length) parts.push(el('span', { class: 'setting-range' }, 'max ' + s.max_length));
   }
-  return el('div', { class: 'setting' + (off ? ' inactive' : '') },
+  return el('div', { class: 'setting' + (off ? ' inactive' : ''), title: defaultTip(s) },
     el('div', { class: 'setting-head' },
       el('span', { class: 'setting-label' }, s.label || s.key),
       state.game_running

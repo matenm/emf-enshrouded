@@ -47,6 +47,8 @@ std::string setting_json(const ModSetting& s) {
     Obj o;
     o.str("key", s.def.key).str("type", core::setting_type_name(s.def.type)).str("label", s.def.label).str("help", s.def.help);
     o.str("value", s.value).str("default", s.def.default_value).boolean("live", s.def.live);
+    // the default as the in-game Mods tab shows it on hover ("on", an option's label, a key's name)
+    o.str("default_shown", core::setting_shown_value(s.def, s.def.default_value));
     if (s.def.has_min) o.num("min", s.def.min);
     if (s.def.has_max) o.num("max", s.def.max);
     if (s.def.step > 0) o.num("step", s.def.step);
