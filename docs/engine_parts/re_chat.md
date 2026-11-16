@@ -147,5 +147,5 @@ bool __fastcall hk_queue_chat(void* ui, const StringView* t, uint8_t kind, uint3
 
 ## Open risks
 - The client-side hooks are not tested at runtime. The thread for hook A is inferred. Whether the chat input opens at all when the server disables text chat is unknown.
-- Kinds 1, 2, 3 and 4 are only partly named (0 = typed text, 1 = localized system line; 2 and 3 come from two UI callers; 4 skips the text-chat gate).
+- Kinds 1, 2, 3 and 4 are only partly named (0 = typed text; 1 = a localized system line from the ECS program above, seen in code only; 2 and 3 come from two UI callers; 4 = the session-info line (join, leave), which skips the text-chat gate and, with loca tag 1 = 0, is drawn with no speaker's name: EMF's own system lines use kind 4, `kChatKindSession` in `src/core/chat_commands.h`).
 - The wildcarded struct offsets keep signature A valid across small updates. The UI command id 0x74 is not in the signature, but it would change if commands are added before it. Re-check with `python sig.py` after game updates.
