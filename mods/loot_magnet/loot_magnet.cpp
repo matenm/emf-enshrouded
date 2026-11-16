@@ -130,7 +130,9 @@ std::map<uint32_t, std::string> g_item_names;  // item id -> debug name (the gam
 emf::keys::Edge g_key;
 int g_looted = 0;  // corpses looted this session (for loot.status)
 sweep::Sweeper g_sweeper;
+sweep::BaseWatch g_base_watch;
 uint64_t g_sweep_ms = 0, g_walk_said_ms = 0;
+bool g_told_no_smash = false;  // the log said once that this core cannot hit (smashing needs API v18)
 std::map<sweep::Kind, int> g_swept;  // what the sweep collected this session, by group (for loot.status)
 bool g_told_gear = false;   // the host heard "gear stays" this session
 bool g_told_no_time = false;  // the log said once that the game gave a death no time
@@ -235,42 +237,62 @@ void sweep_tick(emf::World w, const Config& c, const std::vector<magnet::Looter>
     std::vector<sweep::Player> players;
     std::vector<magnet::Vec3> places;
     for (const auto& l : looters) {
-        players.push_back({l.id, l.pos, l.on});
+        players.push_back({l.id, l.pos, l.on, l.on && sweep::has_room(w, l.id)});
         if (l.on) places.push_back(l.pos);
     }
     if (reach <= 0 || places.empty()) return;
+    // a player who arrived or moved far (a fast travel, a join): their base may have come into the world with them
+    if (g_base_watch.moved(players)) refresh_bases(w);
+    sweep::Want want;
+    want.smash = c.sweep.group(sweep::Kind::Smash).on;
+    want.chests = c.sweep.group(sweep::Kind::Chest).on;
+    if (want.smash && !emf::has_v18()) {
+        want.smash = false;
+        if (!g_told_no_smash) {
+            g_told_no_smash = true;
+            EMF_LOG(kMod, "sweep: smashing needs EMF API v18 (hits); this core is older, so barrels are left alone");
+        }
+    }
     LARGE_INTEGER f, t0, t1;
     QueryPerformanceFrequency(&f);
     QueryPerformanceCounter(&t0);
-    const auto things = sweep::things_near(w, places, reach, [w](uint32_t item) { return item_name(w, item); });
+    const auto things = sweep::things_near(w, places, reach, [w](uint32_t item) { return item_name(w, item); }, want);
     QueryPerformanceCounter(&t1);
     const double walk_ms = static_cast<double>(t1.QuadPart - t0.QuadPart) * 1000.0 / static_cast<double>(f.QuadPart);
     if (c.debug_log && now - g_walk_said_ms >= 60000) {
         g_walk_said_ms = now;
         EMF_LOG(kMod, "sweep: %zu things near the players read in %.1f ms (once a second)", things.size(), walk_ms);
     }
-    const auto acts = g_sweeper.tick(now, session, players, things, g_bases, c.sweep);
+    size_t room = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_requests_lock);
+        room = g_requests.size() < 256 ? 256 - g_requests.size() : 0;  // never an action booked without a place
+    }
+    const auto acts = g_sweeper.tick(now, session, players, things, g_bases, c.sweep, room);
     std::map<sweep::Kind, int> looted;
     int accepted = 0, smashed = 0;
     for (const auto& a : acts) {
         if (a.act == sweep::Act::Smash) {
-            if (emf::has_v18() && emf::damage(w, a.player, a.entity, a.amount)) ++smashed;
+            if (emf::damage(w, a.player, a.entity, a.amount)) {
+                ++smashed;
+                if (a.first) ++g_swept[sweep::Kind::Smash];
+            }
             continue;
         }
-        std::lock_guard<std::mutex> lock(g_requests_lock);
-        if (g_requests.size() >= 256) break;
         Request r{a.player, a.entity, session};
         r.accept = a.act == sweep::Act::Accept;
         r.offer_id = a.offer_id;
-        g_requests.push_back(r);
+        {
+            std::lock_guard<std::mutex> lock(g_requests_lock);
+            g_requests.push_back(r);
+        }
         if (r.accept)
             ++accepted;
         else
             ++looted[a.kind];
+        if (!r.accept && a.first) ++g_swept[a.kind];  // what loot.status counts: one per thing, not per try
     }
-    for (const auto& [k, n] : looted) g_swept[k] += n;
-    if (smashed) g_swept[sweep::Kind::Smash] += smashed;
-    if (c.debug_log && !acts.empty()) {
+    if (c.debug_log && (accepted || smashed || !looted.empty())) {
         std::string what;
         for (const auto& [k, n] : looted) what += (what.empty() ? "" : ", ") + std::to_string(n) + " " + sweep::kind_name(k);
         if (accepted) what += (what.empty() ? "" : ", ") + std::to_string(accepted) + " chest(s) opened";
@@ -410,8 +432,8 @@ void cmd_toggle(emf::World w, const std::vector<std::string>& a) {
         return;
     }
     const Config c = config();
-    EMF_REPLY("Loot Magnet is %s for you (corpses within %.0f m, %s)", on ? "on" : "off", c.rules.radius,
-              c.rules.materials_only ? "materials only" : "everything");
+    EMF_REPLY("Loot Magnet is %s for you (corpses within %.0f m, %s; and what else lies near you: /loot.status)",
+              on ? "on" : "off", c.rules.radius, c.rules.materials_only ? "materials only" : "everything");
 }
 
 void cmd_status(emf::World w, const std::vector<std::string>&) {
@@ -436,8 +458,8 @@ void cmd_status(emf::World w, const std::vector<std::string>&) {
     EMF_REPLY("Also: %s", groups.empty() ? "nothing else (every group is off)" : groups.c_str());
     std::string swept;
     for (const auto& [k, n] : g_swept) swept += (swept.empty() ? "" : ", ") + std::to_string(n) + " " + sweep::kind_name(k);
-    EMF_REPLY("%d corpse(s) looted this session%s%s; /loot.toggle switches yours", g_looted, swept.empty() ? "" : ", ",
-              swept.c_str());
+    EMF_REPLY("%d corpse(s) looted this session%s%s (sent; what did not fit stays); /loot.toggle switches yours", g_looted,
+              swept.empty() ? "" : ", ", swept.c_str());
 }
 }  // namespace
 
@@ -488,7 +510,7 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         g_magnet.on_pickup(e.pickedUpByEntityId.id, e.pickedUpFromEntityId.id);
     });
     g_file.attach();
-    if (!emf::add_command("loot.toggle", "[on|off]: your Loot Magnet (corpses of creatures killed near you come to you)",
+    if (!emf::add_command("loot.toggle", "[on|off]: your Loot Magnet (the loot of kills and what lies near you come to you)",
                           cmd_toggle, EMF_COMMAND_PLAYERS))
         EMF_LOG(kMod, "the command loot.toggle could not be added (see the core log)");
     if (!emf::add_command("loot.status", ": is your Loot Magnet on, and its rules", cmd_status, EMF_COMMAND_PLAYERS))

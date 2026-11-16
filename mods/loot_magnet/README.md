@@ -84,19 +84,23 @@ general **Reach**):
 | Smash barrels, crates and urns (`smash`) | off | only those that drop loot: one hit with their own health; the drop lies on the ground, and Items on the ground picks it up |
 
 Never:
-- **Inside a base:** within **Never within (m) of a flame altar**. Smashing keeps 10 m more away. So your farm,
-  your chests and your buildings are never touched.
-- **A player's chest:** anything a player placed is never opened.
+- **Inside a base:** within **Never within (m) of a flame altar**. Smashing keeps 10 m more away. So your chests and
+  your buildings are never touched.
+- **A crop:** the stage a planted crop shows is never harvested, wherever the farm is (taking it would end the plant).
+- **Anything a player placed** is never opened, taken or smashed; **thrown animal bait** stays where you threw it.
+- **A chest another player opened** stays theirs: Loot Magnet empties only a chest it opened itself, or one you opened.
+  A chest that a player without the magnet stands nearer to is left to them, and so is a barrel.
 - **A locked chest:** one that needs a lockpick or a key is never opened (that would use up the item); once a player
   opened it with the item, it is.
 - **A quest item:** the game has no mark for them, so names that look like one (Quest, _NPC_, LoreText, MapPiece,
-  Key_) stay where they are. A chest that holds one is left to you.
+  Key_ or Prop_Component_ at the start) stay where they are. A chest that holds one is left to you.
 - **Items on the ignore list:** **Never pick up**, item names as `items <words>` in the console shows them, comma
-  separated. End one with * for every name that begins so (`Food_T1_raw_*`).
-- **Spawners, nests, bee hives, trees and rocks.**
+  separated. End one with * for every name that begins so (`Food_T1_raw_*`). A chest that holds an ignored item is
+  left whole. The list cannot apply to wild plants without a pickup: their loot is rolled when they are taken.
+- **Enemy spawners** (bone piles, spider eggs), nests, fog nest resources, bee hives, trees and rocks.
 
-A full bag loses nothing: what does not fit stays where it is. An item is tried 5 times, 2 s apart, then left until
-you come back.
+**A full bag:** a pickup comes only while you have an empty slot, so it always fits whole; plants and chests give what
+fits and keep the rest. An item is tried 5 times, 2 s apart, then left until you come back.
 
 ## Settings (Mods tab, EMF.exe, or `set loot_magnet <key> <value>`)
 
@@ -144,6 +148,6 @@ Switch it off once you trust it: then only the looted lines are written.
 ## Good to know
 
 - **Host or dedicated server only.** In someone else's game it does nothing (that game's host decides).
-- **Loose drops** (separate pickups lying on the ground) are not picked up: picking up whatever lies near a kill could
-  take a quest item or something a player dropped. The loot spot a kill leaves is not a loose drop: it is taken.
+- **Loose drops** (separate pickups lying on the ground) are taken by **Items on the ground** (on by default, 2.0),
+  not by the corpse part: a quest item or a key the game placed is never taken (see "Never" above).
 - The log (`emf\emf_core.log`, lines `[loot_magnet]`) names every corpse looted and the player it went to.
