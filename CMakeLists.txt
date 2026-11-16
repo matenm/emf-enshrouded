@@ -158,6 +158,7 @@ add_library(emf_core_lib STATIC
   src/core/doors.cpp
   src/core/enemy_orders.cpp
   src/core/move_orders.cpp
+  src/core/villager_moves.cpp
   src/core/block_rules.cpp
   src/core/block_service.cpp
   src/core/block_glue.cpp
@@ -493,6 +494,7 @@ add_executable(emf_tests
   tests/test_path_grid.cpp
   tests/test_doors.cpp
   tests/test_move_orders.cpp
+  tests/test_villager_moves.cpp
   tests/test_block_rules.cpp
   tests/test_block_service.cpp
   tests/test_block_glue.cpp
