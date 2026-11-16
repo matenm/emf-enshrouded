@@ -1,7 +1,7 @@
 {
   "id": "emf_beastmaster_bear",
   "title": "Beastmaster: the bear",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "out": "../../../analysis/models/mods/emf_beastmaster_bear",
   "description": "The bear for the Beastmaster mod: a realistic grizzly on a skeleton and animations of its own, big and tough. Wild bears appear now and then when Beastmaster is installed; tame one and call it. Bear model and animations: \"Realistic Animated Bear 3D Model\" by WildMesh 3D, licensed under CC BY 4.0 (used in the game with changes).",
   "authors": [
