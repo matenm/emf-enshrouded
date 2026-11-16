@@ -103,6 +103,7 @@ version the additions need (empty: the v20 the `lua` mod needs is enough). Range
 | 1.36 | `world:permissions` | v43 |
 | 1.37 | `emf.break_blocks`, `emf.block_at`, `emf.find_wall` | v44 |
 | 1.38 | the world's own blocks (ruins) spared: a block's `world`, the break option `world` | v45 |
+| 1.39 | villager moves (`emf.villager_move`, `emf.villager_move_cancel`, `emf.villager_moving`) | v46 |
 
 ## What happens when a script fails
 
@@ -166,6 +167,8 @@ right away.
 | `emf.enemy_order_cancel(id)` / `emf.enemy_target(world, enemy)` | 1.32: end an order / what the enemy goes for now (or nil) |
 | `emf.enemy_move(world, enemy, points [, opts] [, fn])` | 1.33: the creature walks to a point or through a list of points; the move's id, or nil and why (see "Move orders" below) |
 | `emf.enemy_move_cancel(id)` / `emf.enemy_moving(world, enemy)` | 1.33: end a move / its move's id now (or nil) |
+| `emf.villager_move(world, villager, points [, opts] [, fn])` | 1.39: a villager walks to a point or through points inside its own area, and may hold there; the move's id, or nil and why (see "Walking villagers" below) |
+| `emf.villager_move_cancel(id)` / `emf.villager_moving(world, villager)` | 1.39: end a villager move or its hold / its move's id now (or nil) |
 | `emf.break_blocks(world, x, y, z [, opts], fn)` | 1.37: damages or breaks the player-built blocks around a point, never the ground and (1.38) never the world's own ruins; `fn(world, result)` after the step; id or nil (see "Breaking blocks" below) |
 | `emf.block_at(world, x, y, z)` / `emf.find_wall(world, from, to)` | 1.37: what is at a point / the first building block on a line, as a table, or nil |
 | `emf.kill(world, id)` | (1.4) kills a creature without a hit: its current health becomes 0 (1.5: through the game's attribute code) and the game's death program sends `EntityDiedEvent` the next step; the corpse keeps its loot. No attacker, no kill credit (`emf.damage` gives one); never a player; host only. true / false |
@@ -771,6 +774,43 @@ emf.enemy_move(world, raider, {gap}, {peaceful = true}, function(w, id, status)
 end)
 ```
 
+## Walking villagers (1.39)
+
+`emf.villager_move(world, villager, points [, {arrive = m, seconds = n, stuck = n, hold = n | true}] [, fn])` walks a
+villager to a point `{x, y, z}` or through a list of up to 16, by sending the game's own "go to" command again whenever
+the villager drops it (it arrived somewhere, a player came close, its path failed). Nothing is written to the game's
+components and nothing is saved.
+
+- **Its own area only.** The game walks a villager only inside its roaming circle: for the game's villagers 30 m around
+  its home (seen in game: points 20 m and 28 m out were walked to, one 40 m out was not), or the range the player set in
+  its menu. A point outside it, or beyond the game's leash (it would be teleported home), is refused with the reason. A
+  villager the player told to stay is refused too.
+- **When the game lets it.** It waits (and its stuck clock with it) while no player is within 150 m, at night and while
+  it sleeps, in water, and while a player talks to it; `seconds` runs on.
+- `arrive` (metres, default 2), `seconds` (default 0: none) and `stuck` (2 to 120, default 15) as for `emf.enemy_move`.
+  A villager that the game teleports (stuck, or too far from home), or whose path is not found twice, ends `"stuck"`.
+- `hold = n` (seconds, up to 3600) or `hold = true` (until cancelled): after it arrives it stays at the last point; EMF
+  sends it back when it wanders off. `fn` still comes once, with `"arrived"`; the hold then runs on the same id and ends
+  quietly when its time is over, on `emf.villager_move_cancel`, a new move on it, the player telling it to stay, its home
+  moving, a teleport, or when it cannot get back for `stuck` seconds. It waits while a player is close by (never pulled
+  away from a player).
+- `fn(world, id, status)`: `"arrived"`, `"stuck"`, `"timeout"`, `"gone"` or `"cancelled"`. A cancel, a stuck or a timeout
+  tells the villager to stop where it stands; it then goes back to its routine by itself.
+- Another key, or a value of the wrong type, is a Lua error. It returns the move's id, or nil and why. A move (and a
+  hold) ends when your script reloads or pauses. `emf.villager_moving(world, villager)` is its move's or hold's id, or
+  nil. Host only. On a core older than API v46: nil and a reason.
+
+```lua
+-- send the villager you name to the player and keep it there for a minute
+emf.command("stand", "<villager>: it walks to you and stays a minute", function(world, args)
+  local x, y, z = world:position(emf.local_player())
+  local id, why = emf.villager_move(world, tonumber(args[1]), {x, y, z}, {hold = 60}, function(w, id, status)
+    emf.log("villager move " .. id .. ": " .. status)
+  end)
+  emf.reply(id and ("move " .. id) or ("not sent: " .. why))
+end)
+```
+
 ## Breaking blocks (1.37)
 
 `emf.break_blocks(world, x, y, z [, opts], fn)` damages (like a pickaxe hit: cracks, the game's per-block health) or
@@ -886,14 +926,19 @@ callback. The host sends them on the next step of that world:
 emf.emits({"NpcCommandEvent"})
 emf.command("come", "<villager entity id>: that villager walks to you", function(world, args)
   local x, y, z = world:position(emf.local_player())
+  local npc = world:template("ActiveNpcState", tonumber(args[1]))
+  if not npc then return emf.reply("not a villager") end
   emf.emit("server", "NpcCommandEvent", {
-    type = 1, npcId = tonumber(args[1]),  -- 1 = GoToPosition (NpcCommandType in components.hpp)
+    type = 1,           -- 1 = GoToPosition (NpcCommandType in components.hpp)
+    npcId = npc.npcId,  -- the villager's template npcId, not its entity id (the game matches this hash)
     targetTransform = { position = { x = math.floor(x * 2^32), y = math.floor(y * 2^32), z = math.floor(z * 2^32) } },
   })
 end)
 ```
 
-(World positions inside the game's structs are fixed point: 1 m = 2^32. `world:position` already converts.)
+(World positions inside the game's structs are fixed point: 1 m = 2^32. `world:position` already converts.) The game
+takes one such command per villager per step and drops it once the villager arrives or is interrupted; `emf.villager_move`
+(1.39, "Walking villagers") sends it for you until the villager is there.
 
 ## Settings
 

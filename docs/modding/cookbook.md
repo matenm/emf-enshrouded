@@ -254,7 +254,26 @@ this: the beast is in Combat with that target the same step. `AddThreatTargetEve
 adds its value to the target's `Threat` attribute, which only players have.
 
 ## Walk a villager somewhere
-*Tested in game (villager_jobs).*
+*Tested in game.*
+
+From API v46 (EMF 0.6.14), let EMF walk it and tell you when it is there. The point must be inside the villager's own
+area (30 m around its home for the game's villagers):
+
+```cpp
+EmfPathPoint p{x, y, z, 0};
+EmfMoveOrder o{};
+o.enemy = villager;
+o.count = 1;
+o.points = &p;
+o.hold_seconds = 60;  // optional: stay there a minute after arriving
+const uint32_t id = emf::villager_move(w, o, [](EmfWorld*, uint32_t id, uint32_t status, void*) {
+    // EMF_MOVE_ARRIVED, _STUCK, _TIMEOUT, _GONE, _CANCELLED
+});
+if (!id) EMF_LOG("mymod", "not sent: %s", o.why);
+```
+
+Lua: `emf.villager_move(world, villager, {x, y, z}, {hold = 60}, fn)`. On an older core, send the game's command
+yourself (`villager_jobs` did):
 
 ```cpp
 // npcId: the villager's ActiveNpcState template data, first 4 bytes (template hash 0x1a8b5909)

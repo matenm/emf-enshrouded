@@ -1,7 +1,7 @@
 # EMF API reference
 
 The C API is one table of function pointers, `EmfApi`, declared in `sdk/include/emf/emf_api.h` and passed to your
-`emf_mod_load`. It only grows: each version appends functions at the end (`EMF_API_VERSION` 45 today), so a mod built
+`emf_mod_load`. It only grows: each version appends functions at the end (`EMF_API_VERSION` 46 today), so a mod built
 for an older version works with a newer core. Another framework that runs EMF mods: see [hosting.md](hosting.md). `sdk/include/emf/emf.hpp` wraps it in C++; prefer the wrappers.
 
 **Threads.** "World callback" below means: inside `on_tick`, `run_on_world`, `on_event`, a command, a put/take result
@@ -1412,6 +1412,42 @@ terrain, another material) is a player's. Seen live on a ruin and on a player's 
   material counts as the world's again. C++: `emf::has_v45()`.
 - Console: `blocks origin [at <x> <y> <z>]`: the block where you look (or at a point) now, the shipped one there, and
   whether it is the world's own.
+
+## v46: villager moves
+
+| C | What |
+|---|---|
+| `uint32_t villager_move(world, EmfMoveOrder* order, EmfMoveCallback cb, void* user)` | walks villager `order->enemy` through `count` points (1..16) inside its own area: EMF sends the game's own GoToPosition command again whenever the villager dropped it, at most once a second, from the `emf_moves` program (one command per villager per step). `arrive`, `seconds`, `stuck_seconds` as for `enemy_move`; `hold_seconds` (in the old `pad2`'s place) or the flag `EMF_MOVE_HOLD` keep it at the last point after it arrived. Returns the move's id, or 0 with `order->why` |
+| `bool villager_move_cancel(uint32_t id)` | ends a villager move (`cb` gets `EMF_MOVE_CANCELLED`) or its hold (quietly); at once inside a server world callback, else at the next step |
+| `uint32_t villager_moving(world, villager)` | the id of its move or hold, 0 none |
+
+- **The walk area.** The game walks a villager only inside its roaming circle: its template's
+  `roamingSetup.maxRadiusFromSpawn` around its home (30 m for the game's villagers, seen in game: 20 m and 28 m out
+  were walked to and held, 40 m out failed with path result 7), or the roaming range the player set in its menu. Refused
+  when added: a point outside that circle (+1 m), a point beyond the game's leash (max of `targetRadius`, `bedRadius`:
+  the game teleports it home there), a villager the player told to stay (roaming range 0), no villager (no
+  `DynamicActiveNpcState` or no `ActiveNpcState` template with an npcId), a player, `EMF_MOVE_ALLIES`, `_PEACEFUL`,
+  `_PEACEFUL_ALL` (enemy-only), bad points or numbers, more than 256 villager moves; not a server world or not inside a
+  world callback on it.
+- **Waiting.** Nothing is sent and the stuck clock waits while the game does not run the villager: no player within
+  150 m, Start, FindBed, Sleep, InsideWater, deciding to sleep, or a player talking to it. `seconds` runs on (a move
+  started at dusk can end `EMF_MOVE_TIMEOUT` overnight).
+- **Ends.** `EMF_MOVE_ARRIVED` (within `arrive` across and that + 2 m up or down, or the game's own walk ended at its
+  target within `arrive` + 3 m: it stops up to 5 m short of a point it cannot stand on), `EMF_MOVE_STUCK` (no metre
+  closer for `stuck_seconds` while not waiting, the game teleported it, or its path not found twice for one point),
+  `EMF_MOVE_TIMEOUT`, `EMF_MOVE_GONE` (no AI, no position, another npcId: the id names another entity),
+  `EMF_MOVE_CANCELLED` (cancel, a new move on it, the world closing: world NULL). Cancelled, stuck and timeout send it
+  "go to where you stand", so it stops and goes back to its routine.
+- **Hold.** The callback still comes once, at `EMF_MOVE_ARRIVED`; the hold runs on the same id, sending the point again
+  every 2 s while the villager is not walking there (seen in game: that kept it in place), and waits while a player is
+  close by. It ends quietly (no second callback): its time over, `villager_move_cancel`, a new move on it, the world
+  closing, the player telling it to stay, its home moving more than 1 m, a teleport, or no way back for
+  `stuck_seconds`.
+- `enemy_move` refuses `EMF_MOVE_HOLD`. Villager Jobs 1.5.1 sends no job command to a villager with a villager move.
+  C++: `emf::has_v46()`, `emf::villager_move(w, order, cb, user)`, `emf::villager_move_cancel(id)`,
+  `emf::villager_moving(w, villager)`.
+- Console (host): `vmove <villager> <x> <y> <z> | <villager> <entity | me> [hold <seconds | always>]` and
+  `vmove.stop <id>`; how the move ended is said later.
 
 ## SDK headers (header-only C++, no ABI)
 
