@@ -108,6 +108,11 @@ All four come from the example, and the game stops or shows nothing if one is mi
   templates, registries, recipes) for both sides, or the server's build stops at the first missing resource or type.
   Emberbrand does this: on a server it adds the item and the recipe without the icon and the name. EMF builds a
   server's content at the server's start in `emf\content\server\` (`docs/engine_parts/content_loader.md`).
+- **Say when a part could not be added.** A script that catches its own failure with `pcall` (one creature of
+  several, say) must not only `print` it, or EMF reports the build as fine and the player never learns the part is
+  missing. Call EML's `warn("<what>: not added: " .. tostring(err))`: EMF's builder (emf_content.dll) lists each
+  warning in its reply, `emf\content.log` keeps it, and the player sees it on screen once a world loads. It says so
+  again at every start until the content changes. The creature packs from `tools/models/make_mod.py` do this.
 
 ## Apply it
 

@@ -145,7 +145,7 @@ touching the `.kfc`); otherwise it is built again.
 `emf_content_state.json` next to the shadow:
 
 ```json
-{"fingerprint": "sha256:...", "code": 0, "message": "...", "mods": ["beasts 1.0.0"], "errors": [],
+{"fingerprint": "sha256:...", "code": 0, "message": "...", "mods": ["beasts 1.0.0"], "errors": [], "warnings": [],
  "ms": 28000, "built_at": "2026-11-01T20:00:00Z", "unloaded": true, "truncated": false,
  "chain_checked": ["creative.dll\t1000\t1340..."], "attempts": 0, "reported": true}
 ```
@@ -169,6 +169,7 @@ inherited one at every start, the core clears it once read):
 |---|---|
 | `built` | console: `EML content: 3 mods (built in 28 s)` |
 | `current` | console: `EML content: 3 mods (unchanged since the last build)` |
+| `built` or `current` with a message | a good build whose mods warned: the message is the first warning and how many more, from the state's `warnings`. The console line ends `; a mod reported a problem: <warning>`, and on screen once the first world loads: `An EML mod reported a problem while its content was built: <warning>. The rest of the content is in; emf\content.log has every line.` |
 | `failed` | console, and on screen once the first world loads: `EML content could not be built: <why>. The game runs without it. Your saves were backed up.`; a save backup first ("before a start without EML content"), not held back by `min_minutes` (mod items vanish when a world loads without their mod) |
 | `failed_again` | the same warning with "EMF tries again when a mod, the game or emf_content.dll changes.", no second backup |
 | `off` | only with `mode=on`: `EML content is off (<why>)` in the console |
