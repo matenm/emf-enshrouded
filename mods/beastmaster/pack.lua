@@ -82,6 +82,7 @@ function P:reset()
 	self.moved = {}      -- entity id -> when it was last teleported back
 	self.credited = {}   -- foes whose killing blow went to an owner already
 	self.strays = {}     -- entity id -> checks in a row it guarded someone else
+	self.walked = {}     -- entity id -> true: on another mod's move at the last check
 	self.refused = {}    -- beast -> checks in a row the game refused to bring it back
 	self.sent = {}       -- entity id -> until when Attack's order holds (a passive beast fights it until then)
 	self.orders = {}     -- entity id -> the creature Attack sent it at (written as its pick until the order ends)
@@ -238,6 +239,7 @@ end
 -- goes.
 function P:fresh(id)
 	self.base[id], self.sent[id], self.recall[id], self.fought[id], self.orders[id] = nil, nil, nil, nil, nil
+	self.walked[id] = nil
 	self.speeds[id], self.called[id] = nil, nil
 	self.fight:forget(id)
 end
@@ -825,10 +827,16 @@ function P:step(world)
 				self:on_died(b.entity, world)
 			elseif b.out and b.entity then
 				if not ours(world, b.entity) then
-					self.ids[b.entity] = nil  -- gone, or the id names another entity now: never touched again
+					-- gone, or the id names another entity now: never touched again. One that left the world on another mod's
+					-- move (it is not leashed then: a far move unloads it) stays out and comes back beside its owner
+					local lost = self.walked[b.entity] and not world:position(b.entity)
+					self.walked[b.entity] = nil
+					self.ids[b.entity] = nil
 					b.entity = nil
-					b.out = false
-					self.env.save()
+					if not lost then
+						b.out = false
+						self.env.save()
+					end
 				elseif not owner or away then
 					emf.destroy(world, b.entity)  -- the owner left, or it steps aside: back when that ends (still out)
 					self.ids[b.entity] = nil
@@ -841,6 +849,7 @@ function P:step(world)
 					-- not taken for another creature, not leashed and not sent back (EMF gives it back to its owner after)
 					local moving = emf.enemy_moving ~= nil and emf.enemy_moving(world, b.entity) ~= nil
 					if moving then guard = owner end
+					self.walked[b.entity] = moving or nil
 					if guard ~= 0 and guard ~= owner then
 						-- it guards someone else: after STRAY_CHECKS in a row, the id names another entity now
 						self.strays[b.entity] = (self.strays[b.entity] or 0) + 1

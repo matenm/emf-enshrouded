@@ -10,6 +10,8 @@
 --   facing out. A stroll that ends off the floor puts the beast back on its spot before it rests; a beast ROAM_M or more
 --   from the stable's middle for AWAY_S is put back at once (the game's teleport, with a ground search).
 --   A beast the Sleep state cannot hold (no enemy AI state) strolls on.
+--   A beast another mod walks somewhere (EMF move orders) is left alone while it walks: it gets up and is not put back,
+--   turned or told to guard the stable; after the move, one left ROAM_M or more away is put back AWAY_S later.
 --   At night (NIGHT_FROM to DAWN by the game's clock) they rest the whole night: a stroll ends at once, a rest goes on;
 --   in the morning each rest ends when it was due, so they get up one by one.
 --   Each carries the game's "E Pet" prompt (emf.offer; offered again every OFFER_EVERY_S while EMF no longer holds it).
@@ -175,6 +177,11 @@ local function beast_graph(world, id)
 end
 local SPAWN_GRACE_S = 5  -- a creature spawned a moment ago reads as dead this long at most
 
+-- Another mod walks creature `id` somewhere (EMF move orders, Lua 1.33).
+local function walking(world, id)
+	return emf.enemy_moving ~= nil and emf.enemy_moving(world, id) ~= nil
+end
+
 -- The game's time now in ns plus `plus_ns`, or nil while it is not known.
 function H:game_now(world, plus_ns)
 	if not self.clock then return nil end
@@ -261,13 +268,14 @@ function H:pet(world, player, entity)
 	local b = e.beast
 	local px, _, pz = world:position(player)
 	local x, y, z = world:position(e.id)
-	if px and x and emf.teleport and (px - x) ^ 2 + (pz - z) ^ 2 > 0.01 then
+	local walks = walking(world, e.id)  -- on another mod's move: not turned or settled
+	if not walks and px and x and emf.teleport and (px - x) ^ 2 + (pz - z) ^ 2 > 0.01 then
 		emf.teleport(world, e.id, x, y, z, { yaw = math.deg(math.atan(px - x, pz - z)) })
 	end
 	e.faced = true
 	e.sc.turned = true
 	local was_rest = e.scene == "rest"
-	if idle_mod.hold(world, e.id, e.sc, now, self:game_now(world, LEASE_S * NS), self:game_now(world, CHECK_AHEAD_NS)) then
+	if not walks and idle_mod.hold(world, e.id, e.sc, now, self:game_now(world, LEASE_S * NS), self:game_now(world, CHECK_AHEAD_NS)) then
 		e.until_s = was_rest and math.max(e.until_s, now + PET_S) or now + PET_S
 		e.scene = "rest"
 	end
@@ -428,6 +436,13 @@ function H:upkeep(world, e, h, now)
 		end
 	end
 	if max and cur < max then emf.attribute_add(world, e.id, "health", max - cur) end
+	if walking(world, e.id) then
+		-- another mod walks it somewhere (as pack.lua leaves a beast out alone): it gets up and is not put back, turned or
+		-- told to guard the stable meanwhile; EMF gives it back to the stable after, and one left far is put back then
+		if e.sc.held then idle_mod.wake(world, e.id, e.sc) end
+		e.far = nil
+		return
+	end
 	if not e.faced and (e.tries or 0) < FACE_TRIES then e.faced = face(world, e, h) end
 	if emf.offer and now >= (e.offer_at or 0) then
 		e.offer_at = now + OFFER_EVERY_S

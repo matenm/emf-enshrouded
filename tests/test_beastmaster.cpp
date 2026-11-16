@@ -2197,6 +2197,31 @@ TEST_CASE("beastmaster: a beast on another mod's move order is left alone (not d
     CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, out") != std::string::npos);
 }
 
+// A beast on a move is not leashed, so a far move can take it out of the world (unloaded); Beastmaster counted it home.
+TEST_CASE("beastmaster: a beast that leaves the world on another mod's move stays out and comes back beside its owner") {
+    BeastRig b;
+    wolf_out(b);
+    b.seconds(1);
+    b.r.fake.moving[1234] = 7;
+    component<ecs::DynamicEnemy01BehaviorState>(b.r.fake, 1234).guardEntityId.id = 999;  // the move's waypoint
+    b.seconds(2);
+    remove_entity(b.r.fake, 1234);  // far away: unloaded; EMF's move ends (gone)
+    b.r.fake.moving.erase(1234);
+    b.spawnable(1);
+    b.seconds(1);
+    CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, out") != std::string::npos);
+    b.seconds(1);
+    REQUIRE(b.r.fake.spawns.size() == 2);
+    CHECK(std::abs(b.r.fake.spawns[1].x - 2.0) < 0.01);  // beside its owner at (0, 10, 0)
+    CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, out") != std::string::npos);
+    // without a move, a beast whose creature is gone counts as home (as before)
+    b.seconds(1);
+    remove_entity(b.r.fake, 1235);
+    b.seconds(2);
+    CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, at home") != std::string::npos);
+    CHECK(b.r.fake.spawns.size() == 2);
+}
+
 TEST_CASE("beastmaster: an unknown bait name gives a note and the mod keeps running") {
     BeastRig b({{"bait_wolf", "No_Such_Item"}});
     b.look(1, 0, 10.5, 0, 0);
@@ -5295,6 +5320,38 @@ TEST_CASE("home: a beast off the floor when its stroll ends is put back on its s
     CHECK(moves_to(b, 1235, b.r.fake.spawns[1].x, b.r.fake.spawns[1].z) == before);
     b.seconds(3);
     CHECK(moves_to(b, 1235, b.r.fake.spawns[1].x, b.r.fake.spawns[1].z) == before + 1);
+}
+
+// As for a beast out: another mod's move order (EMF 0.6.8) walks a beast at home somewhere; Beastmaster put it back on
+// its spot, told it to guard the stable and held it asleep meanwhile, so the move never got anywhere.
+TEST_CASE("home: a beast at home on another mod's move order is left alone (not put back, turned, told to guard the "
+          "stable or held asleep); after the move it is put back") {
+    RollRig b;
+    b.roll(0.0);
+    home_three(b);
+    REQUIRE(b.r.fake.spawns.size() == 3);
+    const Fake::Spawn spot = b.r.fake.spawns[0];
+    b.seconds(6);
+    REQUIRE(asleep(b, 1234));
+    auto stable_guards = [&b] {
+        const auto sent = b.guards();
+        return std::count(sent.begin(), sent.end(), std::make_pair(1234u, 950u));
+    };
+    const auto guards_before = stable_guards();
+    const size_t teleports_before = teleports_of(b.r.fake, 1234);
+    b.r.fake.moving[1234] = 7;
+    b.seconds(1);
+    CHECK(awake(b, 1234));  // got up: the move can go
+    place(b.r.fake, 1234, 10, 10, 9);  // 9 m out of the open side, walking
+    b.seconds(40);                     // past its rest and the next stroll's end
+    CHECK(teleports_of(b.r.fake, 1234) == teleports_before);
+    CHECK(stable_guards() == guards_before);
+    CHECK(awake(b, 1234));
+    CHECK_FALSE(destroyed(b, 1234));
+    CHECK(b.r.fake.spawns.size() == 3);
+    b.r.fake.moving.erase(1234);  // the move ended (EMF gives it back to the stable); still 9 m out
+    b.seconds(5);
+    CHECK(moves_to(b, 1234, spot.x, spot.z) >= 1);
 }
 
 TEST_CASE("home: a beast at home never fights (its aggro and chosen targets are cleared every step) and is healed to "

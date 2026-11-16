@@ -466,6 +466,9 @@ does not ship this file. A beast added here has no picture on its tab (the pictu
   update: that version does not try a failed picture again before then). Until a picture is there, or with an older
   EMF, the tab shows the rest as before.
 - A beast that is out is taken out of the world while its owner is away, and comes back when they return.
+- A beast another mod walks somewhere (EMF move orders) is left alone until that walk ends: one out is not brought back
+  to you meanwhile, one at home in a Large Stable is not put back on its spot (it is after the walk). A beast out that
+  such a walk takes out of the world (too far away) comes back beside you.
 - Beasts are ordinary game creatures with the enemy AI: they guard you as the game's companions do, and sometimes take
   their own path to a foe.
 - The bear's and the aurochs' health boost needs Beastmaster to spawn them: one made another way (the `spawn` console
