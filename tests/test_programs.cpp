@@ -1,10 +1,13 @@
 #include <doctest.h>
 
+#include <windows.h>
+
 #include <cstring>
 #include <string>
 #include <vector>
 
 #include "core/fault_report.h"
+#include "core/module_name.h"
 #include "core/programs.h"
 #include "fake_world.h"
 
@@ -142,6 +145,28 @@ TEST_CASE("a faulting program hook is reported once, naming the module of the ca
     REQUIRE(faults.size() == 1);
     CHECK(faults[0].find("program hook") != std::string::npos);
     CHECK(faults[0].find("emf_tests.exe") != std::string::npos);
+}
+
+// The name came from the ANSI path: a mod file named with letters outside the code page was named wrongly, and the
+// marker owner check (well-formed UTF-8) then refused every marker of that mod.
+TEST_CASE("module_stem_of names a mod by its file name without the extension, in UTF-8") {
+    wchar_t exe[MAX_PATH];
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    std::wstring dir(exe);
+    dir = dir.substr(0, dir.find_last_of(L"\\/"));
+    const std::wstring tmp = dir + L"\\stem_test";
+    CreateDirectoryW(tmp.c_str(), nullptr);
+    const std::wstring copy = tmp + L"\\Fr\u00f6hlich \u03a9.dll";  // Froehlich Omega: not in one ANSI code page
+    REQUIRE(CopyFileW((dir + L"\\dist\\emf\\mods\\herald\\herald.dll").c_str(), copy.c_str(), FALSE));
+    HMODULE m = LoadLibraryW(copy.c_str());
+    REQUIRE(m);
+    const void* fn = reinterpret_cast<const void*>(GetProcAddress(m, "emf_mod_load"));
+    REQUIRE(fn);
+    CHECK(module_stem_of(fn) == "Fr\xc3\xb6hlich \xce\xa9");
+    FreeLibrary(m);
+    DeleteFileW(copy.c_str());
+    CHECK(module_stem_of(reinterpret_cast<const void*>(&original_fn)) == "emf_tests");
+    CHECK(module_stem_of(nullptr) == "unknown");
 }
 
 TEST_CASE("module_name_of names the module containing an address") {

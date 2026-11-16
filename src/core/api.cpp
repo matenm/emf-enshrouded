@@ -7,6 +7,7 @@
 #include "api_sizes.h"
 #include "common/pattern_find.h"
 #include "core/manifest.h"
+#include "core/module_name.h"
 
 #include <intrin.h>
 
@@ -179,18 +180,7 @@ void* api_resolve(const char* name) {
 }
 
 // The file name (no extension) of the module that holds `address`: the mod calling the API.
-std::string module_name_of(const void* address) {
-    HMODULE m = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            static_cast<LPCWSTR>(address), &m))
-        return "unknown";
-    char path[MAX_PATH] = {};
-    GetModuleFileNameA(m, path, MAX_PATH);
-    std::string s(path);
-    s = s.substr(s.find_last_of("\\/") + 1);
-    const size_t dot = s.find_last_of('.');
-    return dot == std::string::npos ? s : s.substr(0, dot);
-}
+std::string module_name_of(const void* address) { return module_stem_of(address); }
 
 bool install_hook(const std::string& owner, const std::string& name, uintptr_t target, void* detour, void** original,
                   const char* api) {

@@ -1,4 +1,5 @@
 #include "fault_report.h"
+#include "module_name.h"
 
 #include <windows.h>
 
@@ -22,6 +23,13 @@ std::string module_name_of(const void* addr) {
     char out[MAX_PATH * 3];
     const int len = WideCharToMultiByte(CP_UTF8, 0, name, -1, out, sizeof(out), nullptr, nullptr);
     return len > 1 ? std::string(out, len - 1) : "unknown module";
+}
+
+std::string module_stem_of(const void* addr) {
+    std::string s = module_name_of(addr);  // UTF-8, so a mod named with any letters keeps its name
+    if (s == "unknown module") return "unknown";
+    const size_t dot = s.find_last_of('.');
+    return dot == std::string::npos ? s : s.substr(0, dot);
 }
 
 void set_fault_reporter(std::function<void(const std::string&)> reporter) {
