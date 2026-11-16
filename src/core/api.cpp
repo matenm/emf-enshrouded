@@ -32,6 +32,7 @@
 #include "doors.h"
 #include "enemy_orders.h"
 #include "move_orders.h"
+#include "villager_moves.h"
 #include "path_glue.h"
 #include "remove_building.h"
 #include "spawn.h"
@@ -1115,6 +1116,66 @@ bool guarded_move_call(EmfMoveCallback cb, EmfWorld* w, uint32_t id, uint32_t st
     }
 }
 
+uint32_t api_enemy_move(EmfWorld* w, EmfMoveOrder* req, EmfMoveCallback cb, void* user);
+
+// v46 villager moves (villager_moves.h): the order's points walked inside the villager's own area.
+uint32_t api_villager_move(EmfWorld* w, EmfMoveOrder* req, EmfMoveCallback cb, void* user) {
+    if (!g_state || !req || req->size < kMoveOrderV40Size) {
+        core_log("villager_move refused: no order, or its size field is not sizeof(EmfMoveOrder)");
+        return 0;
+    }
+    req->why[0] = 0;
+    auto refuse = [req](const std::string& why) {
+        std::snprintf(req->why, sizeof(req->why), "%s", why.c_str());
+        std::string line = "villager_move refused (villager " + std::to_string(req->enemy) + "): " + why;
+        if (g_state) {  // a mod retrying every step: the same line once per 10 s
+            std::lock_guard<std::mutex> l(g_state->put_refusals_lock);
+            line = g_state->put_refusals.pass(line, now());
+        }
+        if (!line.empty()) core_log(line);
+        return 0u;
+    };
+    if (!w || w != dispatching_world())
+        return refuse("call it from a world callback (on_tick, run_on_world, on_event) on the server world passed to it");
+    if (WorldView(raw(w)).kind() != EMF_WORLD_SERVER) return refuse("not a server world (host only)");
+    VillagerMoves* m = g_state->villager_moves;
+    if (!m) return refuse("villager moves are off (see the log)");
+    if (req->flags & ~static_cast<uint32_t>(EMF_MOVE_HOLD))
+        return refuse("allies and peaceful are enemy_move's flags: a villager only walks");
+    if (!req->points || req->count == 0 || req->count > kMovePointsMax) return refuse("1 to 16 points");
+    VillagerMoves::Order o;
+    o.villager = req->enemy;
+    for (uint32_t i = 0; i < req->count; ++i) o.points.push_back({req->points[i].x, req->points[i].y, req->points[i].z});
+    o.arrive = req->arrive == 0.0f ? 2.0 : req->arrive;
+    o.seconds = req->seconds;
+    if (req->size >= offsetof(EmfMoveOrder, stuck_seconds) + sizeof(req->stuck_seconds)) o.stuck_seconds = req->stuck_seconds;
+    if (req->size >= offsetof(EmfMoveOrder, hold_seconds) + sizeof(req->hold_seconds)) o.hold_seconds = req->hold_seconds;
+    o.hold_forever = (req->flags & EMF_MOVE_HOLD) != 0;
+    VillagerMoves::Callback done;
+    if (cb)
+        done = [cb, user](EmfWorld* world, uint32_t id, uint32_t status) {
+            if (!guarded_move_call(cb, world, id, status, user))
+                core_log("villager_move: a mod's callback faulted (move " + std::to_string(id) + ")");
+        };
+    std::string why;
+    const uint32_t id = m->add(w, o, std::move(done), &why);
+    if (!id) return refuse(why);
+    return id;
+}
+
+bool api_villager_move_cancel(uint32_t id) {
+    VillagerMoves* m = g_state ? g_state->villager_moves : nullptr;
+    if (!m) return false;
+    EmfWorld* w = dispatching_world();
+    const bool now = w && WorldView(raw(w)).kind() == EMF_WORLD_SERVER;  // else at the next step
+    return m->cancel(id, now);
+}
+
+uint32_t api_villager_moving(EmfWorld* w, uint32_t villager) {
+    VillagerMoves* m = g_state ? g_state->villager_moves : nullptr;
+    return m && w ? m->moving(w, villager) : 0;
+}
+
 uint32_t api_enemy_move(EmfWorld* w, EmfMoveOrder* req, EmfMoveCallback cb, void* user) {
     if (!g_state || !req || req->size < kMoveOrderV40Size) {
         core_log("enemy_move refused: no order, or its size field is not sizeof(EmfMoveOrder)");
@@ -1136,6 +1197,7 @@ uint32_t api_enemy_move(EmfWorld* w, EmfMoveOrder* req, EmfMoveCallback cb, void
     if (WorldView(raw(w)).kind() != EMF_WORLD_SERVER) return refuse("not a server world (host only)");
     MoveOrders* m = g_state->moves;
     if (!m) return refuse("move orders are off (see the log)");
+    if (req->flags & EMF_MOVE_HOLD) return refuse("EMF_MOVE_HOLD is for villager_move");
     if (!req->points || req->count == 0 || req->count > kMovePointsMax) return refuse("1 to 16 points");
     std::vector<MoveOrders::Point> points;
     for (uint32_t i = 0; i < req->count; ++i)
@@ -2659,6 +2721,9 @@ const EmfApi kApi = {
     api_break_blocks,  // v44
     api_block_at,
     api_find_wall,
+    api_villager_move,  // v46
+    api_villager_move_cancel,
+    api_villager_moving,
 };
 
 bool guarded_chat_call(EmfChatCallback cb, EmfWorld* w, uint64_t account, uint32_t entity, const char* text, void* user) {

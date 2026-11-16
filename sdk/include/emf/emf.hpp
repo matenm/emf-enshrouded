@@ -1070,6 +1070,24 @@ inline bool game_admin(World w, uint32_t player) {
 inline bool has_v44() { return api() && api()->size >= offsetof(EmfApi, find_wall) + sizeof(api()->find_wall); }
 // API v45 (EmfBlockInfo.world, EMF_BREAK_WORLD: the world's own blocks, its ruins, are never broken unless asked)
 inline bool has_v45() { return has_v44() && api()->version >= 45; }
+// v46: villager moves (villager_move, villager_move_cancel, villager_moving)
+inline bool has_v46() { return api() && api()->size >= offsetof(EmfApi, villager_moving) + sizeof(api()->villager_moving); }
+// Walks villager order.enemy through its points inside its own area (order.size is set here): the move's id, or 0 with
+// order.why. hold_seconds / EMF_MOVE_HOLD keep it at the last point after the arrival callback.
+inline uint32_t villager_move(World w, EmfMoveOrder& order, EmfMoveCallback cb = nullptr, void* user = nullptr) {
+    order.size = sizeof order;
+    if (!has_v46() || !api()->villager_move) {
+        static const char kText[] = "this EMF core is too old (villager_move needs API v46)";
+        static_assert(sizeof kText <= sizeof order.why, "the text fits");
+        std::memcpy(order.why, kText, sizeof kText);
+        return 0;
+    }
+    return api()->villager_move(w.raw(), &order, cb, user);
+}
+inline bool villager_move_cancel(uint32_t id) { return has_v46() && api()->villager_move_cancel && api()->villager_move_cancel(id); }
+inline uint32_t villager_moving(World w, uint32_t villager) {
+    return has_v46() && api()->villager_moving ? api()->villager_moving(w.raw(), villager) : 0;
+}
 // Queues the break (req.size is set here): its id, or 0 with req.why. cb gets the counts after the server step.
 inline uint32_t break_blocks(World w, EmfBreakBlocks& req, EmfBreakCallback cb = nullptr, void* user = nullptr) {
     req.size = sizeof req;

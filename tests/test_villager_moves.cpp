@@ -12,7 +12,12 @@
 #include <utility>
 #include <vector>
 
+#include "common/offsets.h"
+#include "core/api.h"
+#include "core/api_sizes.h"
+#include "core/dispatcher.h"
 #include "core/villager_moves.h"
+#include "fake_world.h"
 #include "emf/emf_api.h"
 #include "emf/generated/components.hpp"
 
@@ -619,4 +624,54 @@ TEST_CASE("villager moves: the emf_moves queue keeps one GoToPosition per villag
     CHECK(all[1].x == doctest::Approx(6));
     for (uint32_t i = 0; i < kNpcQueueMax + 10; ++i) q.push(i + 1, 0, 0, 0);
     CHECK(q.size() == kNpcQueueMax);
+}
+
+TEST_CASE("api (v46): villager_move from a server world callback only; the enemy-only flags refused; hold_seconds and EMF_MOVE_HOLD reach the move; cancel and moving") {
+    Fake f;
+    f.villager();
+    VillagerMoves moves(f.deps());
+    emf::test::FakeWorld fw;
+    fw.put<uint8_t>(emf::off::kKind, EMF_WORLD_SERVER);
+    CoreState state;
+    state.log_line = [](const std::string&) {};
+    state.villager_moves = &moves;
+    set_core_state(&state);
+    EmfWorld* w = reinterpret_cast<EmfWorld*>(fw.p());
+    Dispatcher disp;
+    auto in_world = [&](auto fn) {
+        static decltype(fn)* held;
+        held = &fn;
+        disp.post(EMF_WORLD_SERVER, [](EmfWorld* world, void*) { (*held)(world); }, nullptr);
+        disp.run(w, EMF_WORLD_SERVER, [](const std::string&) {});
+    };
+    const EmfApi* api = api_table();
+    CHECK(api->version == 46u);
+    CHECK(api->size == kApiV46Size);
+    CHECK(offsetof(EmfApi, villager_move) == kApiV44Size);
+    EmfPathPoint p{20, 10, 0, 0};
+    EmfMoveOrder m{};
+    m.size = sizeof m;
+    m.enemy = kVillager;
+    m.count = 1;
+    m.points = &p;
+    CHECK(api->villager_move(w, &m, nullptr, nullptr) == 0u);  // not inside a world callback
+    CHECK(std::string(m.why).find("world callback") != std::string::npos);
+    in_world([&](EmfWorld* world) {
+        m.flags = EMF_MOVE_PEACEFUL;
+        CHECK(api_table()->villager_move(world, &m, nullptr, nullptr) == 0u);
+        CHECK(std::string(m.why).find("enemy_move") != std::string::npos);
+        m.flags = EMF_MOVE_HOLD;
+        m.hold_seconds = 0;
+        const uint32_t id = api_table()->villager_move(world, &m, nullptr, nullptr);
+        REQUIRE(id != 0u);
+        CHECK(api_table()->villager_moving(world, kVillager) == id);
+        CHECK(api_table()->villager_move_cancel(id));
+        CHECK(api_table()->villager_moving(world, kVillager) == 0u);
+        // enemy_move takes no hold
+        m.flags = EMF_MOVE_HOLD;
+        CHECK(api_table()->enemy_move(world, &m, nullptr, nullptr) == 0u);
+    });
+    CHECK(f.sends.size() >= 2);  // the point, then "stop where you stand"
+    CHECK(f.sends[0].npc == kNpcId);
+    set_core_state(nullptr);
 }

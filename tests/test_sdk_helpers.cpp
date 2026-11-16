@@ -1117,3 +1117,22 @@ TEST_CASE("emf::has_v42 (0.6.11): by the version number, the table did not grow"
     REQUIRE(emf::init(&v42));
     CHECK(emf::has_v42());
 }
+
+TEST_CASE("emf::has_v45 by the version (the table did not grow); has_v46 by the table's size (villager moves appended)") {
+    reset();
+    static EmfApi v44 = fake_api();
+    v44.version = 44;
+    v44.size = static_cast<uint32_t>(offsetof(EmfApi, villager_move));  // a v44/v45 core's table
+    REQUIRE(emf::init(&v44, 40));
+    CHECK(emf::has_v44());
+    CHECK_FALSE(emf::has_v45());
+    CHECK_FALSE(emf::has_v46());
+    EmfMoveOrder m{};
+    CHECK(emf::villager_move(emf::World{nullptr}, m) == 0u);
+    CHECK(std::string(m.why).find("API v46") != std::string::npos);
+    static EmfApi v46 = fake_api();
+    v46.version = 46;
+    REQUIRE(emf::init(&v46));
+    CHECK(emf::has_v45());
+    CHECK(emf::has_v46());
+}

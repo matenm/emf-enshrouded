@@ -602,9 +602,9 @@ TEST_CASE("api break_blocks (v44): queued on a server world; refused on a client
 
 TEST_CASE("api table (v44, v45): break_blocks, block_at and find_wall appended; v45 is the version only (EmfBlockInfo.world, EMF_BREAK_WORLD)") {
     const EmfApi* api = api_table();
-    CHECK(api->version == 45u);
-    CHECK(EMF_API_VERSION == 45);
-    CHECK(api->size == kApiV44Size);
+    CHECK(api->version >= 45u);  // the newest version is checked by its own test
+    CHECK(EMF_API_VERSION >= 45);
+    CHECK(api->size >= kApiV44Size);
     CHECK(kApiV45Size == kApiV44Size);
     CHECK(offsetof(EmfApi, break_blocks) == kApiV43Size);
     CHECK(api->break_blocks != nullptr);

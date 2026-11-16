@@ -50,6 +50,7 @@
 #include "doors.h"
 #include "enemy_orders.h"
 #include "move_orders.h"
+#include "villager_moves.h"
 #include "path_glue.h"
 #include "block_commands.h"
 #include "block_glue.h"
@@ -616,6 +617,9 @@ std::vector<std::array<double, 3>> player_places(uint8_t* world) {
 std::unique_ptr<emf::core::EnemyOrders> g_orders;
 // v40 move orders: walked after every server step; their guard orders go out from the emf_moves program at the next step.
 std::unique_ptr<emf::core::MoveOrders> g_moves;
+// v46 villager moves: walked after every server step; their GoToPosition commands go out from the emf_moves program.
+std::unique_ptr<emf::core::VillagerMoves> g_villager_moves;
+emf::core::NpcSendQueue g_npc_queue;
 std::mutex g_guard_lock;
 std::vector<std::pair<uint32_t, uint32_t>> g_guard_queue;  // (guarding, guarded)
 constexpr const char* kMovesProgramName = "emf_moves";
@@ -639,6 +643,25 @@ void moves_program(void* ctx, void*) {
         g_guard_queue.insert(g_guard_queue.begin(), work.begin() + static_cast<std::ptrdiff_t>(sent), work.end());
         if (g_guard_queue.size() > kGuardQueueMax) g_guard_queue.resize(kGuardQueueMax);
     }
+    // v46: villager moves' GoToPosition (the game's own command; one per villager, the latest point)
+    std::vector<emf::core::NpcSendQueue::Send> sends = g_npc_queue.take();
+    size_t done = 0;
+    for (; done < sends.size(); ++done) {
+        namespace gen = emf::gen::ecs;
+        auto* ev = static_cast<gen::NpcCommandEvent*>(
+            emf::core::api_table()->emit_event(ctx, "NpcCommandEvent", gen::NpcCommandEvent::kSize));
+        if (!ev) break;  // logged once by emit_event; the rest waits for the next step
+        const auto& s = sends[done];
+        ev->type = gen::NpcCommandType::GoToPosition;
+        ev->npcId.value = s.npc;  // the villager's template ActiveNpcState.npcId
+        ev->targetTransform.position.x = std::llround(s.x * 4294967296.0);
+        ev->targetTransform.position.y = std::llround(s.y * 4294967296.0);
+        ev->targetTransform.position.z = std::llround(s.z * 4294967296.0);
+        ev->targetTransform.orientation.w = 1.0f;
+        ev->targetTransform.scale = {1.0f, 1.0f, 1.0f};
+    }
+    if (done < sends.size())
+        g_npc_queue.put_back(std::vector<emf::core::NpcSendQueue::Send>(sends.begin() + static_cast<std::ptrdiff_t>(done), sends.end()));
 }
 // v23 change_component: the emf_components program and its requests (null when off on this game build).
 std::unique_ptr<emf::core::ComponentService> g_components;
@@ -766,6 +789,8 @@ void hk_register_all_programs(void* world) {
             if (g_orders) g_orders->world_reset();        // enemy orders of the old world end
             emf::core::builtin_world_reset(g_builtin);   // god's hit rules of the old world go
             if (g_moves) g_moves->world_reset();  // move orders of the old world end (cancelled, no world)
+            if (g_villager_moves) g_villager_moves->world_reset();  // villager moves too (holds quietly)
+            g_npc_queue.clear();
             {
                 std::lock_guard<std::mutex> l(g_guard_lock);
                 g_guard_queue.clear();
@@ -1468,13 +1493,24 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
         s.name = kMovesProgramName;
         s.world_kind = EMF_WORLD_SERVER;
         s.fn = moves_program;
-        s.events_out = {"StartGuardingEvent"};
+        s.events_out = {"StartGuardingEvent", "NpcCommandEvent"};
         if (g_state->system_programs.registration_closed() || !g_state->system_programs.add(s, true)) {
             emf::logf("move orders: off (the %s program could not be added)", kMovesProgramName);
         } else {
+            emf::core::VillagerMoves::Deps vd;
+            vd.get = d.get;
+            vd.tpl = [](EmfWorld* w, uint32_t hash, uint32_t entity, uint64_t* size) -> const void* {
+                const EmfApi* a = emf::core::api_table();
+                return a->get_template_component ? a->get_template_component(w, hash, entity, size) : nullptr;
+            };
+            vd.now_ms = [] { return GetTickCount64(); };
+            vd.go_to = [](uint32_t npc, double x, double y, double z) { g_npc_queue.push(npc, x, y, z); };
+            vd.drop = [](uint32_t npc) { g_npc_queue.drop(npc); };
             g_moves = std::make_unique<emf::core::MoveOrders>(std::move(d));
             g_state->moves = g_moves.get();
-            emf::logf("move orders: on (program %s in the server world)", kMovesProgramName);
+            g_villager_moves = std::make_unique<emf::core::VillagerMoves>(std::move(vd));
+            g_state->villager_moves = g_villager_moves.get();
+            emf::logf("move orders and villager moves: on (program %s in the server world)", kMovesProgramName);
         }
     }
     // v38 doors: an internal server program writes the door components through the game's writeOther (private research
@@ -1947,6 +1983,7 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
             emf::core::map_server_tick(w);  // v34 ground_at
             if (g_orders) g_orders->step(w);  // v39 enemy orders
             if (g_moves) g_moves->step(w);    // v40 move orders
+            if (g_villager_moves) g_villager_moves->step(w);  // v46 villager moves
             if (g_doors) {  // door locks kept per world: read once after the world's save loaded, saved when they change
                 g_door_file.poll([](const std::string& text) { g_doors->load_saved(text); });
                 g_doors->server_tick(reinterpret_cast<uint8_t*>(w), GetTickCount64());

@@ -1,4 +1,4 @@
-/* EMF (Enshrouded Modding Framework) C API, version 45 (see EMF_API_VERSION).
+/* EMF (Enshrouded Modding Framework) C API, version 46 (see EMF_API_VERSION).
  *
  * A mod is a DLL in <game>/emf/mods/ that exports:
  *     extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api);
@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define EMF_API_VERSION 45
+#define EMF_API_VERSION 46
 
 /* World kinds (the byte at the entity storage + 8: world+0xE15DC8 on build 1273043, world+0xE179C8 on 1283531). */
 #define EMF_WORLD_SERVER 0
@@ -785,6 +785,8 @@ typedef void (*EmfPathCallback)(EmfWorld* world, uint32_t id, const EmfPathResul
 #define EMF_MOVE_PEACEFUL 0x2u /* its fights against players are cleared on the way */
 #define EMF_MOVE_PEACEFUL_ALL 0x4u /* API v41 (0.6.10): every fight is cleared on the way (animals, monsters,
                                       players' beasts too): it only walks. A v40 core refuses it (unknown flags) */
+#define EMF_MOVE_HOLD 0x8u     /* API v46, villager_move only: after it arrives it holds at the last point until
+                                  villager_move_cancel (see hold_seconds) */
 #define EMF_MOVE_ARRIVED 0u    /* EmfMoveCallback status: at the last point */
 #define EMF_MOVE_STUCK 1u      /* no metre of progress for 15 s (or stuck_seconds) while not fighting (a wall, no path,
                                   the game gave up) */
@@ -793,7 +795,8 @@ typedef void (*EmfPathCallback)(EmfWorld* world, uint32_t id, const EmfPathResul
 #define EMF_MOVE_CANCELLED 4u  /* enemy_move_cancel, a new move or enemy order on it, the world closing (world NULL) */
 typedef struct EmfMoveOrder {
     uint32_t size;               /* sizeof(EmfMoveOrder) */
-    uint32_t enemy;              /* the creature (it has DynamicEnemy01BehaviorState); never a player or a boss */
+    uint32_t enemy;              /* enemy_move: the creature (it has DynamicEnemy01BehaviorState); never a player or a
+                                    boss. villager_move (v46): the villager */
     uint32_t flags;              /* EMF_MOVE_* */
     uint32_t count;              /* points: 1..16 */
     const EmfPathPoint* points;  /* walked in order; x, y, z are read (move is ignored); path_find's points fit
@@ -805,7 +808,9 @@ typedef struct EmfMoveOrder {
     char why[96];                /* refused: why (NUL-terminated) */
     float stuck_seconds;         /* API v41 (0.6.10; read when size covers it, a v40 core ignores it): no metre closer
                                     for this long while not fighting ends it stuck; 0 = 15; 2..120 */
-    uint32_t pad2;
+    float hold_seconds;          /* API v46, villager_move only (pad2 before v46, never read): after it
+                                    arrives it holds at the last point this long, 0..3600; 0 = no hold (see
+                                    EMF_MOVE_HOLD) */
 } EmfMoveOrder;
 typedef void (*EmfMoveCallback)(EmfWorld* world, uint32_t id, uint32_t status, void* user);
 /* v44 blocks: player-built blocks (voxels with a building material) damaged or broken from a mod, on the server. EMF
@@ -1651,6 +1656,29 @@ typedef struct EmfApi {
     /* The first building block on the line from `from` to `to` (metres; at most 64 m of it), with its centre. False
      * when the line is clear, or for the reasons block_at gives. */
     bool (*find_wall)(EmfWorld* world, const float from[3], const float to[3], EmfBlockInfo* out);
+
+    /* ---- v46: villager moves (EmfMoveOrder) ---- */
+    /* Walks villager order->enemy to its points inside its own walk area, by sending the game's own GoToPosition
+     * command again whenever the villager dropped it (it arrived somewhere, a player came close, its path failed).
+     * Nothing is written to the game's components and nothing is saved. Returns the move's id (from 1), or 0 with
+     * order->why: not a server world or not inside a world callback on it, no villager (DynamicActiveNpcState and its
+     * ActiveNpcState template), a player, a villager the player told to stay, a point outside its walk area (the
+     * player's roaming range when set, else its template's roaming radius around its home: 30 m for the game's
+     * villagers) or beyond the game's leash (it would be teleported home), the enemy-only flags (EMF_MOVE_ALLIES,
+     * _PEACEFUL, _PEACEFUL_ALL), bad points or numbers, more than 256 villager moves. It waits (and its stuck clock
+     * with it) while the game does not run the villager: no player within 150 m, night and sleep, water, a player
+     * talking to it; `seconds` runs on. Statuses as enemy_move: ARRIVED, STUCK (no metre closer for stuck_seconds, the
+     * game teleported it, or its path not found twice), TIMEOUT, GONE, CANCELLED. With hold_seconds or EMF_MOVE_HOLD
+     * the callback still comes once, at ARRIVED; the hold then runs on the same id (villager_moving is the id) and
+     * ends quietly: its time over, villager_move_cancel, a new move on it, the world closing, the player telling it
+     * to stay, its home moving, a teleport, or no way back for stuck_seconds. It waits while a player is close by.
+     * cb as enemy_move. Cancel, stuck and timeout tell the villager to stop where it stands. */
+    uint32_t (*villager_move)(EmfWorld* world, EmfMoveOrder* order, EmfMoveCallback cb, void* user);
+    /* Ends a villager move (its callback gets EMF_MOVE_CANCELLED) or its hold (quietly): at once inside a world
+     * callback on the server world, else at the next step. False: no such move. */
+    bool (*villager_move_cancel)(uint32_t id);
+    /* The id of `villager`'s move or hold, 0 = none. */
+    uint32_t (*villager_moving)(EmfWorld* world, uint32_t villager);
 } EmfApi;
 
 #define EMF_ITEM_NAME_GAME_TEXT 1u /* v29 item_name: the player's language even where EMF's screens cannot draw it */
