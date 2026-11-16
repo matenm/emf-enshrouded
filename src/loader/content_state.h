@@ -24,6 +24,7 @@ struct ContentState {
     int code = -5;  // content_build.h's codes
     std::string message;
     std::vector<std::string> mods, errors;
+    std::vector<std::string> warnings;  // a good build's mods that warned ("<id>: <warning>"): said again at each start
     uint64_t ms = 0;
     std::string built_at;    // UTC, "YYYY-MM-DDTHH:MM:SSZ"
     bool unloaded = true;    // emf_content.dll was unloaded after the build
@@ -41,7 +42,8 @@ inline std::string state_json(const ContentState& s) {
     };
     return "{\"fingerprint\": " + cio::json_string(s.fingerprint) + ", \"code\": " + std::to_string(s.code) +
            ", \"message\": " + cio::json_string(s.message) + ", \"mods\": " + list(s.mods) + ", \"errors\": " +
-           list(s.errors) + ", \"ms\": " + std::to_string(s.ms) + ", \"built_at\": " + cio::json_string(s.built_at) +
+           list(s.errors) + ", \"warnings\": " + list(s.warnings) + ", \"ms\": " + std::to_string(s.ms) +
+           ", \"built_at\": " + cio::json_string(s.built_at) +
            ", \"unloaded\": " + (s.unloaded ? "true" : "false") + ", \"truncated\": " + (s.truncated ? "true" : "false") +
            ", \"chain_checked\": " + list(s.chain_checked) + ", \"attempts\": " + std::to_string(s.attempts) +
            ", \"reported\": " + (s.reported ? "true" : "false") + "}\r\n";
@@ -61,7 +63,7 @@ inline std::optional<ContentState> parse_state(std::string_view text) {
     s.code = static_cast<int>(code->n);
     if (const auto* m = v.get("message"); m && m->is(T::String)) s.message = m->s;
     for (const auto& [key, list] : {std::pair<const char*, std::vector<std::string>*>{"mods", &s.mods}, {"errors", &s.errors},
-                                {"chain_checked", &s.chain_checked}})
+                                {"warnings", &s.warnings}, {"chain_checked", &s.chain_checked}})
         if (const auto* a = v.get(key); a && a->is(T::Array))
             for (const auto& x : a->arr)
                 if (x.is(T::String)) list->push_back(x.s);

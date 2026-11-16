@@ -261,6 +261,69 @@ TEST_CASE("content start: build runs before chain and core") {
     CHECK(r.logged("status built 1 1500"));
 }
 
+// A creature pack caught its own failure and only logged it: the build said "up to date" and nothing reached the
+// player. Its warning now goes into the reply, the state, the loader's log and the core's status.
+TEST_CASE("content start: a build whose mods warned keeps the warnings, logs each, and the status carries a summary") {
+    auto warned = built_ok();
+    warned.warnings = {"emf_beastmaster_bear: Bear: not added: out of references", "emf_snakes: Grass Snake: not added"};
+    Recorder r;
+    auto plan = emf::loader::plan_content(plan_steps(r, owned_facts(), std::nullopt));
+    REQUIRE(plan.path == ContentPath::BuildHeld);
+    auto steps = start_steps(r, true, warned);
+    CHECK(emf::loader::start_in_dllmain(plan, steps));
+    emf::loader::run_held_content(plan, steps);
+    REQUIRE(r.states.size() == 2);
+    CHECK(r.states[1].code == 0);  // still a good build: the rest of the content is in
+    CHECK(r.states[1].warnings == warned.warnings);
+    CHECK(r.joined().find("hooks(content on), status(built)") != std::string::npos);
+    CHECK(r.logged("EML content: a mod warned: emf_beastmaster_bear: Bear: not added: out of references"));
+    CHECK(r.logged("EML content: a mod warned: emf_snakes: Grass Snake: not added"));
+    CHECK(r.logged("status built 1 1500 emf_beastmaster_bear: Bear: not added: out of references (and 1 more)"));
+}
+
+TEST_CASE("content start: a current start sends the earlier build's warning again (the creature is still missing)") {
+    auto state = good_state("sha256:now");
+    state.warnings = {"emf_beastmaster_bear: Bear: not added"};
+    Recorder r;
+    auto plan = emf::loader::plan_content(plan_steps(r, owned_facts(), state));
+    REQUIRE(plan.path == ContentPath::UseCurrent);
+    auto steps = start_steps(r);
+    CHECK_FALSE(emf::loader::start_in_dllmain(plan, steps));
+    CHECK(r.logged("status current 1 28000 emf_beastmaster_bear: Bear: not added"));
+}
+
+TEST_CASE("content build: the reply's mod_warnings are read as '<id>: <warning>'") {
+    emf::loader::BuildOutcome out;
+    REQUIRE(emf::loader::detail::read_reply(
+        R"({"code": 0, "message": "up to date", "mod_warnings": [{"id": "bear", "warning": "Bear: not added"},)"
+        R"( {"id": 5, "warning": "no id"}, {"warning": "x"}]})",
+        out));
+    REQUIRE(out.warnings.size() == 3);
+    CHECK(out.warnings[0] == "bear: Bear: not added");
+    CHECK(out.warnings[1] == "?: no id");
+    CHECK(out.warnings[2] == "?: x");
+    emf::loader::BuildOutcome none;
+    REQUIRE(emf::loader::detail::read_reply(R"({"code": 0, "message": "up to date"})", none));
+    CHECK(none.warnings.empty());
+}
+
+TEST_CASE("content state: the warnings are written and read back") {
+    auto st = good_state("sha256:now");
+    st.warnings = {"bear: Bear: not added", "a: \"quoted\""};
+    const auto back = emf::loader::parse_state(emf::loader::state_json(st));
+    REQUIRE(back.has_value());
+    CHECK(back->warnings == st.warnings);
+    const auto old = emf::loader::parse_state(R"({"fingerprint": "f", "code": 0})");  // a state from before
+    REQUIRE(old.has_value());
+    CHECK(old->warnings.empty());
+}
+
+TEST_CASE("content warnings: the summary is the first warning and how many more") {
+    CHECK(emf::loader::warnings_summary({}).empty());
+    CHECK(emf::loader::warnings_summary({"a: b"}) == "a: b");
+    CHECK(emf::loader::warnings_summary({"a: b", "c: d", "e: f"}) == "a: b (and 2 more)");
+}
+
 TEST_CASE("content start: failed build starts chain and core without redirect") {
     auto failed = built_ok();
     failed.code = 2;

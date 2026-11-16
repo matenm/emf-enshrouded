@@ -40,6 +40,7 @@ struct BuildOutcome {
     std::string message;
     std::vector<std::string> mods;    // "<id> <version>"
     std::vector<std::string> errors;  // "<path>: <error>" for each mod the DLL could not read
+    std::vector<std::string> warnings;  // "<id>: <warning>" for each warning a mod's Lua gave while it built
     uint64_t ms = 0;
     bool unloaded = true;    // the DLL is not in the process any more (or never was)
     bool truncated = false;  // the reply was cut (or did not fit at all): the result is unknown
@@ -91,6 +92,13 @@ inline bool read_reply(const std::string& text, BuildOutcome& out) {
             const auto* error = e.get("error");
             out.errors.push_back((path && path->is(T::String) ? path->s : std::string("?")) + ": " +
                                  (error && error->is(T::String) ? error->s : std::string("?")));
+        }
+    if (const auto* warns = v.get("mod_warnings"); warns && warns->is(T::Array))
+        for (const auto& w : warns->arr) {
+            const auto* id = w.get("id");
+            const auto* warning = w.get("warning");
+            out.warnings.push_back((id && id->is(T::String) ? id->s : std::string("?")) + ": " +
+                                   (warning && warning->is(T::String) ? warning->s : std::string("?")));
         }
     return true;
 }

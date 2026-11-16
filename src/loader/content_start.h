@@ -51,6 +51,7 @@ struct ContentPlan {
     std::string fingerprint;  // when EMF owns it
     size_t state_mods = 0;    // UseCurrent: the earlier build's mods and time
     uint64_t state_ms = 0;
+    std::vector<std::string> state_warnings;  // UseCurrent: what its mods warned (the core says it again)
     int attempts = 1;                    // BuildHeld: the how-many-th start in a row that begins this build
     std::optional<ContentState> failed;  // KnownFailed: the earlier failure with the same files
     // Pictures of creatures mods asked for that the cache lacks (portraits_plan.h; the loader fills it, never on the
@@ -113,6 +114,14 @@ inline std::string seconds_text(uint64_t ms) {
 
 inline std::string mods_text(size_t n) { return std::to_string(n) + (n == 1 ? " mod" : " mods"); }
 
+// The status message of a good build whose mods warned: the first warning, and how many more ("" for none).
+inline std::string warnings_summary(const std::vector<std::string>& warnings) {
+    if (warnings.empty()) return {};
+    std::string out = warnings.front();
+    if (warnings.size() > 1) out += " (and " + std::to_string(warnings.size() - 1) + " more)";
+    return out;
+}
+
 constexpr int kMaxBuildAttempts = 2;  // starts in a row a build may stop the game in before it is left alone
 
 inline ContentPlan plan_content(const PlanSteps& s) {
@@ -143,6 +152,7 @@ inline ContentPlan plan_content(const PlanSteps& s) {
         plan.path = ContentPath::UseCurrent;
         plan.state_mods = state->mods.size();
         plan.state_ms = state->ms;
+        plan.state_warnings = state->warnings;
         s.log("EML content: the shadow copy is current (" + mods_text(state->mods.size()) + ", built " + state->built_at +
               "): emf_content.dll is not loaded");
         return plan;
@@ -237,7 +247,7 @@ inline void start_unheld(const ContentPlan& plan, const StartSteps& s, std::opti
     if (status) {
         // given: the start that could not be held for a build
     } else if (plan.path == ContentPath::UseCurrent) {
-        status = ContentStatus{"current", plan.state_mods, plan.state_ms, ""};
+        status = ContentStatus{"current", plan.state_mods, plan.state_ms, warnings_summary(plan.state_warnings)};
     } else if (plan.path == ContentPath::KnownFailed && plan.failed) {
         // the core shows the warning at every such start; the save backup only the first time it hears of it
         status = ContentStatus{plan.failed->reported ? "failed_again" : "failed", plan.failed->mods.size(), plan.failed->ms,
@@ -401,6 +411,7 @@ inline void run_held_content(const ContentPlan& plan, const StartSteps& s) {
     state.message = out.message;
     state.mods = out.mods;
     state.errors = out.errors;
+    state.warnings = out.warnings;
     state.ms = out.ms;
     state.built_at = s.now();
     state.unloaded = out.unloaded;
@@ -426,6 +437,7 @@ inline void run_held_content(const ContentPlan& plan, const StartSteps& s) {
     if (ok) {
         s.log("EML content: built " + mods_text(out.mods.size()) + " in " + seconds_text(out.ms) +
               "; the game reads the shadow copy");
+        for (const auto& w : out.warnings) s.log("EML content: a mod warned: " + w);
     } else {
         s.drop_record();
         s.log("EML content could not be built: " + out.message + " (code " + std::to_string(out.code) +
@@ -440,7 +452,7 @@ inline void run_held_content(const ContentPlan& plan, const StartSteps& s) {
     }
     s.run_chain();
     s.hooks(ok ? Hooks::ContentOn : Hooks::ContentOff);
-    s.set_status(ok ? ContentStatus{"built", out.mods.size(), out.ms, ""}
+    s.set_status(ok ? ContentStatus{"built", out.mods.size(), out.ms, warnings_summary(out.warnings)}
                     : ContentStatus{"failed", out.mods.size(), out.ms, out.message});
     s.start_core();
 }
