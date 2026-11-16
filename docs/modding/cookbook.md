@@ -635,6 +635,28 @@ local function try_raider(world, raider, raider_pos, altar_pos)
 end
 ```
 
+## A raider that breaks the wall in front of it (blocks)
+
+A raider held up by a wall: find the wall on the line from its chest toward its goal, and crack it every 1.5 s while it
+stands there (Night Raids' "Raiders break walls" does this, with a hole low enough to walk through).
+
+```lua
+local function crack_wall(world, raider, goal)
+  local x, y, z = world:position(raider)
+  local dx, dz = goal.x - x, goal.z - z
+  local len = math.sqrt(dx * dx + dz * dz)
+  if len < 0.1 then return end
+  local chest = {x, y + 1.2, z}
+  local ahead = {x + dx / len * 4, y + 1.2, z + dz / len * 4}  -- 4 m toward the goal
+  local wall = emf.find_wall(world, chest, ahead)
+  if not wall then return end                                    -- nothing to break: it is held up by something else
+  -- a hole from the floor up: spheres of 1 m from 0.75 m over its feet, 0.7 m higher
+  emf.break_blocks(world, wall.x, y + 0.75, wall.z, {radius = 1, height = 0.7}, function(w, r)
+    if r.removed > 0 then emf.log("the wall gives way: " .. r.removed .. " blocks") end
+  end)
+end
+```
+
 ## A gate that opens for a raid (doors)
 
 A raid mod can open a gate when the attack starts and keep the treasure room shut (Lua 1.30, host or dedicated server).

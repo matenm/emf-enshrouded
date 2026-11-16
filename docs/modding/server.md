@@ -109,7 +109,7 @@ deny=loot.toggle, champion.where
 ```
 
 **Defaults of the shipped mods on a server:** Night Raids is on, but every world starts without raids (`raids.world
-on`); Loot Magnet, Wandering Champion, Bounty Board, Grave Keeper, Sleep Through the Day, Server Herald, Hand-over,
+on`), and its "Raiders break walls" is off (`break_walls=1` in `emf\config\raids.ini`); Loot Magnet, Wandering Champion, Bounty Board, Grave Keeper, Sleep Through the Day, Server Herald, Hand-over,
 Waypoint Teleports, Bulk Craft, Flame Blessings, Beastmaster and Necromancer are installed switched off: set `enabled=1` in
 `emf\config\<id>.ini` (`loot_magnet`, `champion`, `bounty`, `grave`, `sleep`, `herald`, `handover`, `teleports`,
 `bulk_craft`, `blessings`, `beastmaster`, `necromancer`; section `[<id>]`), or switch

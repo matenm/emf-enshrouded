@@ -101,6 +101,7 @@ version the additions need (empty: the v20 the `lua` mod needs is enough). Range
 | 1.34 | the move options `stuck` and `peaceful = "all"` | v41, from EMF 0.6.10 |
 | 1.35 | `door` on a path's door points | v42, from EMF 0.6.11 |
 | 1.36 | `world:permissions` | v43 |
+| 1.37 | `emf.break_blocks`, `emf.block_at`, `emf.find_wall` | v44 |
 
 ## What happens when a script fails
 
@@ -164,6 +165,8 @@ right away.
 | `emf.enemy_order_cancel(id)` / `emf.enemy_target(world, enemy)` | 1.32: end an order / what the enemy goes for now (or nil) |
 | `emf.enemy_move(world, enemy, points [, opts] [, fn])` | 1.33: the creature walks to a point or through a list of points; the move's id, or nil and why (see "Move orders" below) |
 | `emf.enemy_move_cancel(id)` / `emf.enemy_moving(world, enemy)` | 1.33: end a move / its move's id now (or nil) |
+| `emf.break_blocks(world, x, y, z [, opts], fn)` | 1.37: damages or breaks the player-built blocks around a point, never the ground; `fn(world, result)` after the step; id or nil (see "Breaking blocks" below) |
+| `emf.block_at(world, x, y, z)` / `emf.find_wall(world, from, to)` | 1.37: what is at a point / the first building block on a line, as a table, or nil |
 | `emf.kill(world, id)` | (1.4) kills a creature without a hit: its current health becomes 0 (1.5: through the game's attribute code) and the game's death program sends `EntityDiedEvent` the next step; the corpse keeps its loot. No attacker, no kill credit (`emf.damage` gives one); never a player; host only. true / false |
 | `emf.health(world, id)` | (1.5) the current and maximum health: `local cur, max = emf.health(w, id)`; the game's attributes in a world you host, else the replicated `NetworkHealth`; nil when neither is there |
 | `emf.attribute(world, id, attr)` | (1.5) an attribute as the game reads it: `attr` is `"health"`, `"max_health"`, `"stamina"`, `"max_stamina"`, `"mana"`, `"max_mana"`, a player's `"xp_pending"`, `"xp"`, `"xp_required"` and `"level"` (1.11, EMF API v22), or an attribute id; nil when the entity has none. Give XP with `emf.attribute_add(w, player, "xp_pending", n)`: the game levels the player up itself (the other three are read-only). Host only |
@@ -761,6 +764,47 @@ saved. `emf.enemy_moving(world, enemy)` is its move's id, or nil. Host only. On 
 -- walk a raider to the gap next to the gate, then break the gate
 emf.enemy_move(world, raider, {gap}, {peaceful = true}, function(w, id, status)
   if status == "arrived" then emf.enemy_order(w, raider, gate, {seconds = 60, damage = 40}) end
+end)
+```
+
+## Breaking blocks (1.37)
+
+`emf.break_blocks(world, x, y, z [, opts], fn)` damages (like a pickaxe hit: cracks, the game's per-block health) or
+breaks at once the building blocks in a sphere, or a column of spheres, around a point in metres. Never terrain: the
+ground stays. A hole is a normal building change, sent to every player and saved like mining: the game keeps it inside
+a flame altar's area and resets the world outside bases (after about 30 minutes or at a server restart), as it does for
+a pickaxe. The world's ruins are building blocks too. Host only (the server world). It returns an id, or nil (the
+reason is in the log). On a core older than API v44 it is nil.
+
+| `opts` field | What |
+|---|---|
+| `radius` | metres, 0.25 to 3.5 (default 1) |
+| `height` | metres, 0 to 4: more spheres up to this far above the point (a column; at most 8 spheres) |
+| `mode` | `"damage"` (default) or `"break"` (at once: no health, no cracks) |
+| `damage` | a number for all five hardness classes, or a list of five (Soft, SlightlyHard, ModeratelyHard, Hard, VeryHard), whole, 0 to 100000; default the game's T4 pickaxe (100, 100, 95, 60, 50) |
+| `drops` | `true`: removed blocks drop what a pickaxe gives (each material's item, so many blocks per item) at the hole |
+| `materials` | a list of building material ids 0 to 127 (`emf.block_at`'s `material`); default every one that can break |
+
+Any other key, or a value of the wrong type, is a Lua error. `fn(world, result)` comes once, after the server step that
+ran it: `result.status` is `"done"`, `"cancelled"` (the world ended first) or `"failed"` (breaking is off after a
+fault); `result.damaged`, `result.removed`, `result.dropped` are counts. A script paused or reloaded in between hears
+nothing. With the default damage straw falls in 1 hit, wood logs in 2-3, planks in 5, stone in about 22; damage not
+finished heals 20 s after the last hit; the game's Unbreakable materials never break. At most 8 spheres run per step for
+all mods; the rest wait.
+
+`emf.block_at(world, x, y, z)` and `emf.find_wall(world, from, to)` (positions `{x, y, z}` or `{x = , y = , z = }`; the
+line at most 64 m) give `{kind = "empty" | "terrain" | "building", material, fill, hardness, health, damage, x, y, z}`
+(`hardness` 0 Soft .. 4 VeryHard, 5 Unbreakable; `damage` 0..255 so far, nil when unknown; `x, y, z` the block's
+centre), or nil (the line is clear, the place is not loaded, not the server world, an older core). Inside a world
+callback on the server world, like `world:get`.
+
+```lua
+-- a bomb that cracks soft walls around it, never the ground
+emf.command("bomb", "<x> <y> <z>: crack the walls around a point", function(world, args)
+  local x, y, z = tonumber(args[1]), tonumber(args[2]), tonumber(args[3])
+  local id = emf.break_blocks(world, x, y, z, {radius = 2, damage = {400, 300, 200, 50, 20}, drops = true},
+    function(w, r) emf.reply(r.status .. ": " .. r.removed .. " blocks gone, " .. r.dropped .. " items") end)
+  if not id then emf.reply("refused (see the log)") end
 end)
 ```
 
