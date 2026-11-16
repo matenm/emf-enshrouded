@@ -99,6 +99,9 @@ class OtherSourcesTests(unittest.TestCase):
         self.assertNotIn("help", cmds)  # the built-in table is read on its own
         self.assertTrue(cmds["profile"].startswith("[save <name>"))
         self.assertIn("- profile [save <name>", g.generate())
+        # registered as commands.add (src/core/api_markers.cpp), not center.add
+        for name in ("markers", "markers.test", "screen"):
+            self.assertIn(name, cmds)
 
     def test_lua_command_help_joined_with_dots(self):
         helps = {n: h for _, n, h in g.parse_mod_commands(g.REPO)}

@@ -178,7 +178,7 @@ def parse_builtin_commands(cpp):
 
 
 def parse_core_commands(repo):
-    """[(name, help)] of the core's other console commands: center.add("name", "help"...) in src/core (not the
+    """[(name, help)] of the core's other console commands: center.add or commands.add("name", "help"...) in src/core (not the
     built-in table)."""
     out = []
     folder = os.path.join(repo, "src", "core")
@@ -187,7 +187,7 @@ def parse_core_commands(repo):
             continue
         with open(os.path.join(folder, fn), encoding="utf-8") as f:
             src = f.read()
-        for m in re.finditer(r'center(?:\.|->)add\(\s*"([\w.]+)",\s*((?:"(?:[^"\\]|\\.)*"\s*)+),', src):
+        for m in re.finditer(r'(?:center|commands)(?:\.|->)add\(\s*"([\w.]+)",\s*((?:"(?:[^"\\]|\\.)*"\s*)+),', src):
             out.append((m.group(1), _cpp_strings(m.group(2))))
     return out
 
@@ -201,7 +201,7 @@ def parse_menu_commands(repo):
     for fn in sorted(os.listdir(os.path.join(repo, "src", "core"))):
         if fn.endswith(".cpp") and fn != "builtin_commands.cpp":
             src = read(os.path.join("src", "core", fn))
-            for m in re.finditer(r'center(?:\.|->)add\(\s*"([\w.]+)",\s*(?:"(?:[^"\\]|\\.)*"\s*)+,([^;]*?)\);', src):
+            for m in re.finditer(r'(?:center|commands)(?:\.|->)add\(\s*"([\w.]+)",\s*(?:"(?:[^"\\]|\\.)*"\s*)+,([^;]*?)\);', src):
                 args = [a.strip() for a in m.group(2).split(",")]
                 if len(args) >= 4 and args[3] == "true":  # (fn, ctx, user, anywhere, ...)
                     names.append(m.group(1))

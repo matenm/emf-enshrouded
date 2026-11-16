@@ -474,7 +474,7 @@ Kinds:
 
 Typed into the in-game console (key under Esc), the bridge's console command, or <game>\emf\commands.txt
 (read about once a second while a world runs). (host) = needs a world you host.
-help, mods, settings, set, hooks, pattern, hud.list, hud.move, hud.scale, hud.hide, hud.show, hud.reset, hud.layout, hud.swap, hud.order, hud.colour, hud.grow, profile, saves.backup, saves.list also work at the main menu.
+help, mods, settings, set, hooks, pattern, map.where, map.act, markers, markers.test, screen, hud.list, hud.move, hud.scale, hud.hide, hud.show, hud.reset, hud.layout, hud.swap, hud.order, hud.colour, hud.grow, profile, saves.backup, saves.list also work at the main menu.
 
 - help [page]: list the commands (in the chat 8 per page)
 - mods: list the mods and what became of them
@@ -513,6 +513,22 @@ help, mods, settings, set, hooks, pattern, hud.list, hud.move, hud.scale, hud.hi
 - path.door <entity>: what the game's path grid knows about a door: whether it is in the grid's door table, open or closed there, its box and door row, and the node in the row's middle (type, ground, room); the answer follows after a step (host)
 - remove <entity> [me|drop|<player>] [force]: take a placed object away like a pick-up, its item back to you, as a drop or to a player; refused for a chest with items unless force (they drop on the ground), and for a Flame Altar (host)
 - destroy <entity>: remove an entity from the world, never a player (host)
+- buffs.list  [food|buff|debuff|rested|terrain] [text]: the game's buff types
+- buffs.of  [entity]: an entity's active buffs (default 1)
+- buffs.give  <entity> <type id> [seconds]: gives a buff (server world)
+- buffs.clear  <entity> <type id>: removes a buff (server world)
+- map.where: the world spot under the mouse on the open map, and whether Shift + hold does something here
+- ground  <x> <z>: the ground's height at that spot (the place may need a few seconds to load)
+- map.act  <x> <z>: this game's server does its map action there (as Shift + hold on the map)
+- markers: the markers this game draws, whether drawing and the game's map list are on, and when the game last showed its HUD and map screen
+- markers.test  [text] [game icon type, hex] | clear: a marker 10 m ahead of you
+- screen: which game screen is open (the game's chat, a menu, play) and whether mods' keys read as up (they do while the game's chat or rename box is open)
+- blocks [origin] [at <x> <y> <z>]: the player-built block where you look, or what is at a point (material, hardness, health, damage so far); origin: whether it is the world's own (a ruin as the game shipped it) or a player's (host or dedicated server)
+- break [radius 0.25-3.5] [instant] [drops] [world] [height <m>] [at <x> <y> <z>]: break the player-built blocks where you look, or around a point (never the ground; the hole stays and is saved; host or dedicated server)
+- hits: the hit hooks' state, rules, callbacks and cost
+- offers.list: the E prompts mods put on entities in this world
+- players.mods: each player in the world: their EMF and the mods that differ from this server's (the mod check on join)
+- chat.players: the players of this world with their account hashes (for [chat] admins), connection, name and game role
 - hud.list: the HUD editor's state, every HUD part with its offset, scale and whether it is hidden, and the layouts
 - hud.move <part> <x> <y>: move a HUD part, in percent of the screen from where the game draws it (e.g. hud.move vitals 5 -2.5)
 - hud.scale <part> <0.5-2>: a HUD part's size, around the screen edge it is nearest (e.g. hud.scale hotbar 0.75)

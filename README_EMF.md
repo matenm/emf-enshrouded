@@ -375,10 +375,11 @@ mod's key press. Every mod's key can
 be changed in the console's Mods tab or in EMF.exe (click the key, then press the new one). When a mod's default key
 changes, a key you chose yourself stays.
 
-While you type in the game's chat (or its social screen's chat, or a rename box), mods' keys are paused: typing K does
-not open the Villager Jobs wheel, and the console key types its character into the chat instead of opening the console.
-A key still held when the chat closes counts again once you let go of it. The console's `screen` command says which
-game screen is open and whether mods' keys are paused.
+While the game's chat, its social screen (which holds a second chat) or a rename box is open, mods' keys are paused:
+typing K does not open the Villager Jobs wheel, and the console key types its character into the chat instead of
+opening the console (close the social screen to open the console from there). A key still held when the chat closes
+counts again once you let go of it. The console's `screen` command says which game screen is open and whether mods'
+keys are paused. On a game build EMF does not know yet, this check may be off (the log says so at start).
 
 ### Commands in the game's chat
 You can also type a command into the game's own text chat with a `/` in front: `/give Material_T1_Wood_Logs 5`,
@@ -436,6 +437,7 @@ end the game; use `commands.txt` then.)
 | `buffs.list [food\|buff\|debuff\|rested\|terrain] [text]` | the game's buff types with their ids (API v32) |
 | `markers` | the markers this game draws (by mod, and those a server sent), and whether drawing and the game's map list are on (API v33) |
 | `markers.test [text] [game icon]` | a marker 10 m ahead of you, over the world and on the map; `markers.test clear` removes it |
+| `screen` | which game screen is open (play, a menu, the chat) by the game's own name, and whether mods' keys are paused (they are while the game's chat, social screen or a rename box is open); runs anywhere |
 | `map.where` | the world spot under the mouse on the open map, and whether this game's server offers a map action (API v34); runs anywhere, also on a game you joined |
 | `ground <x> <z>` | the ground's height at that spot (API v34); needs a world you host, the answer follows a moment later |
 | `map.act <x> <z>` | this game's server does its map action at that spot, as Shift + hold on the map does (API v34; the server checks it the same way); runs anywhere |
