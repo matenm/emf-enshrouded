@@ -1,0 +1,8 @@
+{
+  "id": "texture_dump",
+  "name": "Texture Dump",
+  "version": "0.1.0",
+  "capabilities": ["export"],
+  "description": "Read-only: writes the material maps of a few creature models as PNG files (custom-model research).",
+  "authors": ["EMF contributors"]
+}

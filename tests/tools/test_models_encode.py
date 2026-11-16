@@ -353,6 +353,44 @@ class MakeModTests(unittest.TestCase):
         mock = os.path.join(HERE, "..", "..", "tools", "models", "mock_eml.lua")
         return subprocess.run(["lua", mock, d], capture_output=True, text=True, timeout=60, env=dict(os.environ, **env))
 
+    def test_normal_and_material_maps_beside_the_albedo_are_written(self):
+        """normal_mipNN.png and material_mipNN.png in the albedo's folder become <name>_normal.lua and
+        <name>_material.lua; a map the folder no longer has loses its file."""
+        with tempfile.TemporaryDirectory() as d:
+            folder, src = os.path.join(d, "tex"), os.path.join(d, "src")
+            os.makedirs(folder)
+            os.makedirs(src)
+            for n in ("albedo_mip00.png", "albedo_mip01.png", "normal_mip00.png"):
+                with open(os.path.join(folder, n), "wb") as f:
+                    f.write(b"PNG")
+            open(os.path.join(src, "bear_material.lua"), "w").close()  # an earlier build's map
+            self.assertEqual(make_mod.write_maps(src, "bear", folder), ["normal"])
+            self.assertEqual(sorted(os.listdir(src)), ["bear_albedo.lua", "bear_normal.lua"])
+            with open(os.path.join(src, "bear_normal.lua"), encoding="ascii") as f:
+                self.assertIn("1 PNG levels", f.read())
+            with self.assertRaises(SystemExit):
+                make_mod.write_maps(src, "bear", src)  # no albedo there
+
+    @unittest.skipUnless(shutil.which("lua"), "needs lua 5.4 on PATH")
+    def test_the_generated_mod_writes_our_normal_map_and_keeps_the_other_maps_flat(self):
+        png16 = make_mod.lua_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x10\x00\x00\x00\x10")
+        with tempfile.TemporaryDirectory() as d:
+            entry = make_mod.listing_entry(dict(BEAR))
+            entry["texture"] = {"slot": 0, "material_guid": "mat-ours-0001", "flat_size": 4, "maps": ["normal"]}
+            make_mod.write_scripts(d, {"id": "test_pack", "title": "Test"}, [entry])
+            for name, text in (("data", STUB_DATA), ("blob", 'return "blob"\n'),
+                               ("albedo", "return { %s }\n" % png16), ("normal", "return { %s }\n" % png16)):
+                with open(os.path.join(d, "beast_bear_%s.lua" % name), "w", encoding="utf-8") as f:
+                    f.write(text)
+            mock = os.path.join(HERE, "..", "..", "tools", "models", "mock_eml.lua")
+            out = subprocess.run(["lua", mock, d], capture_output=True, text=True, timeout=60)
+            self.assertEqual(out.returncode, 0, out.stderr)
+            self.assertIn("mat-ours-0001 image 1 BC7_srgb_block 16x16", out.stdout)
+            self.assertIn("mat-ours-0001 image 2 BC5_unorm_block 16x16", out.stdout)   # our normal map
+            self.assertIn("mat-ours-0001 image 3 BC1_RGB_unorm_block 4x4", out.stdout)  # flat: no material map of ours
+            self.assertIn("flat material", out.stdout)
+            self.assertNotIn("flat normal", out.stdout)
+
     @unittest.skipUnless(shutil.which("lua"), "needs lua 5.4 on PATH")
     def test_on_a_dedicated_server_the_template_is_made_without_the_model(self):
         """A dedicated server's data has no render data: the template copy and its edits are made, the model and the
