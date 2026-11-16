@@ -17,7 +17,7 @@
 // reply: a NUL-terminated UTF-8 JSON object in the caller's buffer:
 //   {"code": n, "message": "...", "mods": [{"id": "...", "version": "..."}],
 //    "mod_errors": [{"id": "..." or null, "path": "...", "error": "..."}], "dlls": [...], "ms": n}
-//   plus "mod_warnings": [{"id": "...", "warning": "..."}] when a mod's Lua warned while the build ran (at most 20,
+//   plus "mod_warnings": [{"id": "...", "warning": "..."}] when a mod's Lua warned while the build ran (at most 30, 3 per mod,
 //   each cut at 300 characters); the code stays what it was (OK when the build worked).
 //   *reply_len is set to the full reply's length with its NUL. When it does not fit, the reply is cut: the real code
 //   and ms, "truncated": true, empty lists, as much of the message as fits; the call returns the real code. Only when

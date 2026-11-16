@@ -78,6 +78,13 @@ The build's request and reply (the portraits call's are [below](#portraits)):
   "version": "..."}], "mod_errors": [{"id": "..." or null, "path": "...", "error": "..."}], "dlls": ["..."], "ms": n}`.
   `mods` is sorted by id. `dlls` stays empty, because runtime DLLs are off. `mod_errors` is filled when a mod's
   folder or `mod.json` cannot be read (code 1).
+- `mod_warnings: [{"id": "...", "warning": "..."}]` is in the reply only when a mod's Lua gave warnings or errors while
+  the build ran: EML's `warn`, or an error logged inside the mod's `lua{mod_id}` span.
+  - At most 30, and 3 of one mod.
+  - Each is cut at 300 characters, before a stack traceback, with control characters dropped, without the mod's own
+    `<id>:` prefix, and with the event's other fields after it.
+  - Empty and `@word` messages are skipped.
+  - The code stays what it was: a build that warned is still good, and the player is told.
 - `*reply_len` is always set to the full reply's length with the NUL. Pass a big buffer (1 MB). When the reply does
   not fit, it is cut: it keeps the real code and `ms`, gets `"truncated": true`, has empty lists and as much of the
   message as fits, and the call still returns the real code. Only when not even that fits (about 100 bytes), or

@@ -159,8 +159,10 @@ struct ModWarningInfo {
     warning: String,
 }
 
-/// At most this many warnings go into a reply; every one still goes to the log.
-const MAX_MOD_WARNINGS: usize = 20;
+/// At most this many warnings go into a reply, and at most MAX_WARNINGS_PER_MOD of one mod (one chatty mod cannot hide
+/// another's); every one still goes to the log.
+const MAX_MOD_WARNINGS: usize = 30;
+const MAX_WARNINGS_PER_MOD: usize = 3;
 /// A warning longer than this many characters is cut (the log has it whole).
 const MAX_WARNING_CHARS: usize = 300;
 
@@ -355,8 +357,36 @@ impl tracing::field::Visit for FieldText {
     }
 }
 
-/// A warning's text for the reply: tabs and line breaks become single spaces, cut to MAX_WARNING_CHARS characters.
+/// An event's message and its other fields ("key=value"), as text.
+#[derive(Default)]
+struct EventText {
+    message: String,
+    fields: Vec<String>,
+}
+
+impl tracing::field::Visit for EventText {
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == "message" {
+            self.message = value.to_string();
+        } else {
+            self.fields.push(format!("{}={value}", field.name()));
+        }
+    }
+
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == "message" {
+            self.message = format!("{value:?}");
+        } else {
+            self.fields.push(format!("{}={value:?}", field.name()));
+        }
+    }
+}
+
+/// A warning's text for the reply: up to a Lua stack traceback (players cannot use it; the log keeps it), tabs and line
+/// breaks as single spaces, other control characters dropped (a mod's text cannot move a console's cursor, as in
+/// Logger::send), cut to MAX_WARNING_CHARS characters.
 fn warning_text(raw: &str) -> String {
+    let raw = raw.find("stack traceback").map_or(raw, |at| &raw[..at]);
     let mut out = String::new();
     let mut space = false;
     for c in raw.trim().chars() {
@@ -365,11 +395,12 @@ fn warning_text(raw: &str) -> String {
                 out.push(' ');
             }
             space = true;
-        } else {
+        } else if (c as u32) >= 0x20 && c != '\u{7f}' {
             out.push(c);
             space = false;
         }
     }
+    let out = out.trim_end().to_string();
     match out.char_indices().nth(MAX_WARNING_CHARS) {
         Some((at, _)) => out[..at].to_string(),
         None => out,
@@ -396,6 +427,20 @@ where
         }
     }
 
+    // a span opened with an empty mod_id and given it later
+    fn on_record(
+        &self,
+        id: &tracing::span::Id,
+        values: &tracing::span::Record<'_>,
+        ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        let mut mod_id = FieldText { name: "mod_id", value: None };
+        values.record(&mut mod_id);
+        if let (Some(mod_id), Some(span)) = (mod_id.value, ctx.span(id)) {
+            span.extensions_mut().replace(ModId(mod_id));
+        }
+    }
+
     fn on_event(&self, event: &tracing::Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
         if *event.metadata().level() > tracing::Level::WARN {
             return;  // information and below: not a warning
@@ -404,15 +449,23 @@ where
         let Some(id) = scope.into_iter().find_map(|span| span.extensions().get::<ModId>().map(|m| m.0.clone())) else {
             return;  // not inside a mod's span: EML's or EMF's own line
         };
-        let mut message = FieldText { name: "message", value: None };
-        event.record(&mut message);
+        let mut text = EventText::default();
+        event.record(&mut text);
+        let mut warning = warning_text(&text.message);
+        // a mod's own "<id>:" in front of its line (creature packs log so): the id is in `id` already
+        if let Some(rest) = warning.strip_prefix(&format!("{id}:")) {
+            warning = rest.trim_start().to_string();
+        }
+        // nothing said, or Lua 5.4's control messages ("@on", "@off"): not a warning
+        if warning.is_empty() || (warning.starts_with('@') && !warning.contains(' ')) {
+            return;
+        }
+        if !text.fields.is_empty() {
+            warning = warning_text(&format!("{warning} ({})", text.fields.join(", ")));
+        }
         let mut list = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        if list.len() < MAX_MOD_WARNINGS {
-            let mut warning = warning_text(&message.value.unwrap_or_default());
-            // a mod's own "<id>:" in front of its line (creature packs log so): the id is in `id` already
-            if let Some(rest) = warning.strip_prefix(&format!("{id}:")) {
-                warning = rest.trim_start().to_string();
-            }
+        let of_this_mod = list.iter().filter(|w| w.id == id).count();
+        if list.len() < MAX_MOD_WARNINGS && of_this_mod < MAX_WARNINGS_PER_MOD {
             list.push(ModWarningInfo { id, warning });
         }
     }
@@ -942,9 +995,88 @@ mod tests {
                 }
             });
         });
-        assert_eq!(warnings.len(), MAX_MOD_WARNINGS);
+        assert_eq!(warnings.len(), MAX_WARNINGS_PER_MOD);  // one chatty mod cannot fill the list
         assert!(warnings[0].warning.chars().count() <= MAX_WARNING_CHARS);
         assert!(warnings[0].warning.ends_with('\u{e9}'));
+    }
+
+    // One mod that warned 25 times after a game update hid every other mod's warning (a creature pack's "not added").
+    #[test]
+    fn every_mod_gets_its_share_of_the_warnings() {
+        let ((), warnings) = with_log_collecting(Logger::none(), || {
+            for m in 0..12 {
+                let mod_id = format!("mod{m}");
+                tracing::warn_span!(target: "eml::lua", "lua", mod_id).in_scope(|| {
+                    for i in 0..5 {
+                        tracing::warn!(target: "eml::lua", "warning {i}");
+                    }
+                });
+            }
+        });
+        assert_eq!(warnings.len(), MAX_MOD_WARNINGS);
+        assert_eq!(warnings.iter().filter(|w| w.id == "mod0").count(), MAX_WARNINGS_PER_MOD);
+        assert_eq!(warnings.iter().filter(|w| w.id == "mod9").count(), MAX_WARNINGS_PER_MOD);
+    }
+
+    #[test]
+    fn a_warnings_text_loses_control_characters_and_the_stack_traceback() {
+        let ((), warnings) = with_log_collecting(Logger::none(), || {
+            let mod_id = String::from("m");
+            tracing::warn_span!(target: "eml::lua", "lua", mod_id).in_scope(|| {
+                tracing::warn!(target: "eml::lua", "a\u{1b}[2Jb\u{7}c\u{7f}d");
+                tracing::warn!(target: "eml::lua", "Bear: not added: boom\nstack traceback:\n\t[C]: in ?");
+            });
+        });
+        assert_eq!(warnings[0].warning, "a[2Jbcd");
+        assert_eq!(warnings[1].warning, "Bear: not added: boom");
+    }
+
+    // warn() with nothing, warn("@on") (Lua 5.4's control message) or only the mod's own prefix said nothing.
+    #[test]
+    fn empty_and_control_warnings_are_not_counted() {
+        let ((), warnings) = with_log_collecting(Logger::none(), || {
+            let mod_id = String::from("m");
+            tracing::warn_span!(target: "eml::lua", "lua", mod_id).in_scope(|| {
+                tracing::warn!(target: "eml::lua", "");
+                tracing::warn!(target: "eml::lua", "@on");
+                tracing::warn!(target: "eml::lua", "m:\t");
+                tracing::warn!(target: "eml::lua", "@ a real warning");
+            });
+        });
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert_eq!(warnings[0].warning, "@ a real warning");
+    }
+
+    // EML's own warnings in a mod's span carry their facts as fields (`warn!(error = %e, path = ..., "...")`).
+    #[test]
+    fn a_warnings_other_fields_follow_its_text() {
+        let ((), warnings) = with_log_collecting(Logger::none(), || {
+            let mod_id = String::from("m");
+            tracing::warn_span!(target: "eml::lua", "lua", mod_id).in_scope(|| {
+                tracing::warn!(target: "eml::lua", error = %"no access", path = "a/b", "failed to read directory");
+            });
+        });
+        assert_eq!(warnings[0].warning, "failed to read directory (error=no access, path=a/b)");
+    }
+
+    #[test]
+    fn a_mod_id_recorded_later_still_counts() {
+        let ((), warnings) = with_log_collecting(Logger::none(), || {
+            let span = tracing::warn_span!(target: "eml::lua", "lua", mod_id = tracing::field::Empty);
+            span.record("mod_id", "late");
+            span.in_scope(|| tracing::warn!(target: "eml::lua", "w"));
+        });
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].id, "late");
+    }
+
+    // The collector relies on EML opening a `lua` span with the mod's id around each line a mod's Lua logs: if a new
+    // EML logs otherwise, the warnings would quietly stop reaching the player.
+    #[test]
+    fn emls_log_functions_still_open_the_span_with_the_mods_id() {
+        let log_rs = include_str!("../../../third_party/eml/crates/mod-loader-lua/src/env/log.rs");
+        assert!(log_rs.contains("warn_span!(\"lua\", mod_id)"));
+        assert!(log_rs.contains("\"warn\","));
     }
 
     #[test]
