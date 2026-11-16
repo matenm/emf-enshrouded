@@ -271,3 +271,9 @@ TEST_CASE("block rules: EMF_BREAK_WORLD (v45) is a known flag and asks to break 
     r.flags = 0x8;
     CHECK(break_check(r) == "unknown flags");
 }
+
+TEST_CASE("block rules: shrink_off_world keeps a margin past the radius (the kernel tests in float)") {
+    auto ruin = [](int32_t i, int32_t j, int32_t k) { return i == 22 && j == 40 && k == 60 ? 1 : 0; };  // 1 m away
+    CHECK(shrink_off_world(10.25f, 20.25f, 30.25f, 0.995f, ruin) == doctest::Approx(0.99f));
+    CHECK(shrink_off_world(10.25f, 20.25f, 30.25f, 0.98f, ruin) == doctest::Approx(0.98f));
+}

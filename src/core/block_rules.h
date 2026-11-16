@@ -68,6 +68,8 @@ int world_verdict(uint16_t cur, bool base_known, uint16_t base);
 // world_cell says is the world's own (1) or unknown (-1), among the cells within r. The radius to use; 0 when less
 // than kBlockMinRadius is left (the sphere is skipped). world_cell(i, j, k): cell (i, j, k) of 0.5 m, its centre at
 // ((i + 0.5) / 2, ...); 0 for a player's block, terrain and empty cells.
+// Cells within r + kShrinkMargin are looked at (the kernel's float test may take a cell a hair past r).
+constexpr double kShrinkMargin = 0.01;
 float shrink_off_world(float cx, float cy, float cz, float r, const std::function<int(int32_t, int32_t, int32_t)>& world_cell);
 
 // One cell read for the `blocks origin` probe: what it is now, what the shipped world has there, and the verdict.

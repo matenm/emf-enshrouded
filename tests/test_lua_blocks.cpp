@@ -213,4 +213,9 @@ TEST_CASE("lua 1.38: a block's world (true: the world's own, false: a player's, 
     r.fake.block.world = 1;
     r.run_command("bw.old");
     CHECK(logged("old nil"));
+    // and world = true is no unknown flag for it: ruins break like any block there
+    r.fake.breaks.clear();
+    r.run_command("bw.brk");
+    REQUIRE(r.fake.breaks.size() == 2u);
+    CHECK((r.fake.breaks[0].r.flags & EMF_BREAK_WORLD) == 0);
 }

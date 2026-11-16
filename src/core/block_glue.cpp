@@ -157,7 +157,7 @@ float mining_factor(void* balancing) {
     return 1.0f;
 }
 
-float shrink_sphere(void* editor, const Sphere& s);  // below, after the reads
+float shrink_sphere(void* editor, const Sphere& s, const float table[256]);  // below, after the reads
 
 void blocks_program(void* ctx, void*) {
     if (!g_on.load() || !g_service) return;
@@ -204,7 +204,7 @@ void blocks_program(void* ctx, void*) {
         }
         return true;
     };
-    e.shrink = [&](const Sphere& s) -> float { return shrink_sphere(h.editor, s); };
+    e.shrink = [&](const Sphere& s, const float table[256]) -> float { return shrink_sphere(h.editor, s, table); };
     e.drop = [&](const uint8_t guid[16], uint32_t count, const float pos[3]) -> uint32_t {
         PendingDrop d{};
         std::memcpy(d.guid, guid, 16);
@@ -256,7 +256,7 @@ constexpr size_t kColumnHandle = 0xA0;
 constexpr uint32_t kBaseLevel = 6;  // the level every VoxelWorld caller reads (the full 0.5 m cells)
 std::atomic<bool> g_base_off{false};  // a fault: every building cell counts unknown (protected) until a restart
 std::atomic<bool> g_base_test_off{false};
-std::atomic<bool> g_shrink_said{false};
+std::atomic<bool> g_noread_said{false}, g_nobase_said{false}, g_unloaded_said{false};
 
 bool base_reader_usable() {
     return !g_base_test_off.load() && !g_base_off.load() && g_deps.fns.column_acquire && g_deps.fns.brick_seek &&
@@ -265,47 +265,64 @@ bool base_reader_usable() {
 
 int32_t floor_div8(int32_t c) { return c >= 0 ? c / 8 : -((-c + 7) / 8); }
 
-// One base brick (512 cells, x + 8y + 64z) through the game's column reader, as its own region read does when a brick
-// was never changed; false when unknown (a column not loaded, a decode that failed). *faulted on a fault.
-bool base_brick_raw(void* editor, int32_t bx, int32_t by, int32_t bz, uint16_t out[512], bool* faulted) {
-    *faulted = false;
+// The column reader in three guarded stages (private research ruin_blocks 4.1): acquire takes the column's lock and a
+// reference on its resource, so the release and the unlock run whenever acquire returned, even after a fault in the
+// read between (a lock left taken would hang the game's next writer). A fault inside acquire itself cannot be undone.
+bool column_acquire_raw(void* editor, int32_t bx, int32_t bz, uint8_t* h) {
     __try {
-        alignas(16) uint8_t h[kColumnHandle] = {};
         g_deps.fns.column_acquire(h, editor, kBaseLevel,
                                   (static_cast<uint64_t>(static_cast<uint32_t>(bz)) << 32) | static_cast<uint32_t>(bx));
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+// 1 the brick is read into out, 0 unknown, -1 a fault.
+int column_read_raw(uint8_t* h, int32_t by, uint16_t out[512]) {
+    __try {
         void* data = nullptr;
         std::memcpy(&data, h + 0x20, 8);
-        bool ok = h[0x90] != 0 && data != nullptr;  // a tile outside the world: available but no data (read as air)
-        if (ok) {
-            if (!g_deps.fns.brick_seek(h + 0x30, static_cast<uint32_t>(by))) {
-                for (int i = 0; i < 512; ++i) out[i] = 0;  // above the column's bricks: air
-            } else if (h[0x80]) {                          // one material for the whole brick
-                const uint8_t* mp = nullptr;
-                const uint8_t* fp = nullptr;
-                std::memcpy(&mp, h + 0x68, 8);
-                std::memcpy(&fp, h + 0x70, 8);
-                const uint8_t m = mp ? *mp : 0;
-                const uint16_t f = fp ? *fp : static_cast<uint16_t>(m ? 0xFF : 0);
-                for (int i = 0; i < 512; ++i) out[i] = static_cast<uint16_t>(m | (f << 8));
-            } else {
-                uint32_t end = 0, size = 0;
-                const uint8_t* start = nullptr;
-                std::memcpy(&end, h + 0x60, 4);
-                std::memcpy(&size, h + 0x88, 4);
-                std::memcpy(&start, h + 0x50, 8);
-                struct {
-                    uint16_t* p;
-                    uint64_t n;
-                } dst{out, 512};
-                struct {
-                    const uint8_t* p;
-                    uint64_t n;
-                } src{start + (end - size), size};
-                uint8_t res[8] = {};
-                g_deps.fns.brick_decode(res, &dst, &src);
-                ok = res[0] == 0;
-            }
+        if (h[0x90] == 0 || data == nullptr) return 0;  // not loaded; a tile outside the world has no data (read as air)
+        if (!g_deps.fns.brick_seek(h + 0x30, static_cast<uint32_t>(by))) {
+            for (int i = 0; i < 512; ++i) out[i] = 0;  // above the column's bricks: air
+            return 1;
         }
+        if (h[0x80]) {  // one material for the whole brick
+            const uint8_t* mp = nullptr;
+            const uint8_t* fp = nullptr;
+            std::memcpy(&mp, h + 0x68, 8);
+            std::memcpy(&fp, h + 0x70, 8);
+            if (!mp) return 0;  // the game always has one: not the layout EMF knows
+            const uint8_t m = *mp;
+            const uint16_t f = fp ? *fp : static_cast<uint16_t>(m ? 0xFF : 0);
+            for (int i = 0; i < 512; ++i) out[i] = static_cast<uint16_t>(m | (f << 8));
+            return 1;
+        }
+        uint32_t end = 0, size = 0;
+        const uint8_t* start = nullptr;
+        std::memcpy(&end, h + 0x60, 4);
+        std::memcpy(&size, h + 0x88, 4);
+        std::memcpy(&start, h + 0x50, 8);
+        if (!start || size == 0 || size > end) return 0;  // not the layout EMF knows
+        struct {
+            uint16_t* p;
+            uint64_t n;
+        } dst{out, 512};
+        struct {
+            const uint8_t* p;
+            uint64_t n;
+        } src{start + (end - size), size};
+        uint8_t res[8] = {};
+        g_deps.fns.brick_decode(res, &dst, &src);
+        return res[0] == 0 ? 1 : 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -1;
+    }
+}
+bool column_release_raw(uint8_t* h) {
+    __try {
+        void* data = nullptr;
+        std::memcpy(&data, h + 0x20, 8);
         if (data) {
             void* loader = nullptr;
             uint32_t id = 0;
@@ -321,11 +338,25 @@ bool base_brick_raw(void* editor, int32_t bx, int32_t by, int32_t bz, uint16_t o
             else if (h[8] == 2)
                 _InterlockedExchangeAdd(lock, 0x7FFF0000);
         }
-        return ok;
+        return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// One base brick (512 cells, x + 8y + 64z) through the game's column reader, as its own region read does when a brick
+// was never changed; false when unknown (a column not loaded, a layout EMF does not know). *faulted on a fault.
+bool base_brick_raw(void* editor, int32_t bx, int32_t by, int32_t bz, uint16_t out[512], bool* faulted) {
+    alignas(16) uint8_t h[kColumnHandle] = {};
+    *faulted = false;
+    if (!column_acquire_raw(editor, bx, bz, h)) {
         *faulted = true;
         return false;
     }
+    const int read = column_read_raw(h, by, out);
+    if (read < 0) *faulted = true;
+    if (!column_release_raw(h)) *faulted = true;
+    return read == 1;
 }
 
 // The base bricks one read touches (a break sphere: at most 3x3x3), each read once.
@@ -370,18 +401,19 @@ struct BaseCache {
 // Ruin protection for one sphere: the cells of its box read at once (the region read, x + sx * (y + sy * z)), each
 // building cell judged against the shipped world (world_verdict), the radius shrunk off the world's own and the unknown
 // ones (shrink_off_world). A box that cannot be read: 0 (the sphere is skipped: never break what cannot be judged).
-float shrink_sphere(void* editor, const Sphere& s) {
+float shrink_sphere(void* editor, const Sphere& s, const float table[256]) {
     int32_t lo[3];
     uint32_t n[3];
-    const float c[3] = {s.x, s.y, s.z};
+    const double c[3] = {s.x, s.y, s.z};
+    const double reach = s.r + kShrinkMargin;  // the box shrink_off_world looks at
     for (int a = 0; a < 3; ++a) {
-        lo[a] = static_cast<int32_t>(std::floor((c[a] - s.r) * 2.0f));
-        const auto hi = static_cast<int32_t>(std::floor((c[a] + s.r) * 2.0f));
+        lo[a] = static_cast<int32_t>(std::floor((c[a] - reach) * 2.0));
+        const auto hi = static_cast<int32_t>(std::floor((c[a] + reach) * 2.0));
         n[a] = static_cast<uint32_t>(hi - lo[a] + 1);
         if (n[a] > 16) return 0.0f;  // larger than the game's own reads (radius <= 3.5: at most 15)
     }
     if (!g_deps.fns.region_read || g_reads_off.load()) {
-        if (!g_shrink_said.exchange(true))
+        if (!g_noread_said.exchange(true))
             say("ruin protection: the game's voxel read is not available: breaks spare every block (EMF_BREAK_WORLD "
                 "still breaks)");
         return 0.0f;
@@ -394,16 +426,21 @@ float shrink_sphere(void* editor, const Sphere& s) {
         if (!g_reads_off.exchange(true)) say("block reads off (the game's voxel region read faulted)");
         return 0.0f;
     }
-    if (!ok) return 0.0f;  // part of the box is not loaded
-    if (!base_reader_usable() && !g_shrink_said.exchange(true))
+    if (!ok) {  // part of the box is not loaded
+        if (!g_unloaded_said.exchange(true)) say("ruin protection: a break's place is not loaded; that sphere spares everything");
+        return 0.0f;
+    }
+    if (!base_reader_usable() && !g_base_off.load() && !g_nobase_said.exchange(true))
         say("ruin protection: the shipped world cannot be read on this game build: breaks spare every building block "
             "(EMF_BREAK_WORLD still breaks)");
     auto cache = std::make_unique<BaseCache>();
     cache->editor = editor;
     return shrink_off_world(s.x, s.y, s.z, s.r, [&](int32_t i, int32_t j, int32_t k) {
-        const uint16_t cur = cells[static_cast<size_t>(i - lo[0]) +
-                                   n[0] * (static_cast<size_t>(j - lo[1]) + n[1] * static_cast<size_t>(k - lo[2]))];
+        const int64_t di = i - lo[0], dj = j - lo[1], dk = k - lo[2];
+        if (di < 0 || dj < 0 || dk < 0 || di >= n[0] || dj >= n[1] || dk >= n[2]) return -1;  // outside the read box
+        const uint16_t cur = cells[static_cast<size_t>(di) + n[0] * (static_cast<size_t>(dj) + n[1] * static_cast<size_t>(dk))];
         if ((cur & 0xFF) < 0x80) return 0;
+        if (!(table[cur & 0xFF] > 0)) return 0;  // a material this break never touches (Unbreakable, not asked for)
         uint16_t base = 0;
         const bool known = cache->cell(i, j, k, &base);
         return world_verdict(cur, known, base);
@@ -589,7 +626,7 @@ ProgramSpec blocks_setup(BlockGlueDeps deps) {
     g_watchdog_said = g_cb_fault_said = g_kernel_said = g_factor_said = false;
     g_reads_off = false;
     g_base_off = false;
-    g_shrink_said = false;
+    g_noread_said = g_nobase_said = g_unloaded_said = false;
     g_last_run_ms = now();
     const bool usable = g_deps.fns.kernel && g_deps.fns.config_find;
     {

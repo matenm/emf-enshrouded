@@ -163,6 +163,9 @@ uint8_t f_damage_get(void* store, const uint32_t cell[3]) {
 std::map<std::tuple<int, int, int>, uint16_t> g_base;
 std::vector<std::pair<int, int>> g_base_columns;
 int g_column_released = 0, g_column_acquired = 0;
+long g_column_lock = 0;     // the column lock's reader count (the game's editor+0x174)
+bool g_seek_faults = false;
+int g_uniform = 0;          // 0 a coded brick; 1 uniform stone 0x8A with no fill pointer; 2 uniform with no material
 struct FakeBrick {
     int bx, by, bz;
 };
@@ -173,6 +176,10 @@ void f_column_acquire(void* h, void* editor, uint32_t level, uint64_t column) {
     auto* p = static_cast<uint8_t*>(h);
     const int bx = static_cast<int>(static_cast<uint32_t>(column)), bz = static_cast<int>(static_cast<uint32_t>(column >> 32));
     p[0x90] = 1;  // available (the game sets it first, clears it for a resource that is not loaded)
+    long* lock = &g_column_lock;  // the shared lock, taken for every column with bx, bz >= 0 (mode 1)
+    ++g_column_lock;
+    std::memcpy(p, &lock, 8);
+    p[8] = 1;
     if (std::find(g_base_columns.begin(), g_base_columns.end(), std::make_pair(bx, bz)) == g_base_columns.end()) return;
     ++g_column_acquired;
     void* data = &g_fake_brick;
@@ -184,8 +191,18 @@ void f_column_acquire(void* h, void* editor, uint32_t level, uint64_t column) {
     std::memcpy(p + 0x38, &bx, 4);  // the fake's own notes, inside the part BrickSeek gets
     std::memcpy(p + 0x3C, &bz, 4);
 }
+uint8_t g_uniform_material = 0x8A;
 bool f_brick_seek(void* h30, uint32_t by) {
+    if (g_seek_faults) *static_cast<volatile int*>(nullptr) = 1;
     auto* p = static_cast<uint8_t*>(h30) - 0x30;
+    if (g_uniform) {
+        p[0x80] = 1;
+        const uint8_t* m = g_uniform == 1 ? &g_uniform_material : nullptr;
+        std::memcpy(p + 0x68, &m, 8);
+        const uint8_t* none = nullptr;
+        std::memcpy(p + 0x70, &none, 8);
+        return true;
+    }
     int bx = 0, bz = 0;
     std::memcpy(&bx, p + 0x38, 4);
     std::memcpy(&bz, p + 0x3C, 4);
@@ -287,6 +304,9 @@ struct Fixture {
         g_base.clear();
         g_base_columns.clear();
         g_column_released = g_column_acquired = 0;
+        g_column_lock = 0;
+        g_seek_faults = false;
+        g_uniform = 0;
         d.log = [](const std::string& s) { g_log.push_back(s); };
         d.after_step = [this](std::function<void(EmfWorld*)> fn) { after.push_back(std::move(fn)); };
         d.now_ms = [] { return g_now; };
@@ -690,8 +710,8 @@ TEST_CASE("block glue: a break stops just short of the world's own blocks (ruin 
     Fixture f;
     // the break at (10, 20, 30), 1.5 m; a ruin cell 1 m away: (22, 40, 60) -> (11.25, 20.25, 30.25)
     g_base_columns = {{2, 7}};
-    g_voxels[{22, 40, 60}] = 0xFF8A;
-    g_base[{22, 40, 60}] = 0xF78A;  // shipped stone (weathered paint)
+    g_voxels[{22, 40, 60}] = 0xFF87;
+    g_base[{22, 40, 60}] = 0xF787;  // shipped building 7 (weathered paint): a material the break would take
     g_voxels[{18, 40, 60}] = 0xFF87;  // a player's block on the other side, 0.83 m away (shipped air): no matter
     f.ask();
     f.step();
@@ -715,13 +735,76 @@ TEST_CASE("block glue: a break stops just short of the world's own blocks (ruin 
     CHECK(g_calls[0].radius == doctest::Approx(dp - 0.01).epsilon(0.001));
     // a ruin cell next to the centre (the centre is a cell corner: 0.43 m to the nearest cell centre)
     g_calls.clear();
-    g_voxels[{20, 40, 60}] = 0xFF8A;
+    g_voxels[{20, 40, 60}] = 0xFF87;
     g_base_columns = {{2, 7}};
-    g_base[{20, 40, 60}] = 0xFF8A;
+    g_base[{20, 40, 60}] = 0xFF87;
     f.ask();
     f.step();
     REQUIRE(g_calls.size() == 2);
     CHECK(g_calls[0].radius == doctest::Approx(std::sqrt(3 * 0.25 * 0.25) - 0.01).epsilon(0.001));
     REQUIRE(!g_answers.empty());
     CHECK(g_answers.back().r.status == EMF_BREAK_DONE);
+}
+
+TEST_CASE("blocks origin: every column read gives the game's lock back; a fault while reading still releases the column and its lock, turns the reader off (said once), and later cells are unknown") {
+    Fixture f;
+    g_base_columns = {{2, 7}};
+    g_voxels[{20, 40, 60}] = 0xFF8A;
+    g_base[{20, 40, 60}] = 0xFF8A;
+    BlockOrigin o{};
+    std::string why;
+    bool ok = false;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_origin(w, 10.2f, 20.2f, 30.2f, &o, &why); });
+    REQUIRE(ok);
+    CHECK(o.world == 1);
+    CHECK(g_column_lock == 0);  // taken and given back
+    // a uniform brick of stone (no fill pointer: 0xFF), and one whose material pointer is missing (unknown)
+    g_uniform = 1;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_origin(w, 10.2f, 20.2f, 30.2f, &o, &why); });
+    REQUIRE(ok);
+    CHECK(o.base == 0xFF8A);
+    CHECK(o.world == 1);
+    g_uniform = 2;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_origin(w, 10.2f, 20.2f, 30.2f, &o, &why); });
+    REQUIRE(ok);
+    CHECK_FALSE(o.base_known);
+    CHECK(o.world == -1);
+    CHECK(g_column_lock == 0);
+    // a fault inside the read: the column and the lock are given back all the same
+    g_uniform = 0;
+    g_seek_faults = true;
+    const int released = g_column_released;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_origin(w, 10.2f, 20.2f, 30.2f, &o, &why); });
+    REQUIRE(ok);
+    CHECK(o.world == -1);
+    CHECK(g_column_released == released + 1);
+    CHECK(g_column_lock == 0);
+    size_t said = 0;
+    for (const auto& l : g_log) said += l.find("column reader faulted") != std::string::npos;
+    CHECK(said == 1);
+    g_seek_faults = false;  // off until a restart: unknown without calling the game
+    const int acquired = g_column_acquired;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_origin(w, 10.2f, 20.2f, 30.2f, &o, &why); });
+    REQUIRE(ok);
+    CHECK(o.world == -1);
+    CHECK(g_column_acquired == acquired);
+}
+
+TEST_CASE("block glue: a world cell whose material the break would not touch (not in its materials, or Unbreakable) does not shrink the sphere") {
+    Fixture f;
+    g_base_columns = {{2, 7}};
+    g_voxels[{22, 40, 60}] = 0xFF8A;  // ruin stone (building 10): not in the request's list
+    g_base[{22, 40, 60}] = 0xFF8A;
+    EmfBreakBlocks r{};
+    r.size = sizeof r;
+    r.x = 10, r.y = 20, r.z = 30;
+    r.radius = 1.5f;
+    const uint8_t only[1] = {7};
+    r.material_count = 1;
+    r.materials = only;
+    std::string why;
+    REQUIRE(blocks_request(r, on_done, nullptr, &why) != 0);
+    f.step();
+    REQUIRE(g_calls.size() == 2);
+    CHECK(g_calls[0].radius == doctest::Approx(1.5f));
 }

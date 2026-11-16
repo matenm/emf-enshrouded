@@ -75,7 +75,7 @@ std::vector<BlockDone> BlockService::step(const BlockEngine& e) {
         for (const Sphere& whole : r.spheres) {
             Sphere s = whole;
             if (!r.spec.world && e.shrink) {
-                s.r = e.shrink(whole);
+                s.r = e.shrink(whole, table);
                 if (!(s.r > 0)) continue;  // right next to the world's own blocks: skipped
             }
             if (!e.kernel || !e.kernel(s, table, r.spec.instant, &k)) {

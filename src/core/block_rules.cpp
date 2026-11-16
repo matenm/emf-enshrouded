@@ -70,22 +70,23 @@ int world_verdict(uint16_t cur, bool base_known, uint16_t base) {
 float shrink_off_world(float cx, float cy, float cz, float r,
                        const std::function<int(int32_t, int32_t, int32_t)>& world_cell) {
     const double c[3] = {cx, cy, cz};
+    const double reach = r + kShrinkMargin;  // the kernel tests in float: a cell just past r may still pass it
     int32_t lo[3], hi[3];
     for (int a = 0; a < 3; ++a) {
-        lo[a] = static_cast<int32_t>(std::floor((c[a] - r) * 2.0));
-        hi[a] = static_cast<int32_t>(std::floor((c[a] + r) * 2.0));
+        lo[a] = static_cast<int32_t>(std::floor((c[a] - reach) * 2.0));
+        hi[a] = static_cast<int32_t>(std::floor((c[a] + reach) * 2.0));
     }
-    double nearest = r + 1.0;  // none within r
+    double nearest = reach + 1.0;  // none within reach
     for (int32_t k = lo[2]; k <= hi[2]; ++k)
         for (int32_t j = lo[1]; j <= hi[1]; ++j)
             for (int32_t i = lo[0]; i <= hi[0]; ++i) {
                 const double dx = (i + 0.5) / 2.0 - c[0], dy = (j + 0.5) / 2.0 - c[1], dz = (k + 0.5) / 2.0 - c[2];
                 const double d = std::sqrt(dx * dx + dy * dy + dz * dz);
-                if (d > r || d >= nearest) continue;
+                if (d > reach || d >= nearest) continue;
                 if (world_cell(i, j, k) != 0) nearest = d;  // the world's own, or unknown
             }
-    if (nearest > r) return r;
-    const double left = nearest - 0.01;
+    if (nearest > reach) return r;
+    const double left = std::min(static_cast<double>(r), nearest - kShrinkMargin);
     return left < kBlockMinRadius ? 0.0f : static_cast<float>(left);
 }
 

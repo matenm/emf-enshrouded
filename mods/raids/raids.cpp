@@ -351,8 +351,7 @@ void wall_look(emf::World w, uint32_t id, const raids::Vec3& p, const Config& c)
         if (raids::breakable_wall(*b, emf::has_v45()))
             wall = raids::Vec3{b->x, b->y, b->z};
         else
-            EMF_LOG(kMod, "raider %u: the wall at (%.1f, %.1f, %.1f) is the world's own (a ruin) or of unknown origin: left "
-                    "alone", id, b->x, b->y, b->z);
+            wall_say_once("ruin", "a raider's wall is the world's own (a ruin) or of unknown origin: left alone (said once)");
     }
     if (emf::has_v42() && emf::api()->path_find && !g_wall_looking.count(id)) {
         EmfPathQuery q{};

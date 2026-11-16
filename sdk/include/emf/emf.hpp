@@ -1085,6 +1085,7 @@ inline uint32_t break_blocks(World w, EmfBreakBlocks& req, EmfBreakCallback cb =
 inline std::optional<EmfBlockInfo> block_at(World w, float x, float y, float z) {
     EmfBlockInfo b{};
     b.size = sizeof b;
+    b.world = -1;  // a v44 core writes 40 bytes: world stays "not known"
     if (!has_v44() || !api()->block_at || !api()->block_at(w.raw(), x, y, z, &b)) return std::nullopt;
     return b;
 }
@@ -1092,6 +1093,7 @@ inline std::optional<EmfBlockInfo> block_at(World w, float x, float y, float z) 
 inline std::optional<EmfBlockInfo> find_wall(World w, const float from[3], const float to[3]) {
     EmfBlockInfo b{};
     b.size = sizeof b;
+    b.world = -1;  // a v44 core writes 40 bytes: world stays "not known"
     if (!has_v44() || !api()->find_wall || !api()->find_wall(w.raw(), from, to, &b)) return std::nullopt;
     return b;
 }

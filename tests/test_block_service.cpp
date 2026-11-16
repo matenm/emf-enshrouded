@@ -230,7 +230,8 @@ TEST_CASE("block service: each sphere asks how far it may reach (ruin protection
     BlockEngine e = f.engine();
     std::vector<Sphere> asked;
     float give = 0.6f;
-    e.shrink = [&](const Sphere& sp) {
+    e.shrink = [&](const Sphere& sp, const float table[256]) {
+        CHECK(table != nullptr);
         asked.push_back(sp);
         return give;
     };

@@ -193,6 +193,7 @@ int l_break_blocks(lua_State* L) {
     }
     luaL_checktype(L, fn_index, LUA_TFUNCTION);
     const EmfApi* a = s->host->api;
+    if (a->version < 45) r.flags &= ~EMF_BREAK_WORLD;  // a v44 core breaks ruins like any block (and knows no flag)
     if (!has_v44(a)) {
         lua_pushnil(L);
         return 1;
