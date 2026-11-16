@@ -204,3 +204,15 @@ TEST_CASE("blocks origin: says whether the block where you look, or at a point, 
     run(c, "blocks origin at 1 2");
     CHECK(said("usage: blocks"));
 }
+
+TEST_CASE("break world: the word asks to break the world's own blocks (ruins) too (EMF_BREAK_WORLD)") {
+    g_out.clear();
+    CommandCenter c;
+    Fake f;
+    f.camera = false;
+    REQUIRE(add_block_commands(c, f.deps()));
+    run(c, "break 1 world at 1 2 3");
+    CHECK(f.last.flags == EMF_BREAK_WORLD);
+    run(c, "break 1 at 1 2 3");
+    CHECK(f.last.flags == 0);
+}

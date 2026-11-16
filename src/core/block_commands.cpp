@@ -132,13 +132,15 @@ void cmd_break(EmfWorld* w, int argc, const char* const* argv, void*) {
             r.flags |= EMF_BREAK_INSTANT;
         else if (std::strcmp(argv[i], "drops") == 0)
             r.flags |= EMF_BREAK_DROPS;
+        else if (std::strcmp(argv[i], "world") == 0)
+            r.flags |= EMF_BREAK_WORLD;  // the world's own blocks (ruins) too
         else if (std::strcmp(argv[i], "height") == 0)
             ok = i + 1 < argc && parse_float(argv[++i], &r.height);
         else
             ok = i == 1 && parse_float(argv[i], &r.radius);
     }
     if (!ok) {
-        command_reply_line("usage: break [radius 0.25-3.5] [instant] [drops] [height <m>] [at <x> <y> <z>]");
+        command_reply_line("usage: break [radius 0.25-3.5] [instant] [drops] [world] [height <m>] [at <x> <y> <z>]");
         return;
     }
     if (!at) {
@@ -195,7 +197,7 @@ bool add_block_commands(CommandCenter& commands, BlockCommandDeps deps) {
                                      "point (material, hardness, health, damage so far); origin: whether it is the "
                                      "world's own (a ruin as the game shipped it) or a player's (host or dedicated server)",
                            cmd_blocks, nullptr, nullptr);
-    ok &= commands.add("break", "[radius 0.25-3.5] [instant] [drops] [height <m>] [at <x> <y> <z>]: break the "
+    ok &= commands.add("break", "[radius 0.25-3.5] [instant] [drops] [world] [height <m>] [at <x> <y> <z>]: break the "
                                 "player-built blocks where you look, or around a point (never the ground; the hole stays "
                                 "and is saved; host or dedicated server)",
                        cmd_break, nullptr, nullptr);
