@@ -290,6 +290,9 @@ bool decode_markers(const std::string& text, DecodedMarkers* out) {
         if (!s->is(json::Value::Type::Array) || s->arr.size() > kMarkersPerMessage) return false;
         for (const json::Value& v : s->arr) {
             if (!v.is(json::Value::Type::Object)) return false;
+            // a place or size given as no number would read as 0 (the marker to the world's origin)
+            for (const char* k : {"x", "y", "z", "h", "d"})
+                if (const json::Value* f = v.get(k); f && !f->is(json::Value::Type::Number)) return false;
             DecodedMarker d;
             d.id = field_str(v.get("i"));
             d.text = field_str(v.get("t"));

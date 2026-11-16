@@ -182,6 +182,24 @@ TEST_CASE("marker receiver: a position entry whose id is no text or whose place 
     CHECK(ok.positions[0].x == 9);
 }
 
+// A marker entry's place given as no number read as 0 as well: the marker drew at the world's origin.
+TEST_CASE("marker receiver: a marker entry whose place or size is given but is no number refuses the message") {
+    for (const char* bad : {R"({"o":"lua","s":[{"i":"a","x":"9","y":8,"z":7}]})",
+                            R"({"o":"lua","s":[{"i":"a","x":9,"y":null,"z":7}]})",
+                            R"({"o":"lua","s":[{"i":"a","x":9,"y":8,"z":[7]}]})",
+                            R"({"o":"lua","s":[{"i":"a","x":9,"y":8,"z":7,"h":"tall"}]})",
+                            R"({"o":"lua","s":[{"i":"a","x":9,"y":8,"z":7,"d":{}}]})"}) {
+        CAPTURE(bad);
+        DecodedMarkers d;
+        CHECK_FALSE(decode_markers(bad, &d));
+    }
+    DecodedMarkers ok;
+    REQUIRE(decode_markers(R"({"o":"lua","s":[{"i":"a","x":9,"y":8,"z":7,"h":2}]})", &ok));
+    REQUIRE(ok.markers.size() == 1);
+    CHECK(ok.markers[0].marker.x == 9);
+    CHECK(ok.markers[0].marker.height == 2);
+}
+
 TEST_CASE("marker sender: when a player's game links up, what that player should have is sent again") {
     Sent s;
     MarkerSender snd(s.fn(), nullptr);
