@@ -1047,6 +1047,50 @@ TEST_CASE("builtin commands: stack's reply names the item as the game shows it")
 }
 
 namespace {
+std::map<uint32_t, std::string> g_bait_texts;  // name tag -> the name the game shows
+emf::core::LocaResult* bait_lookup(emf::core::LocaResult* out, void*, uint32_t tag) {
+    std::memset(out, 0, sizeof *out);
+    const auto it = g_bait_texts.find(tag);
+    if (it == g_bait_texts.end()) {
+        out->error = 0x1F;
+        return out;
+    }
+    out->text = it->second.data();
+    out->length = it->second.size();
+    return out;
+}
+}  // namespace
+
+TEST_CASE("builtin commands: the candidates of an unclear item name are listed as the game shows them") {
+    BFixture f;
+    FriendlyItemsWorld iw;
+    g_bait_texts.clear();
+    const auto show = [&](uint32_t id, uint8_t seed, const std::string& text) {
+        uint8_t* info = emf::core::item_data_ptr(iw.reg.reg, id);
+        REQUIRE(info);
+        uint8_t g[16];
+        for (int i = 0; i < 16; ++i) g[i] = static_cast<uint8_t>(seed + i);
+        std::memcpy(info + 0x48, g, 16);
+        g_bait_texts[emf::fnv1a32(g, 16)] = text;
+    };
+    show(0x15, 0x80, "Dog Bait");
+    show(0x14, 0xA0, "Simple Bait");
+    NamesPool pool;
+    const uint64_t table = 0x7730;
+    std::memcpy(pool.mem + 0x100, &table, 8);
+    emf::core::LocaAccess a;
+    a.pool = [&pool] { return pool.mem; };
+    a.lookup = &bait_lookup;
+    emf::core::set_game_text_for_tests(std::move(a));
+    f.center.enqueue("give bait");
+    f.run(iw.w);
+    CHECK(bsaid("'bait' could be 2 items: Dog Bait (Food_T2_Dog_Bait), Simple Bait (Material_T0_simple_FishingBait). "
+                "Type more of the name."));
+    CHECK(g_pickup_amounts.empty());
+    emf::core::set_game_text_for_tests(emf::core::LocaAccess{});
+}
+
+namespace {
 // v36 remove: 60 a placed object (item 0x11), 61 a placed chest holding items, 62 a world object (no UsedItem),
 // 63 placed, for a refund to a player; 64 placed, holding an item the registry does not know; 65 a placed chest
 // holding two stacks (3 x 0x11, 5 x 0x22); 50 another player, 42 the local player.

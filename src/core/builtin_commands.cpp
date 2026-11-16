@@ -148,7 +148,10 @@ ItemRead read_item(BuiltinContext& c, EmfWorld* w, const char* cmd, int argc, co
     }
     constexpr size_t kNamed = 8;
     std::string line = "'" + a.name + "' could be " + std::to_string(m.matches.size()) + " items: ";
-    for (size_t k = 0; k < m.matches.size() && k < kNamed; ++k) line += (k ? ", " : "") + l.named[m.matches[k]].name;
+    for (size_t k = 0; k < m.matches.size() && k < kNamed; ++k) {  // as the other replies: "Wood Logs (Material_...)"
+        const NamedItem& n = l.named[m.matches[k]];
+        line += (k ? ", " : "") + (n.shown.empty() ? n.name : n.shown + " (" + n.name + ")");
+    }
     if (m.matches.size() > kNamed) line += " and " + std::to_string(m.matches.size() - kNamed) + " more";
     command_reply_line(line + ". Type more of the name.");
     return ItemRead::Replied;
