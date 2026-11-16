@@ -289,7 +289,7 @@ TEST_CASE("beastmaster: at most 2 out; a 10 s cooldown; too little mana gives a 
 }
 
 TEST_CASE("beastmaster: a beast that dies rests 60 s, its body is removed, and it can be called again after") {
-    BeastRig b;
+    BeastRig b({{"back_after_rest", "false"}});
     b.reply("beastmaster.give wolf");
     b.spawnable(2);
     b.reply("beastmaster.call Wolf");
@@ -317,6 +317,100 @@ TEST_CASE("beastmaster: after a reload the beasts that were out come back once (
     b.seconds(5);
     CHECK(b.r.fake.spawns.size() == 1);  // once
     CHECK(b.faction(1234) == kPlayerAlly);
+}
+
+// A player's report: the wolf fell and stayed home until called again; "let him come back by himself after the rest
+// until dismissed".
+TEST_CASE("beastmaster: a fallen beast comes back by itself after its rest, free, until dismissed; with the setting off it waits at home") {
+    BeastRig b;
+    b.reply("beastmaster.give wolf");
+    b.spawnable(3);
+    REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+    deliver(b.r.fake, "EntityDiedEvent", died_event(1234));
+    b.r.fake.attrs[{1234, EMF_ATTR_HEALTH}] = 0;
+    b.seconds(2);
+    CHECK(contains(b.r.fake.destroyed, 1234));  // its body
+    CHECK(b.noted("Wolf fell; it comes back in 0:5"));
+    const std::string list = b.reply("beastmaster.list");
+    CHECK(list.find("Wolf - wolf, loyalty 1, rests 0:5") != std::string::npos);
+    CHECK(list.find("then comes back") != std::string::npos);
+    CHECK(b.hud("out").find("Wolf (rests 0:5") != std::string::npos);
+    CHECK(b.reply("beastmaster.call Wolf").find("comes back by itself") != std::string::npos);
+    b.seconds(55);
+    CHECK(b.r.fake.spawns.size() == 1);
+    b.seconds(5);
+    REQUIRE(b.r.fake.spawns.size() == 2);  // back beside its owner at (0, 10, 0)
+    CHECK(guid_text(b.r.fake.spawns[1].guid) == kWolfTemplate);
+    CHECK(std::abs(b.r.fake.spawns[1].x - 2.0) <= 1.0);
+    CHECK(b.noted("Wolf is back"));
+    size_t paid = 0;
+    for (const auto& [e, a, d] : b.r.fake.attr_adds) paid += e == 1 && a == EMF_ATTR_MANA && d == -15;
+    CHECK(paid == 1);  // free: only the call cost mana
+    CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, out") != std::string::npos);
+    // it falls again and is sent home while it rests: it stays there
+    deliver(b.r.fake, "EntityDiedEvent", died_event(1235));
+    b.r.fake.attrs[{1235, EMF_ATTR_HEALTH}] = 0;
+    b.seconds(2);
+    CHECK(b.reply("beastmaster.dismiss Wolf").find("goes home") != std::string::npos);
+    b.seconds(70);
+    CHECK(b.r.fake.spawns.size() == 2);
+    CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, at home") != std::string::npos);
+    // the setting off: a fallen beast waits at home after its rest
+    b.r.fake.settings["beastmaster.back_after_rest"] = "false";
+    REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+    deliver(b.r.fake, "EntityDiedEvent", died_event(1236));
+    b.r.fake.attrs[{1236, EMF_ATTR_HEALTH}] = 0;
+    b.seconds(2);
+    CHECK(b.noted("Wolf fell; it rests for 0:5"));
+    b.seconds(70);
+    CHECK(b.r.fake.spawns.size() == 3);
+}
+
+TEST_CASE("beastmaster: a resting beast that comes back holds its slot, comes back after a reload, and stays home when the setting goes off meanwhile") {
+    {
+        BeastRig b;
+        b.reply("beastmaster.give wolf");
+        b.reply("beastmaster.give boar");
+        b.reply("beastmaster.give hound");
+        b.spawnable(3);
+        REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+        b.seconds(11);
+        REQUIRE(b.reply("beastmaster.call Boar").find("comes") != std::string::npos);  // level 10: two active slots
+        deliver(b.r.fake, "EntityDiedEvent", died_event(1234));
+        b.r.fake.attrs[{1234, EMF_ATTR_HEALTH}] = 0;
+        b.seconds(11);
+        const std::string full = b.reply("beastmaster.call Hound");
+        CHECK(full.find("dismiss one first") != std::string::npos);
+        CHECK(full.find("comes back by itself") != std::string::npos);  // says why the slot is taken
+        CHECK(b.reply("beastmaster.dismiss Wolf").find("goes home") != std::string::npos);
+        CHECK(b.reply("beastmaster.call Hound").find("comes") != std::string::npos);
+    }
+    {
+        // a save with a beast that rests and comes back (out 1, rest 30): after a load it comes after the rest
+        BeastRig c;
+        write(c.data, "b 0x00000000000000aa wolf 30 1 Fang\n");
+        c.spawnable(2);
+        c.r.fake.session = 2;
+        fire_load(1);
+        c.seconds(5);
+        CHECK(c.r.fake.spawns.empty());
+        c.seconds(30);
+        CHECK(c.r.fake.spawns.size() == 1);
+    }
+    {
+        // the setting switched off while a beast rests: it stays home
+        BeastRig d;
+        d.reply("beastmaster.give wolf");
+        d.spawnable(2);
+        REQUIRE(d.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+        deliver(d.r.fake, "EntityDiedEvent", died_event(1234));
+        d.r.fake.attrs[{1234, EMF_ATTR_HEALTH}] = 0;
+        d.seconds(5);
+        d.r.fake.settings["beastmaster.back_after_rest"] = "false";
+        d.seconds(70);
+        CHECK(d.r.fake.spawns.size() == 1);
+        CHECK(d.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, at home") != std::string::npos);
+    }
 }
 
 TEST_CASE("beastmaster: a remembered id that now names another entity is dropped, never written") {
@@ -935,7 +1029,7 @@ TEST_CASE("loyalty: the tenth point brings loyalty 2: the owner hears it, the be
     deliver(b.r.fake, "EntityDiedEvent", died_event(1234));  // it falls
     next_beast(b, 1235);
     b.seconds(12);
-    REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+    REQUIRE(b.noted("Wolf is back"));  // by itself after its rest
     b.seconds(1);
     CHECK(b.reply("beastmaster.list").find("loyalty 2,") != std::string::npos);
     CHECK(now_of<ecs::DamageMod>(b, 1235).dataStorage[2] == doctest::Approx(damage));
@@ -2605,6 +2699,93 @@ TEST_CASE("beastmaster: beasts step aside while their owner builds and come back
     CHECK(b.r.fake.spawns.size() == 3);
     b.seconds(2);
     CHECK(b.r.fake.spawns.size() == 3);  // and stay
+}
+
+// ---- in the air: a beast far from its owner is brought beside them with the game's ground search (10 m at most), so
+// beside an owner on the glider it stood in the air and fell to its death (a player's report) ----
+namespace {
+// Player `p`'s movement as the game's DynamicLocomotion.state: 0 on the ground, 2 falling, 4 on the glider.
+void moving_as(Fake& f, uint32_t p, int state) {
+    component<ecs::DynamicLocomotion>(f, p).state = static_cast<emf::gen::ecs::LocomotionState>(state);
+}
+}  // namespace
+
+TEST_CASE("beastmaster: beasts step aside while their owner glides and come back beside them a moment after landing, free") {
+    BeastRig b;
+    b.reply("beastmaster.give wolf");
+    b.reply("beastmaster.give boar");
+    b.spawnable(4);
+    CHECK(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+    b.seconds(2);
+    REQUIRE(b.r.fake.spawns.size() == 1);
+    moving_as(b.r.fake, 1, 4);  // the glider out, 50 m up
+    place(b.r.fake, 1, 0, 60, 0);
+    b.seconds(1);
+    CHECK(contains(b.r.fake.destroyed, 1234));
+    CHECK(notes_with(b.r.fake, "step aside while you are in the air") == 1);
+    CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, aside") != std::string::npos);  // still out
+    CHECK(b.hud("out").find("Wolf (aside)") != std::string::npos);
+    CHECK(b.reply("beastmaster.call Boar").find("once you land") != std::string::npos);
+    for (int i = 1; i <= 10; ++i) {  // a long glide, 8 m a second
+        place(b.r.fake, 1, 8.0 * i, 60.0 - i, 0);
+        b.seconds(1);
+    }
+    CHECK(b.r.fake.spawns.size() == 1);  // not while in the air
+    CHECK(teleports_of(b.r.fake, 1234) == 0);
+    moving_as(b.r.fake, 1, 0);  // landed
+    place(b.r.fake, 1, 90, 10, 0);
+    b.seconds(1);
+    CHECK(b.r.fake.spawns.size() == 1);  // a moment after
+    b.seconds(1);
+    REQUIRE(b.r.fake.spawns.size() == 2);  // the wolf is back beside its owner, where they landed
+    CHECK(guid_text(b.r.fake.spawns[1].guid) == kWolfTemplate);
+    CHECK(std::abs(b.r.fake.spawns[1].x - 92.0) <= 1.0);
+    CHECK(std::abs(b.r.fake.spawns[1].y - 10.5) <= 1.0);
+    CHECK(mana_paid(b.r.fake, 1, 15) == 1);  // free: only the first call cost mana
+    CHECK(b.hud("out").find("Wolf (out)") != std::string::npos);
+    // a second glide: no second note
+    moving_as(b.r.fake, 1, 4);
+    place(b.r.fake, 1, 100, 40, 0);
+    b.seconds(1);
+    CHECK(contains(b.r.fake.destroyed, 1235));
+    CHECK(notes_with(b.r.fake, "step aside while you are in the air") == 1);
+}
+
+TEST_CASE("beastmaster: a jump keeps the beasts out, a fall of 1.5 s sends them aside; an air state while standing still does not") {
+    BeastRig b;
+    wolf_out(b);
+    b.spawnable(1);
+    b.seconds(1);
+    moving_as(b.r.fake, 1, 2);  // a jump: falling for a moment
+    place(b.r.fake, 1, 0, 11, 1);
+    b.seconds(1);
+    moving_as(b.r.fake, 1, 0);
+    place(b.r.fake, 1, 0, 10, 2);
+    b.seconds(3);
+    CHECK(!contains(b.r.fake.destroyed, 1234));
+    // the glider's state, but the owner does not move (a state the game left over, not a glide): they stay
+    moving_as(b.r.fake, 1, 4);
+    b.seconds(4);
+    CHECK(!contains(b.r.fake.destroyed, 1234));
+    // a long fall: aside once it lasted 1.5 s
+    moving_as(b.r.fake, 1, 2);
+    place(b.r.fake, 1, 0, 40, 2);
+    b.seconds(1);
+    place(b.r.fake, 1, 0, 35, 2);
+    b.seconds(1);
+    CHECK(!contains(b.r.fake.destroyed, 1234));
+    place(b.r.fake, 1, 0, 25, 2);
+    b.seconds(1);
+    CHECK(contains(b.r.fake.destroyed, 1234));
+    // another player's glide does not send them aside
+    moving_as(b.r.fake, 1, 0);
+    place(b.r.fake, 1, 0, 10, 2);
+    b.seconds(3);
+    REQUIRE(b.r.fake.spawns.size() == 2);
+    moving_as(b.r.fake, 2, 4);
+    place(b.r.fake, 2, 30, 50, 0);
+    b.seconds(2);
+    CHECK(!contains(b.r.fake.destroyed, 1235));
 }
 
 TEST_CASE("beastmaster: /beastmaster aside sends the beasts away until typed again; calling one brings them back") {

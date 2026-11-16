@@ -2,8 +2,8 @@
 
 A Beastmaster class for Enshrouded. Tame wild wolves, boars, sabretooths, hounds, bears, aurochs and snakes, keep up to 8 in
 your collection, and call as many to fight beside you as you have active slots (1 at the start, up to 4 as your character
-levels up). Build a stable to choose which beasts are active. They follow you, come back when they stray, rest after
-they fall, and are kept with the world. Their kills are yours: XP and loot. Loyal beasts earn talent points: make each
+levels up). Build a stable to choose which beasts are active. They follow you, come back when they stray, step aside
+while you glide, rest after they fall and then come back by themselves, and are kept with the world. Their kills are yours: XP and loot. Loyal beasts earn talent points: make each
 one your own (stronger, tougher, faster, a second wind, an ambush, a guard, a menace, a taunt). Monsters split between
 you and your beasts: a tank beast draws half of them.
 
@@ -44,8 +44,11 @@ page says who applies them). Without them everything else works and those beasts
    - **Passive:** they ignore fights and keep following you; Attack still sends them at a creature (for 20 s).
    - **Aggressive:** they also go after hostile creatures within 25 m of you (never wildlife, farm animals, bosses or
      players).
-7. **A beast that falls** rests for 60 seconds at home, and then you can call it again. Its body is gone a second after,
-   so our own beasts never drop loot.
+7. **A beast that falls** rests for 60 seconds, then comes back beside you by itself, free (the line at the bottom left
+   and `/beastmaster list` show "rests 0:40, then comes back"). It keeps its active slot meanwhile: **Dismiss** it (the
+   wheel shows "Dismiss Wolf (rests 0:40)") to leave it at home and call another. With **A fallen beast comes back by
+   itself after its rest** (`back_after_rest`) off it waits at home after its rest until you call it. Its body is gone
+   a second after, so our own beasts never drop loot.
 8. **Dismiss** a beast to send it home: **Dismiss <name>** on the wheel (one for each beast that is out), **Dismiss
    all** (with two or more out), or `/beastmaster dismiss <name or number>`; `/beastmaster dismiss` alone sends every
    beast home. A dismissed beast waits at home: call it again whenever you like. Beasts that are out stay out when you
@@ -58,6 +61,10 @@ page says who applies them). Without them everything else works and those beasts
    `/beastmaster aside` sends them away by hand, for example when they stand where you want to work; **Come back** on
    the wheel, `/beastmaster aside` again, calling or taming a beast, or sending the last one home ends it.
    `/beastmaster list` shows them as "aside".
+10. **In the air:** beasts cannot glide, so while you are on the glider (or falling for more than 1.5 s, not a jump)
+    your beasts step aside too, and come back beside you, free, a second after you land (the first time a note says
+    so). Before 1.18.0 a beast far from you was brought to your side while you glided, in the air, and fell to its
+    death.
 
 ## The stable
 
@@ -344,6 +351,7 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 | Mana to call a beast (`call_mana_pct`) | 15 % | of your maximum mana; 0 = free |
 | Seconds between calls (`call_cooldown_s`) | 10 | |
 | Rest after a beast falls (`rest_s`) | 60 s | |
+| A fallen beast comes back by itself after its rest (`back_after_rest`) | on | free, beside you, until you dismiss it; it keeps its active slot while it rests. Off: it waits at home after its rest |
 | Beasts in the stable, besides the active ones (`collection_max`; before a stable, the whole collection) | 8 | 1-16 |
 | Tame by defeat below (`tame_health_pct`) | 25 % | |
 | Taming takes (`tame_channel_s`) | 3 s | |

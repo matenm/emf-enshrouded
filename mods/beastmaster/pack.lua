@@ -1,7 +1,8 @@
--- The beasts out in the world: calling (mana, cooldown, limits), dismissing, resting after a fall, and every second:
--- checking each beast is still ours, bringing beasts back when their owner is in the world (after a reload, or a
--- guest who returns), and taking them out of the world while their owner is away or they step aside (aside.lua: while
--- a player builds next to them, or after beastmaster.aside).
+-- The beasts out in the world: calling (mana, cooldown, limits), dismissing, resting after a fall (and coming back
+-- after it by themselves while back_after_rest is on), and every second: checking each beast is still ours, bringing
+-- beasts back when their owner is in the world (after a reload, or a guest who returns), and taking them out of the
+-- world while their owner is away or they step aside (aside.lua: while a player builds next to them, while their owner
+-- is in the air, or after beastmaster.aside).
 -- M.new(env) where env has: setting(key), now(world), tell(world, player, text), beasts() (the roster), save(),
 -- slots(world, owner) (how many beasts the owner may have out: their active slots), stabled() (the world has had a
 -- stable: only active beasts are called), and optionally on_spawn(world, id, species, health_mul) after a beast was
@@ -91,6 +92,7 @@ function P:reset()
 	self.speeds = {}     -- entity id -> {base, wrote} by Movement entry: the game's values and Swiftness's (talents.lua)
 	self.present = nil   -- account -> player entity, for the players in the world (as of the last check)
 	self.called = {}     -- entity id -> when Beastmaster spawned it (idle.lua's clock: its SpawnTime is the game's then)
+	self.back = {}       -- beast -> true: it fell and comes back after its rest (its owner hears when it is back)
 	self.aside:reset()
 	self.fight:reset()
 	self.threat:reset()
@@ -348,15 +350,25 @@ function P:spots(account)
 	return out
 end
 
--- What a player hears while building keeps the beasts aside ("build": their own, "near": another player's).
+-- What a player hears while building ("build": their own, "near": another player's) or being in the air ("air") keeps
+-- the beasts aside.
 local function waits(why, what)
+	if why == "air" then return "Your beasts wait while you are in the air: " .. what .. " once you land." end
 	if why == "near" then return "Your beasts wait while a player builds near you: " .. what .. " a few seconds after that." end
 	return "Your beasts wait while you build: " .. what .. " a few seconds after you stop building."
+end
+
+-- A beast out that fell and rests: it comes back by itself after its rest.
+local function resting(beast)
+	return beast.out and beast.rest > 0
 end
 
 -- beastmaster.call: returns the reply text.
 function P:call(world, owner, account, beast)
 	local s = self.env.setting
+	if resting(beast) then
+		return string.format("%s rests for %s, then comes back by itself.", beast.name, mmss(beast.rest))
+	end
 	if beast.out then return beast.name .. " is out already." end
 	local busy, busy_why = self.aside:building(world, account, owner, self.env.now(world), self:spots(account))
 	if busy then return waits(busy_why, "call again") end
@@ -366,7 +378,12 @@ function P:call(world, owner, account, beast)
 	if beast.rest > 0 then return string.format("%s rests for %s.", beast.name, mmss(beast.rest)) end
 	local n, max = self:out_count(account), self.env.slots(world, owner) or 1
 	if n >= max then
-		return string.format("You have %s out (%s): dismiss one first.", plural(n, "beast"), plural(max, "active slot"))
+		local back
+		for _, b in ipairs(self.env.beasts():list(account)) do
+			if resting(b) then back = back or b.name end
+		end
+		return string.format("You have %s out (%s): dismiss one first.%s", plural(n, "beast"), plural(max, "active slot"),
+			back and string.format(" (%s rests and comes back by itself.)", back) or "")
 	end
 	local now = self.env.now(world)
 	local since = now - (self.last_call[account] or -math.huge)
@@ -394,6 +411,7 @@ end
 local function coming_back(self, world, account, owner)
 	local busy, why = self.aside:building(world, account, owner, self.env.now(world), self:spots(account))
 	if not busy then return "Your beasts come back." end
+	if why == "air" then return "Your beasts come back once you land." end
 	if why == "near" then return "Your beasts come back a few seconds after the player near you stops building." end
 	return "Your beasts come back a few seconds after you stop building."
 end
@@ -439,6 +457,7 @@ function P:dismiss(world, account, beast)
 	end
 	beast.entity = nil
 	beast.out = false
+	self.back[beast] = nil
 	if self:out_count(account) == 0 then self.aside:release(account) end  -- none left to step aside
 	self.env.save()
 	return beast.name .. " goes home."
@@ -646,8 +665,10 @@ function P:on_died(id, world)
 	if not e then return end
 	self.ids[id] = nil
 	e.beast.entity = nil
-	e.beast.out = false
+	-- with back_after_rest it stays out (and holds its slot) without a body, and comes back after its rest
+	e.beast.out = self.env.setting("back_after_rest") == true
 	e.beast.rest = self.env.setting("rest_s")
+	self.back[e.beast] = e.beast.out or nil
 	self.bodies[id] = true
 	self.fallen[#self.fallen + 1] = e
 	self.env.save()
@@ -718,17 +739,23 @@ function P:step(world)
 	local dt = self.last and math.max(0, now - self.last) or 0
 	self.last = now
 	local beasts = self.env.beasts()
-	local resting = false
+	local any_rest = false
+	local comes_back = self.env.setting("back_after_rest") == true
 	for _, account in ipairs(beasts:accounts()) do
 		for _, b in ipairs(beasts:list(account)) do
 			if b.rest > 0 then
+				if b.out and not b.entity and not comes_back then  -- the setting went off: it stays home
+					b.out = false
+					self.back[b] = nil
+					self.env.save()
+				end
 				b.rest = math.max(0, b.rest - dt)
-				resting = true
+				any_rest = true
 				if b.rest == 0 then self.env.save() end
 			end
 		end
 	end
-	if resting and now >= self.next_save then
+	if any_rest and now >= self.next_save then
 		self.next_save = now + 10
 		self.env.save()  -- the rest left survives a reload
 	end
@@ -772,7 +799,9 @@ function P:step(world)
 	for _, e in ipairs(self.fallen) do
 		local owner = present[e.account]
 		if owner then
-			self.env.tell(world, owner, string.format("%s fell; it rests for %s.", e.beast.name, mmss(e.beast.rest)))
+			local back = e.beast.out and e.beast.rest > 0
+			self.env.tell(world, owner, string.format(back and "%s fell; it comes back in %s." or "%s fell; it rests for %s.",
+				e.beast.name, mmss(e.beast.rest)))
 		end
 	end
 	self.fallen = {}
@@ -838,10 +867,15 @@ function P:step(world)
 					end
 				end
 			elseif b.out and owner and b.rest == 0 and not away then
-				local id, why, refused = self:spawn(world, owner, account, b)  -- after a reload, or its owner came back
+				-- after a reload, its owner came back, it stepped aside, or it rested after a fall
+				local id, why, refused = self:spawn(world, owner, account, b)
 				local sp = species.by_id(b.species)
 				if id then
 					self.refused[b] = nil
+					if self.back[b] then
+						self.back[b] = nil
+						self.env.tell(world, owner, b.name .. " is back.")
+					end
 				elseif not sp or (sp.pack and refused) then
 					-- refused REFUSALS checks in a row: this game has no such beast (its pack is not installed), so it
 					-- waits at home instead of being tried every second; an unknown species at once
@@ -864,6 +898,9 @@ function P:step(world)
 		elseif stepped and why == "near" and self.aside:first(account, why) then
 			self.env.tell(world, owner, "Your beasts step aside while a player builds near them (the game most likely "
 				.. "blocks building next to them). They come back a few seconds after that.")
+		elseif stepped and why == "air" and self.aside:first(account, why) then
+			self.env.tell(world, owner, "Your beasts step aside while you are in the air (on the glider, or a long fall): "
+				.. "they cannot follow you there. They come back beside you once you land.")
 		end
 	end
 end

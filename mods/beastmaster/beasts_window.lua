@@ -246,7 +246,7 @@ function W:rows(world)
 		end
 	end
 	for _, b in ipairs(active) do  -- an active beast's rest, counted down (it is not in the stable list)
-		if not b.out and (b.rest or 0) > 0 then
+		if (b.rest or 0) > 0 then
 			rows[#rows + 1] = { text = b.name .. " " .. env.state(b, self.account), dim = true }
 		end
 	end

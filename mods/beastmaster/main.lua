@@ -167,9 +167,10 @@ local function loyalty_of(b)
 end
 
 local function state_text(b, aside)
+	local rest = b.rest > 0 and string.format("rests %d:%02d", math.floor(b.rest / 60), math.floor(b.rest % 60))
+	if b.out and rest then return rest .. ", then comes back" end  -- it fell and comes back by itself (back_after_rest)
 	if b.out then return aside and "aside" or "out" end
-	if b.rest > 0 then return string.format("rests %d:%02d", math.floor(b.rest / 60), math.floor(b.rest % 60)) end
-	return "at home"
+	return rest or "at home"
 end
 
 local function active_count(account)
@@ -724,7 +725,9 @@ local function wheel_items(world, player)
 	for _, b in ipairs(list) do
 		if b.out then
 			out = out + 1
-			add("Dismiss " .. b.name, { action = "dismiss", key = b.name })
+			local rest = b.rest > 0  -- it fell and comes back after its rest (back_after_rest): dismissing leaves it home
+				and string.format(" (rests %d:%02d)", math.floor(b.rest / 60), math.floor(b.rest % 60)) or ""
+			add("Dismiss " .. b.name .. rest, { action = "dismiss", key = b.name })
 		end
 	end
 	if out > 1 then add("Dismiss all", { action = "dismiss", key = "all" }) end

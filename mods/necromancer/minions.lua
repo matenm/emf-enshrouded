@@ -1,7 +1,8 @@
 -- Undead minions of several kinds (skeleton warriors; a lich from the undead pack): each kind is raised for mana up to
 -- its own cap. They stay until they fall, follow and guard their owner, come back beside them when they stray, leave
--- the world while their owner is away or they step aside (aside.lua: while a player builds next to them, or after
--- necromancer.aside) and come back after; after a load the saved counts come back (no mana).
+-- the world while their owner is away or they step aside (aside.lua: while a player builds next to them, while their
+-- owner is in the air, or after necromancer.aside) and come back after; after a load the saved counts come back (no
+-- mana).
 -- Bodies are removed while dead (no loot from our own minions). Their hits hand the killing blow (XP, loot) to the
 -- owner, never on bosses or the player side.
 -- M.new(env) where env has: setting(key), now(world), tell(world, player, text), save(), kinds: an ordered list of
@@ -201,14 +202,16 @@ function P:total(account)
 	return n
 end
 
--- A player builds next to them (their owner, or another player near): the undead wait aside. Returns true and why
--- ("build" or "near").
+-- A player builds next to them (their owner, or another player near), or their owner is in the air: the undead wait
+-- aside. Returns true and why ("build", "near" or "air").
 function P:building(world, account, owner)
 	return self.aside:building(world, account, owner, self.env.now(world), self.out[account] or {})
 end
 
--- What a player hears while building keeps the undead aside ("build": their own, "near": another player's).
+-- What a player hears while building ("build": their own, "near": another player's) or being in the air ("air") keeps
+-- the undead aside.
 function P:waits(why, what)
+	if why == "air" then return "Your undead wait while you are in the air: " .. what .. " once you land." end
 	if why == "near" then return "Your undead wait while a player builds near you: " .. what .. " a few seconds after that." end
 	return "Your undead wait while you build: " .. what .. " a few seconds after you stop building."
 end
@@ -217,6 +220,7 @@ end
 function P:coming_back(world, account, owner)
 	local busy, why = self:building(world, account, owner)
 	if not busy then return string.format("Your undead come back (%d).", self:total(account)) end
+	if why == "air" then return "Your undead come back once you land." end
 	if why == "near" then return "Your undead come back a few seconds after the player near you stops building." end
 	return "Your undead come back a few seconds after you stop building."
 end
@@ -494,6 +498,9 @@ function P:step(world)
 		elseif stepped and why == "near" and self.aside:first(account, why) then
 			self.env.tell(world, owner, "Your undead step aside while a player builds near them (the game most likely "
 				.. "blocks building next to them). They come back a few seconds after that.")
+		elseif stepped and why == "air" and self.aside:first(account, why) then
+			self.env.tell(world, owner, "Your undead step aside while you are in the air (on the glider, or a long fall): "
+				.. "they cannot follow you there. They come back beside you once you land.")
 		end
 	end
 end

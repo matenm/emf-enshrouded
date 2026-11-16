@@ -1,7 +1,7 @@
 {
   "id": "necromancer",
   "name": "Necromancer",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "A Necromancer class: raise skeleton warriors that stay, follow you and fight (3 at a time), a lich and a bone golem with the EMF creature packs, and cast raging spirits, flaming skulls that rush your foe for a few seconds. Hold F2 for the summoning wheel (shared with Beastmaster when both are installed); /necromancer in the chat for players who join. Host or dedicated server. Installed switched off.",
   "authors": ["EMF contributors"],
   "enabled": false,

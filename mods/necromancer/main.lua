@@ -125,6 +125,8 @@ function actions.list(world, player, account)
 	local text = "Your undead: " .. minions:summary(account) .. "."
 	if minions.aside:by_command(account) then
 		text = text .. " They stepped aside: Come back on the wheel, Gather or /necromancer aside brings them back."
+	elseif minions.aside:why(account) == "air" then
+		text = text .. " They step aside while you are in the air and come back once you land."
 	elseif minions.aside:is_aside(account) then
 		text = text .. " They step aside while someone builds next to them."
 	end

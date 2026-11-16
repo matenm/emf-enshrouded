@@ -5,15 +5,15 @@ local M = {}
 
 local DRIFT_S = 2  -- s: a rest whose end moved more than this since the line was sent sends it again
 
--- The parts of a player's line: their beasts out ("out", or "aside" while they stepped aside) and resting (with the
--- seconds left), in list order.
+-- The parts of a player's line: their beasts resting (with the seconds left; also one out that comes back after its
+-- rest) and out ("out", or "aside" while they stepped aside), in list order.
 function M.parts(list, aside)
 	local parts = {}
 	for _, b in ipairs(list) do
-		if b.out then
-			parts[#parts + 1] = { name = b.name, state = aside and "aside" or "out" }
-		elseif b.rest > 0 then
+		if b.rest > 0 then
 			parts[#parts + 1] = { name = b.name, state = "rest", rest = b.rest }
+		elseif b.out then
+			parts[#parts + 1] = { name = b.name, state = aside and "aside" or "out" }
 		end
 	end
 	return parts

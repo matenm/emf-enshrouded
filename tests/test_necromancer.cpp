@@ -341,12 +341,12 @@ TEST_CASE("beastmaster + necromancer: the wheel's labels are short and every lin
     CHECK_MESSAGE(wolf.find("comes") != std::string::npos, wolf);
     n.seconds(11);
     CHECK(n.reply("beastmaster.call Sabretooth 2").find("comes") != std::string::npos);
-    deliver(n.r.fake, "EntityDiedEvent", died_event(1234));  // the wolf falls: it rests
+    deliver(n.r.fake, "EntityDiedEvent", died_event(1234));  // the wolf falls: it rests, and comes back after
     CHECK(n.reply("necromancer.raise").find("rises") != std::string::npos);
     n.seconds(2);
     press_key(n, VK_F2);
     REQUIRE(n.r.fake.wheels.size() == 1);
-    CHECK(item_at(n.r.fake.wheels[0].items, "Beasts: Call Wolf (rests") >= 0);
+    CHECK(item_at(n.r.fake.wheels[0].items, "Beasts: Dismiss Wolf (rests") >= 0);
     CHECK(item_at(n.r.fake.wheels[0].items, "Beasts: Dismiss Sabretooth 2") >= 0);
     for (std::string label : n.r.fake.wheels[0].items) {
         const size_t colon = label.find(": ");
@@ -825,4 +825,35 @@ TEST_CASE("necromancer: the undead also step aside while another player builds w
     component<ecs::ServerCursor>(n.r.fake, 2).currentBuildingItemInstance.itemId.value = 0;
     n.seconds(5);
     CHECK(n.spawned(kSkeleton) == 2);  // back
+}
+
+// ---- in the air: an undead far from its owner is brought beside them with the game's ground search (10 m at most), so
+// beside an owner on the glider it stood in the air and fell (a player's report, of a Beastmaster wolf) ----
+TEST_CASE("necromancer: the undead step aside while their owner glides and come back beside them a moment after landing, free; a raise meanwhile waits") {
+    NecroRig n;
+    n.spawnable(4);
+    CHECK(n.reply("necromancer.raise").find("rises (1/3)") != std::string::npos);
+    n.seconds(2);
+    component<ecs::DynamicLocomotion>(n.r.fake, 1).state = static_cast<emf::gen::ecs::LocomotionState>(4);  // the glider
+    place(n.r.fake, 1, 0, 60, 0);
+    n.seconds(1);
+    CHECK(has(n.r.fake.destroyed, 1234));
+    size_t told = 0;
+    for (const auto& x : n.r.fake.notes) told += x.find("step aside while you are in the air") != std::string::npos;
+    CHECK(told == 1);
+    CHECK(n.reply("necromancer.list").find("Skeletons 1/3") != std::string::npos);  // kept: it comes back
+    CHECK(n.reply("necromancer.raise").find("once you land") != std::string::npos);
+    CHECK(n.reply("necromancer.gather").find("once you land") != std::string::npos);
+    for (int i = 1; i <= 5; ++i) {
+        place(n.r.fake, 1, 8.0 * i, 60.0 - i, 0);
+        n.seconds(1);
+    }
+    CHECK(n.spawned(kSkeleton) == 1);
+    component<ecs::DynamicLocomotion>(n.r.fake, 1).state = static_cast<emf::gen::ecs::LocomotionState>(0);  // landed
+    place(n.r.fake, 1, 50, 10, 0);
+    n.seconds(2);
+    CHECK(n.spawned(kSkeleton) == 2);  // back, free
+    size_t paid = 0;
+    for (const auto& [e, a, d] : n.r.fake.attr_adds) paid += e == 1 && a == EMF_ATTR_MANA && d == -25;
+    CHECK(paid == 1);
 }

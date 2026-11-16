@@ -40,6 +40,9 @@ download: install it with EMF.exe and EMF builds it when the game starts, no EML
    **Undead step aside while someone builds next to them** (`make_room`) turns this off. `/necromancer aside` sends
    them away by hand, for example when they stand where you want to work; **Come back** on the wheel (it takes Gather's
    place meanwhile), Gather, `/necromancer aside` again, raising one, or dismissing them all ends it.
+9. **In the air:** while you are on the glider (or falling for more than 1.5 s, not a jump) your undead step aside
+   too, and come back beside you, free, a second after you land (the first time a note says so). Before 1.3.0 one far
+   from you was brought to your side while you glided, in the air, and fell.
 
 **The wheel (hold F2):** Raise Skeleton (n/3), Raise Lich (n/1), Raise Bone Golem (n/1), Raging Spirits, Gather
 (**Come back** while they stepped aside by `/necromancer aside`), Attack, then **Dismiss <kind>** for each kind you
