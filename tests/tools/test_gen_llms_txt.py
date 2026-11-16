@@ -194,7 +194,7 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(text, g.generate())  # deterministic
         size = len(text.encode("utf-8"))
         self.assertGreater(size, 15 * 1024)
-        self.assertLess(size, 90 * 1024)  # v39 enemy orders 84 KB, v37 paths 81 KB, v25 (E prompts) passed 56 KB, the HUD editor commands 60 KB, v27 (mod messages) 63 KB, the HUD parts 64 KB, v31 hits and env damage 71 KB, v32 buffs 73 KB, v34 the map 77 KB; still small enough for an agent to read whole
+        self.assertLess(size, 100 * 1024)  # v44-v46 (blocks, ruins, villager moves) 92 KB, v39 enemy orders 84 KB, v37 paths 81 KB, v25 (E prompts) passed 56 KB, the HUD editor commands 60 KB, v27 (mod messages) 63 KB, the HUD parts 64 KB, v31 hits and env damage 71 KB, v32 buffs 73 KB, v34 the map 77 KB; still small enough for an agent to read whole
         for heading in ("## C API", "## Lua", "## mod.json", "## Console commands", "## Debug bridge",
                         "## Tools for agents"):
             self.assertIn(heading, text)
