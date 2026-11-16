@@ -8,6 +8,9 @@
 //   as a player's E does, without opening a window (seen in game), then the loot event takes it;
 // - a barrel, crate or urn (RandomLootOnDestroy): a hit with its own health from the player; the game drops its loot as
 //   a ground pickup, which the ground group then takes.
+// What looks alike but must stay (from the game's template list): enemy spawners (bone piles, spider eggs: some carry
+// no Faction), thrown animal bait, a crop's stage (harvesting it ends the plant), fog nest resources, anything a player
+// placed, anything already taken and fading.
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -43,6 +46,7 @@ struct Thing {
     bool offer = false;     // InteractionOfferRuntime
     uint32_t offer_id = 0;  // its offerId (the accept must name it)
     bool offered = false;   // its isOffered (a player in the game's range; nobody else accepting)
+    uint32_t last_accept_guest = 0;  // lastAcceptData.guestId: who opened it last (0 = nobody)
     bool pickup = false;    // PickupItem
     std::string item;       // PickupItem's item, by debug name ("" = not named by the game yet)
     bool default_inv = false, inventory = false, setup = false, destroy_on_loot = false;
@@ -51,13 +55,21 @@ struct Thing {
     bool random_loot = false, random_container = false, loot_on_destroy = false, destructible = false;
     uint16_t max_health = 0;  // Destructible.maxHealth (0 = not read)
     bool spawn_on_destroy = false, mining_node = false;
+    bool enemy_spawner = false;  // EnemySettings, RandomSpawner, TriggerSpawner or EnemySpawnerClient
+    bool disable_loot_on_destroy = false;  // DisableRandomLootOnDestroy
+    bool used_item = false;      // UsedItem: a player placed it
+    bool food_bait = false;      // FoodBait: thrown animal bait (taming)
+    bool crop_stage = false;     // the stage a crop's DynamicGrowth root points at (set by the walk)
+    bool looted = false;         // DestroyOnLootActivated or DestroyOnLoot.shouldDestroy: taken, it fades out
     bool chest_excluded = false;  // any of UsedItem (a player placed it), UpgradeStorage, ItemCollectionComponent,
                                   // CreateItemLoot, DestroyOnLoot, InteractionLootRefill, AnimalTarget,
                                   // InteractionKnowledgeLock, LoreReading
     bool lock = false;            // InteractionLock (a scene chest has one; a searchable lore object does not)
     uint32_t lock_item = 0;       // its requiredItem: the accept would use up that item (a lockpick, a key)
+    bool lock_item_ref = false;   // its requiredItemRef names an item by GUID: the same
     bool lock_item_used = false;  // DynamicInteractionLock.itemUsed: a player already opened it with the item
-    std::vector<std::string> stacks;  // a chest's own Inventory's items (debug names)
+    std::vector<std::string> stacks;  // a chest's own Inventory's items (debug names; "" = not named yet)
+    uint64_t fingerprint = 0;     // its SpawnTime: another entity under a reused id has another
 };
 
 inline std::string lower(std::string s) {
@@ -65,33 +77,40 @@ inline std::string lower(std::string s) {
     return s;
 }
 inline bool contains(const std::string& hay, const char* needle) { return lower(hay).find(lower(needle)) != std::string::npos; }
+inline bool starts(const std::string& hay, const char* prefix) { return lower(hay).rfind(lower(prefix), 0) == 0; }
 
-// The group of a pickup by its item. A scene item the game keeps out of its own area loot (exclude 1: keys, weapons,
-// lore) stays unless a group asks for its kind of item.
+// The group of a pickup by its item. A drop (exclude absent or 0) is a ground item whatever it is (a collection item
+// stays a collectible); the game's scene pickups it keeps out of its own area loot (exclude 1: keys, weapons, lore,
+// mushrooms, fireflies, wild plants) are taken only by the group of their kind of item.
 inline Kind pickup_kind(const std::string& item, int exclude) {
-    if (lower(item).rfind("collection_", 0) == 0) return Kind::Collectible;
+    const bool collection = starts(item, "collection_");
+    if (exclude != 1) return collection ? Kind::Collectible : Kind::Ground;
+    if (collection) return Kind::Collectible;
     if (contains(item, "mushroom")) return Kind::Mushroom;
     if (contains(item, "fishingbait")) return Kind::Firefly;  // fireflies and the other bait critters
-    if (exclude != 1) return Kind::Ground;
     return magnet::is_material(item, false) ? Kind::Plant : Kind::None;  // a wild plant that carries a pickup
 }
 
 inline Kind classify(const Thing& t) {
     if (t.random_loot && t.random_container && t.loot_on_destroy && t.destructible && !t.offer && !t.inventory &&
-        !t.faction && !t.spawn_on_destroy && !t.mining_node)
+        !t.setup && !t.faction && !t.actor && !t.enemy_spawner && !t.spawn_on_destroy && !t.mining_node && !t.used_item &&
+        !t.disable_loot_on_destroy)
         return Kind::Smash;
-    if (t.random_loot && t.random_container && t.setup && t.inventory && t.lock && t.destructible && !t.chest_excluded)
+    if (t.random_loot && t.random_container && t.setup && t.inventory && t.lock && t.destructible && !t.chest_excluded &&
+        !t.enemy_spawner)
         return Kind::Chest;
-    if (!t.offer || !t.destroy_on_loot || t.actor || t.inventory || t.setup) return Kind::None;
+    if (!t.offer || !t.destroy_on_loot || t.actor || t.inventory || t.setup || t.faction || t.spawn_on_destroy ||
+        t.enemy_spawner || t.used_item || t.food_bait || t.crop_stage || t.looted)
+        return Kind::None;
     if (t.pickup) return pickup_kind(t.item, t.exclude);
     return t.default_inv ? Kind::Plant : Kind::None;
 }
 
 // Items a quest needs: the game has no flag for them (they are scene data), so names that look like one stay.
 inline bool quest_like(const std::string& item) {
-    for (const char* p : {"quest", "_npc_", "loretext", "mappiece", "key_"})
+    for (const char* p : {"quest", "_npc_", "loretext", "mappiece"})
         if (contains(item, p)) return true;
-    return false;
+    return starts(item, "key_") || starts(item, "prop_component_");
 }
 
 // The player's ignore list: item debug names, comma separated, any case; a trailing * takes every name that begins so.
@@ -150,11 +169,13 @@ struct Action {
     uint32_t player = 0, entity = 0;
     int32_t amount = 0;     // Smash: the hit's damage
     uint32_t offer_id = 0;  // Accept: the offer it accepts
+    bool first = false;     // the first try for this entity (what loot.status counts)
 };
 struct Player {
     uint32_t id = 0;
     magnet::Vec3 pos;
     bool on = false;  // their magnet
+    bool room = true;  // an empty slot in their bag (a pickup comes only then)
 };
 
 class Sweeper {
@@ -164,75 +185,65 @@ public:
     static constexpr int kMaxSmashes = 3;       // hits for one barrel that stays
     static constexpr uint64_t kSmashRetryMs = 3000;
     static constexpr int32_t kDefaultSmash = 1000;  // when its health was not read
-    static constexpr uint64_t kRollMs = 3000;   // a chest still empty this long after the accept: nothing in it
+    static constexpr uint64_t kRollMs = 3000;   // a chest still empty this long after the accept: nothing rolled yet
+    static constexpr uint64_t kReacceptMs = 30000;  // then it is asked once more (a daytime or toggle lock may lift)
+    static constexpr int kMaxAccepts = 2;
     static constexpr size_t kBudget = 16;       // actions a sweep
+    static constexpr size_t kPerPlayer = 8;     // actions for one player a sweep (one in a field cannot starve others)
     static constexpr uint64_t kForgetMs = 60000;
 
+    // `room`: how many more requests the program's queue takes (the actions booked are never more).
     std::vector<Action> tick(uint64_t now, uint32_t session, const std::vector<Player>& players,
                              const std::vector<Thing>& things, const std::vector<magnet::Vec3>& bases,
-                             const SweepRules& r) {
+                             const SweepRules& r, size_t room = static_cast<size_t>(-1)) {
         if (session != session_) {
             session_ = session;
             st_.clear();
         }
-        std::vector<Action> out;
+        struct Cand {
+            const Thing* t;
+            Kind k;
+            const Player* who;
+            double d;
+        };
+        std::vector<Cand> cands;
         for (const Thing& t : things) {
-            if (out.size() >= kBudget) break;
             const Kind k = classify(t);
             if (k == Kind::None || !r.group(k).on) continue;
             const double base = r.base_radius + (k == Kind::Smash ? r.smash_margin : 0);
             bool in_base = false;
             for (const auto& b : bases) in_base = in_base || magnet::horizontal_distance(t.pos, b) <= base;
             if (in_base) continue;
-            const Player* who = nearest(players, t.pos, r.reach_of(k));
+            double d = 0;
+            const Player* who = nearest(players, t.pos, r.reach_of(k), true, &d);
             if (!who) continue;
-            State& s = st_[t.id];
-            s.seen_ms = now;
-            if (s.done || now < s.next_ms) continue;
-            if (k == Kind::Smash) {
-                if (s.tries >= kMaxSmashes) {
-                    s.done = true;
-                    continue;
-                }
-                ++s.tries;
-                s.next_ms = now + kSmashRetryMs;
-                out.push_back({Act::Smash, k, who->id, t.id, t.max_health ? t.max_health : kDefaultSmash, 0});
-                continue;
+            // a chest or a barrel nearer to a player whose magnet is off is theirs to open
+            if (k == Kind::Chest || k == Kind::Smash) {
+                double d_any = 0;
+                const Player* any = nearest(players, t.pos, r.reach_of(k), false, &d_any);
+                if (any && !any->on) continue;
             }
-            if (k == Kind::Chest) {
-                // the accept would use up a lockpick or a key: it waits for a player to open it with the item
-                if (t.lock_item && !t.lock_item_used) continue;
-                if (t.stacks.empty()) {
-                    if (s.accepted_ms) {
-                        if (now - s.accepted_ms >= kRollMs) s.done = true;  // nothing rolled: an empty chest
-                        continue;
-                    }
-                    if (!t.offered) continue;  // not offered now (another player opens it): later
-                    s.accepted_ms = now;
-                    out.push_back({Act::Accept, k, who->id, t.id, 0, t.offer_id});
-                    continue;
-                }
-                bool keep = false;
-                for (const auto& item : t.stacks) keep = keep || quest_like(item) || r.ignore.match(item);
-                if (keep) {  // a quest item or an ignored one: the whole chest is left to the player
-                    s.done = true;
-                    continue;
-                }
-            } else if (t.pickup) {
-                if (t.item.empty()) continue;  // the game names it a moment later
-                if (quest_like(t.item) || r.ignore.match(t.item)) {
-                    s.done = true;
-                    continue;
-                }
-            }
-            if (s.tries >= kMaxTries) {  // it stays: no room for it (or the game refused)
-                s.done = true;
-                continue;
-            }
-            ++s.tries;
-            s.next_ms = now + kRetryMs;
-            out.push_back({Act::Loot, k, who->id, t.id, 0, 0});
+            cands.push_back({&t, k, who, d});
         }
+        std::sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b) { return a.d < b.d; });
+        std::vector<Action> out;
+        std::map<uint32_t, size_t> per_player;
+        const size_t cap = (std::min)(kBudget, room);
+        for (const Cand& c : cands) {
+            if (out.size() >= cap) break;
+            const Thing& t = *c.t;
+            State& s = st_[t.id];
+            if (s.fingerprint != t.fingerprint) s = State{};  // another entity under a reused id
+            s.fingerprint = t.fingerprint;
+            s.seen_ms = now;
+            if (s.done || now < s.next_ms || per_player[c.who->id] >= kPerPlayer) continue;
+            Action a;
+            if (!decide(t, c.k, *c.who, now, s, r, &a)) continue;
+            out.push_back(a);
+            ++per_player[c.who->id];
+        }
+        for (const Thing& t : things)  // seen this sweep, also those not decided: they stay known
+            if (auto it = st_.find(t.id); it != st_.end()) it->second.seen_ms = now;
         for (auto it = st_.begin(); it != st_.end();)
             it = now - it->second.seen_ms > kForgetMs ? st_.erase(it) : std::next(it);
         return out;
@@ -243,24 +254,117 @@ public:
 private:
     struct State {
         uint64_t seen_ms = 0, next_ms = 0, accepted_ms = 0;
-        int tries = 0;
+        int tries = 0, accepts = 0;
         bool done = false;
+        uint64_t fingerprint = 0;
     };
-    static const Player* nearest(const std::vector<Player>& players, const magnet::Vec3& p, double reach) {
+
+    static bool decide(const Thing& t, Kind k, const Player& who, uint64_t now, State& s, const SweepRules& r, Action* a) {
+        *a = Action{};
+        a->kind = k;
+        a->player = who.id;
+        a->entity = t.id;
+        if (k == Kind::Smash) {
+            if (s.tries >= kMaxSmashes) {
+                s.done = true;
+                return false;
+            }
+            a->first = s.tries == 0;
+            ++s.tries;
+            s.next_ms = now + kSmashRetryMs;
+            a->act = Act::Smash;
+            a->amount = t.max_health ? t.max_health : kDefaultSmash;
+            return true;
+        }
+        if (k == Kind::Chest) {
+            // the accept would use up a lockpick or a key: it waits for a player to open it with the item
+            if ((t.lock_item || t.lock_item_ref) && !t.lock_item_used) return false;
+            if (t.stacks.empty()) {
+                if (s.accepted_ms && now - s.accepted_ms < kRollMs) return false;  // the roll comes
+                if (s.accepts >= kMaxAccepts) {  // asked twice, nothing rolled: an empty chest, or one that is closed
+                    s.done = true;
+                    return false;
+                }
+                if (s.accepted_ms && now - s.accepted_ms < kReacceptMs) return false;
+                if (!t.offered) return false;  // not offered now (another player opens it): later
+                a->first = s.accepts == 0;
+                s.accepted_ms = now;
+                ++s.accepts;
+                a->act = Act::Accept;
+                a->offer_id = t.offer_id;
+                return true;
+            }
+            // rolled loot: only the magnet's own roll, or a chest this player opened themselves (another player's
+            // open chest stays theirs)
+            if (!s.accepted_ms && t.last_accept_guest != who.id) return false;
+            bool keep = false, unnamed = false;
+            for (const auto& item : t.stacks) {
+                if (item.empty()) unnamed = true;
+                keep = keep || quest_like(item) || r.ignore.match(item);
+            }
+            if (unnamed) return false;  // the game names it a moment later
+            if (keep) {  // a quest item or an ignored one: the whole chest is left to the player
+                s.done = true;
+                return false;
+            }
+        } else if (t.pickup) {
+            if (t.item.empty()) return false;  // the game names it a moment later
+            if (!who.room) return false;       // a part that did not fit could be lost: wait for an empty slot
+            if (quest_like(t.item) || r.ignore.match(t.item)) {
+                s.done = true;
+                return false;
+            }
+        }
+        if (s.tries >= kMaxTries) {  // it stays: no room for it (or the game refused)
+            s.done = true;
+            return false;
+        }
+        a->first = s.tries == 0;
+        ++s.tries;
+        s.next_ms = now + kRetryMs;
+        a->act = Act::Loot;
+        return true;
+    }
+
+    // The nearest player within `reach`: with `on_only`, only those whose magnet is on.
+    static const Player* nearest(const std::vector<Player>& players, const magnet::Vec3& p, double reach, bool on_only,
+                                 double* dist) {
         const Player* best = nullptr;
         double best_d = reach;
         for (const auto& pl : players) {
-            if (!pl.on) continue;
+            if (on_only && !pl.on) continue;
             const double d = magnet::distance(pl.pos, p);
             if (d <= best_d) {
                 best_d = d;
                 best = &pl;
             }
         }
+        if (dist) *dist = best_d;
         return best;
     }
     std::map<uint32_t, State> st_;
     uint32_t session_ = 0;
+};
+
+// When the flame altars must be read again before a sweep: a player arrived, or moved far since the last sweep (a
+// fast travel, a join): the base list is refreshed every 10 s otherwise, and an altar that came into the world with
+// them would not be known yet.
+struct BaseWatch {
+    static constexpr double kFar = 50.0;
+    bool moved(const std::vector<Player>& players) {
+        bool moved = false;
+        std::map<uint32_t, magnet::Vec3> now;
+        for (const auto& p : players) {
+            now[p.id] = p.pos;
+            auto it = last_.find(p.id);
+            if (it == last_.end() || magnet::horizontal_distance(it->second, p.pos) > kFar) moved = true;
+        }
+        last_ = std::move(now);
+        return moved;
+    }
+
+private:
+    std::map<uint32_t, magnet::Vec3> last_;
 };
 
 }  // namespace sweep

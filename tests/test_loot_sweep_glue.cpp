@@ -170,12 +170,12 @@ TEST_CASE("sweep glue: things near the players: offers and barrels within reach;
     tpl<gen::RandomLootOnDestroy>(42);
     at(43, 1, 0, 0);  // a plain prop near: no offer, no RandomLootOnDestroy
     tpl<gen::Destructible>(43);
-    const auto near = sweep::things_near(r.w(), {{0, 0, 0}}, 10, names);
+    const auto near = sweep::things_near(r.w(), {{0, 0, 0}}, 10, names, {true, true});
     std::vector<uint32_t> ids;
     for (const auto& t : near) ids.push_back(t.id);
     std::sort(ids.begin(), ids.end());
     CHECK(ids == std::vector<uint32_t>{40, 42});
-    CHECK(sweep::things_near(r.w(), {}, 10, names).empty());  // nobody: no walk
+    CHECK(sweep::things_near(r.w(), {}, 10, names, {true, true}).empty());  // nobody: no walk
 }
 
 TEST_CASE("sweep glue: the accept event names the player, the chest and its offer") {
@@ -184,4 +184,100 @@ TEST_CASE("sweep glue: the accept event names the player, the chest and its offe
     CHECK(e.guestEntityId.id == 1u);
     CHECK(e.hostEntityId.id == 20u);
     CHECK(e.offerId == 7u);
+}
+
+namespace {
+int g_tpl_calls = 0;
+void* f_tpl_counted(EmfWorld* w, uint32_t hash, uint32_t entity, uint64_t* size) {
+    ++g_tpl_calls;
+    return f_tpl(w, hash, entity, size);
+}
+}  // namespace
+
+TEST_CASE("sweep glue: the review's marks are read: spawner, bait, player's object, fading, who opened it, a fingerprint") {
+    Rig r;
+    at(50, 0, 0, 0);
+    comp<gen::InteractionOfferRuntime>(50).lastAcceptData.guestId.id = 2;
+    tpl<gen::EnemySettings>(50);
+    tpl<gen::FoodBait>(50);
+    tpl<gen::UsedItem>(50);
+    comp<gen::DestroyOnLootActivated>(50);
+    tpl<gen::DisableRandomLootOnDestroy>(50);
+    comp<gen::SpawnTime>(50).spawnTime.value = 12345;
+    tpl<gen::InteractionLock>(50).requiredItemRef.bytes[3] = 7;
+    tpl<gen::RandomLoot>(50);  // a chest's and a barrel's parts are read only for random loot
+    tpl<gen::RandomLootContainer>(50);
+    comp<gen::Inventory>(50);
+    const sweep::Thing t = sweep::read_thing(r.w(), 50, names);
+    CHECK(t.enemy_spawner);
+    CHECK(t.food_bait);
+    CHECK(t.used_item);
+    CHECK(t.looted);
+    CHECK(t.disable_loot_on_destroy);
+    CHECK(t.last_accept_guest == 2u);
+    CHECK(t.fingerprint == 12345u);
+    CHECK(t.lock_item_ref);
+    at(51, 0, 0, 0);
+    comp<gen::DestroyOnLoot>(51).shouldDestroy = true;
+    CHECK(sweep::read_thing(r.w(), 51, names).looted);
+}
+
+TEST_CASE("sweep glue: a crop's stage (the entity its DynamicGrowth root's DynamicUpgrade points at) is marked") {
+    Rig r;
+    at(60, 1, 0, 0);  // the root
+    comp<gen::DynamicGrowth>(60);
+    comp<gen::DynamicUpgrade>(60).entityId.id = 61;
+    at(61, 1, 0, 0);  // its stage: looks like a plant
+    comp<gen::InteractionOfferRuntime>(61);
+    comp<gen::DefaultInventory>(61);
+    comp<gen::DestroyOnLoot>(61);
+    at(62, 2, 0, 0);  // a wild plant
+    comp<gen::InteractionOfferRuntime>(62);
+    comp<gen::DefaultInventory>(62);
+    comp<gen::DestroyOnLoot>(62);
+    const auto near = sweep::things_near(r.w(), {{0, 0, 0}}, 10, names, {true, true});
+    bool stage = false, wild = false;
+    for (const auto& t : near) {
+        if (t.id == 61) stage = t.crop_stage;
+        if (t.id == 62) wild = !t.crop_stage;
+    }
+    CHECK(stage);
+    CHECK(wild);
+}
+
+TEST_CASE("sweep glue: with smashing and chests off, the walk makes no template lookup for entities without an offer") {
+    Rig r;
+    r.api.get_template_component = f_tpl_counted;
+    for (uint32_t id = 70; id < 90; ++id) {
+        at(id, 1, 0, 0);
+        tpl<gen::Destructible>(id);  // props, no offer
+    }
+    g_tpl_calls = 0;
+    CHECK(sweep::things_near(r.w(), {{0, 0, 0}}, 10, names, {false, false}).empty());
+    CHECK(g_tpl_calls == 0);
+    at(95, 50, 0, 0);  // out of reach: one look at its position, nothing more
+    comp<gen::InteractionOfferRuntime>(95);
+    g_tpl_calls = 0;
+    CHECK(sweep::things_near(r.w(), {{0, 0, 0}}, 10, names, {true, true}).size() == 0);
+}
+
+TEST_CASE("sweep glue: a player has room while one of their generic slots (backpack, bar) is empty") {
+    Rig r;
+    auto& setup = comp<gen::InventorySetup>(1);
+    setup.linksEntities[0].id = 100;
+    setup.linksCategories[0] = emf::gen::InventoryCategory::Generic;
+    setup.linksEntities[1].id = 101;
+    setup.linksCategories[1] = emf::gen::InventoryCategory::Equipment;
+    auto& bag = comp<gen::Inventory>(100);
+    for (auto& s : bag.slots) {
+        s.id.value = 0x33;
+        s.data.count = 1;
+    }
+    comp<gen::Inventory>(101);  // equipment slots, empty: not room for loot
+    CHECK_FALSE(sweep::has_room(r.w(), 1));
+    bag.slots[5].id.value = 0;
+    CHECK(sweep::has_room(r.w(), 1));
+    setup.availableSlotCount = 3;  // only 3 usable slots and 7 used: no room, though a slot is empty
+    CHECK_FALSE(sweep::has_room(r.w(), 1));
+    CHECK_FALSE(sweep::has_room(r.w(), 2));  // no inventory setup: no room known
 }
