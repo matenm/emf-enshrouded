@@ -139,8 +139,13 @@ std::vector<size_t> setting_display_order(const std::vector<SettingDef>& defs);
 bool setting_active(const SettingDef& def, const std::function<std::string(const std::string&)>& value_of);
 // Why `def` is greyed out, for players: "only while Show the line is on" ("" without "enabledWhen").
 std::string setting_condition_text(const SettingDef& def, const std::vector<SettingDef>& defs);
-// A value as players see it: "on"/"off", a choice's or option's label, else the value.
+// A value as players see it: "on"/"off", a choice's or option's label, a scan code's key (scan_code_shown), else the
+// value.
 std::string setting_shown_value(const SettingDef& def, const std::string& value);
+// A scan code ("0x2b") as players see it: "the key under Esc (0x29)", else the keyboard layout's name for the key ("the
+// \ key (0x2b)"), else "scan code 0x2b". `name_of(scan code)` gives the layout's name ("" for none); empty: this PC's
+// layout (GetKeyNameTextW).
+std::string scan_code_shown(const std::string& value, const std::function<std::string(unsigned)>& name_of = {});
 // A number as settings store it: whole numbers exactly ("1234567"), others with 15 digits ("0.1", "2.5").
 std::string setting_number_text(double v);
 // Characters (UTF-8 code points) in `text`.

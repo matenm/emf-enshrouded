@@ -108,6 +108,28 @@ TEST_CASE("emf settings: the console key is a scan code from 0x01 to 0x7f, kept 
     CHECK(setting_shown_value(*key, "0x29") == "the key under Esc (0x29)");
 }
 
+TEST_CASE("emf settings: any console key scan code is shown by the keyboard layout's name for it, else by its number") {
+    const auto layout = [](unsigned sc) -> std::string {
+        if (sc == 0x2b) return "\\";
+        if (sc == 0x3b) return "F1";
+        if (sc == 0x3a) return "Caps Lock";
+        return "";  // the layout has no name for it
+    };
+    CHECK(scan_code_shown("0x29", layout) == "the key under Esc (0x29)");
+    CHECK(scan_code_shown("0x2b", layout) == "the \\ key (0x2b)");
+    CHECK(scan_code_shown("0x3b", layout) == "the F1 key (0x3b)");
+    CHECK(scan_code_shown("0x3a", layout) == "the Caps Lock key (0x3a)");
+    CHECK(scan_code_shown("0x59", layout) == "scan code 0x59");
+    CHECK(scan_code_shown("junk", layout) == "scan code junk");  // not a scan code: as written
+    // this PC's own layout (GetKeyNameTextW): every layout has a name for 0x2b (\ on US keyboards, # on UK and German)
+    const SettingDef* key = find_def(emf_setting_defs({}), "overlay.key");
+    REQUIRE(key);
+    const std::string shown = setting_shown_value(*key, "0x2b");
+    CHECK(shown.rfind("the ", 0) == 0);
+    CHECK(shown.size() > std::string(" key (0x2b)").size());
+    CHECK(shown.substr(shown.size() - 11) == " key (0x2b)");
+}
+
 TEST_CASE("emf settings: a mod cannot take the id emf") {
     const auto r = parse_manifest(R"({"id": "emf", "version": "1.0.0"})");
     CHECK_FALSE(r.manifest);

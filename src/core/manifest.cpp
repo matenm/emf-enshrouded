@@ -1,5 +1,7 @@
 #include "manifest.h"
 
+#include <windows.h>  // GetKeyNameTextW: a scan code's key on this PC's layout
+
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -856,9 +858,33 @@ std::string setting_shown_value(const SettingDef& d, const std::string& v) {
                 if (o.value == v) return o.label;
             return v;
         case SettingType::Key: return v.empty() ? "no key" : v;
-        case SettingType::ScanCode: return v == "0x29" ? "the key under Esc (0x29)" : "scan code " + v;
+        case SettingType::ScanCode: return scan_code_shown(v);
         default: return v;
     }
+}
+
+namespace {
+
+// This PC's keyboard layout's name for a scan code ("\" for 0x2b on a US keyboard), "" when it has none: the scan code
+// goes in GetKeyNameTextW's lParam as a key message carries it (bits 16-23; 1-0x7f are never extended keys).
+std::string layout_key_name(unsigned sc) {
+    wchar_t w[64] = {};
+    const int n = GetKeyNameTextW(static_cast<LONG>(sc << 16), w, 64);
+    if (n <= 0) return "";
+    char b[256] = {};
+    const int len = WideCharToMultiByte(CP_UTF8, 0, w, n, b, static_cast<int>(sizeof b) - 1, nullptr, nullptr);
+    return len > 0 ? std::string(b, static_cast<size_t>(len)) : std::string();
+}
+
+}  // namespace
+
+std::string scan_code_shown(const std::string& v, const std::function<std::string(unsigned)>& name_of) {
+    if (v == "0x29") return "the key under Esc (0x29)";  // the default: named by where it is, whatever the layout
+    char* end = nullptr;
+    const unsigned long sc = v.empty() ? 0 : std::strtoul(v.c_str(), &end, 0);
+    if (sc < 1 || sc > 0x7F || !end || *end != '\0') return "scan code " + v;
+    const std::string name = name_of ? name_of(static_cast<unsigned>(sc)) : layout_key_name(static_cast<unsigned>(sc));
+    return name.empty() ? "scan code " + v : "the " + name + " key (" + v + ")";
 }
 
 std::string setting_condition_text(const SettingDef& def, const std::vector<SettingDef>& defs) {
