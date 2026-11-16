@@ -138,6 +138,8 @@ if not loader.features.patch then
 end
 
 local function log(...) print("%(id)s:", ...) end
+-- a part that could not be added: EML's warn, so the build's reply lists it and EMF tells the player
+local function problem(...) (warn or print)("%(id)s:", ...) end
 
 local function fill(list, items)
 	while #list > 0 do table.remove(list) end
@@ -671,7 +673,7 @@ for _, c in ipairs(require("creatures")) do
 			c.template_guid))
 	end
 	end)
-	if not ok then log(c.name .. ": not added: " .. tostring(err)) end
+	if not ok then problem(c.name .. ": not added: " .. tostring(err)) end
 end
 '''
 
@@ -841,7 +843,7 @@ CONTENT_LUA = r'''
 -- creatures and the other scripts stay
 for _, name in ipairs(%(modules)s) do
 	local ok, err = pcall(require, name)
-	if not ok then log(name .. ": not added: " .. tostring(err)) end
+	if not ok then problem(name .. ": not added: " .. tostring(err)) end
 end
 '''
 
@@ -853,7 +855,7 @@ for _, p in ipairs(require("props")) do
 		local m, data = make_model(p)
 		if m then log(string.format("added prop %s: model %s (%d meshes)", p.name, p.model_guid, #data.meshes)) end
 	end)
-	if not ok then log(p.name .. ": not added: " .. tostring(err)) end
+	if not ok then problem(p.name .. ": not added: " .. tostring(err)) end
 end
 '''
 

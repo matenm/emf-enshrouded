@@ -191,6 +191,9 @@ class MakeModTests(unittest.TestCase):
             out = subprocess.run(["lua", mock, d], capture_output=True, text=True, timeout=60)
             self.assertEqual(out.returncode, 0, out.stderr)
             self.assertIn("content_bad: not added:", out.stdout)
+            # said with EML's warn, so the build's reply lists it and the player is told
+            self.assertTrue(any(l.startswith("warning:") and "content_bad: not added:" in l
+                                for l in out.stdout.splitlines()), out.stdout)
             self.assertIn("no such item", out.stdout)
             self.assertIn("good content ran", out.stdout)
             self.assertLess(out.stdout.index("added beast_bear"), out.stdout.index("good content ran"))
@@ -373,6 +376,8 @@ class MakeModTests(unittest.TestCase):
             out = self.plain_mod(d, {"MOCK_MISSING": "src-model"})
             self.assertEqual(out.returncode, 0, out.stderr)
             self.assertIn("beast_bear: not added: ", out.stdout)
+            self.assertTrue(any(l.startswith("warning:") and "beast_bear: not added: " in l
+                                for l in out.stdout.splitlines()), out.stdout)
             self.assertIn("the source model was not found", out.stdout)
             self.assertNotIn("template Beast_Bear", out.stdout)
 

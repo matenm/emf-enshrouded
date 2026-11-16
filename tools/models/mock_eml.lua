@@ -2,6 +2,8 @@
 -- usage: lua mock_eml.lua <mod src folder>
 local src = arg[1]
 package.path = src .. "/?.lua;" .. package.path
+-- EML's warn goes to its log as a warning (and into the build's reply); here: a line that says so
+warn = function(...) print("warning:", ...) end
 
 local function deepcopy(v)
 	if type(v) ~= "table" then return v end
