@@ -1100,3 +1100,39 @@ TEST_CASE("raids: mod.json: Raiders break walls (off), Hole size (small), Broken
     }
     CHECK(emf::core::version_text(r.manifest->version) == "1.2.0");
 }
+
+TEST_CASE("walls (review I1): after a give-up the raider does not look again until it makes 3 m of progress") {
+    WallWork w;
+    const auto s = walls_on();
+    const Vec3 pos{kAltar.x + 20, kAltar.y, kAltar.z};
+    w.wants_look(1, pos, kAltar, 30, 0);
+    w.assign(1, pos, Vec3{pos.x - 1, pos.y + 1.2, pos.z}, std::nullopt, s, 0);
+    std::map<uint32_t, Vec3> raiders{{1, pos}};
+    w.tick(raiders, s, 0);
+    REQUIRE(of_kind(w.tick(raiders, s, 120 * kSec), WallAction::GiveUp).size() == 1);
+    CHECK_FALSE(w.wants_look(1, pos, kAltar, 30, 121 * kSec));
+    CHECK_FALSE(w.wants_look(1, pos, kAltar, 30, 200 * kSec));  // no progress: never again (today's 60 s rule removes it)
+    const Vec3 closer{pos.x - 4, pos.y, pos.z};
+    CHECK_FALSE(w.wants_look(1, closer, kAltar, 30, 201 * kSec));  // 4 m closer: it may look again later
+    CHECK_FALSE(w.wants_look(1, closer, kAltar, 30, 205 * kSec));
+    CHECK(w.wants_look(1, closer, kAltar, 30, 212 * kSec));       // held up again for 10 s at a new place
+}
+
+TEST_CASE("walls (review I3): the hole goes deeper: advance moves the spot's point and hole, at most 3 m from where it began") {
+    WallWork w;
+    const auto s = walls_on();
+    const Vec3 pos{kAltar.x + 20, kAltar.y, kAltar.z};
+    const Vec3 wall{pos.x - 1, pos.y + 1.2, pos.z};
+    const auto spot = w.assign(1, pos, wall, std::nullopt, s, 0);
+    REQUIRE(spot);
+    CHECK(w.advance(*spot, Vec3{wall.x - 1.0, wall.y, wall.z}, pos.y, s));
+    auto sp = w.spots();
+    REQUIRE(sp.size() == 1);
+    CHECK(sp[0].point.x == doctest::Approx(wall.x - 1.0));
+    CHECK(sp[0].hole.centre.x == doctest::Approx(wall.x - 1.0));
+    CHECK(sp[0].hole.centre.y == doctest::Approx(pos.y + 0.75));
+    CHECK(w.advance(*spot, Vec3{wall.x - 3.0, wall.y, wall.z}, pos.y, s));
+    CHECK_FALSE(w.advance(*spot, Vec3{wall.x - 3.5, wall.y, wall.z}, pos.y, s));  // past 3 m: a tunnel, not a hole
+    CHECK(w.spots()[0].point.x == doctest::Approx(wall.x - 3.0));
+    CHECK_FALSE(w.advance(99, wall, pos.y, s));
+}

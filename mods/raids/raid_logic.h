@@ -310,6 +310,7 @@ public:
     static constexpr size_t kMaxSpots = 4;
     static constexpr double kGateRange = 6.0;       // a gate is looked for this near the raider
     static constexpr uint64_t kHoldMs = 3000;       // the 60 s clock waits while the spot took damage this recently
+    static constexpr double kMaxAdvance = 3.0;      // a hole goes at most this far into a wall from where it began
 
     struct SpotInfo {
         uint32_t id = 0;
@@ -322,7 +323,8 @@ public:
     };
 
     // Once per look: true when the raider made no 3 m of progress toward the altar for 10 s, is within the base radius
-    // + 20 m of it, works no spot and did not look in the last 10 s.
+    // + 20 m of it, works no spot and did not look in the last 10 s. After a spot it worked was given up, never until it
+    // got 3 m further (so the 60 s removal decides, as without walls).
     bool wants_look(uint32_t id, const Vec3& pos, const Vec3& altar, double base_radius, uint64_t now) {
         if (working(id)) return false;
         const double d = horizontal_distance(pos, altar);
@@ -336,6 +338,14 @@ public:
             return false;
         }
         Track& t = it->second;
+        if (t.gave_up) {  // its spot was given up: today's 60 s rule decides, unless it gets 3 m further
+            if (t.gave_up_at < 0) t.gave_up_at = d;
+            if (d >= t.gave_up_at - kProgress) return false;
+            t.gave_up = false;
+            t.best = d;
+            t.best_ms = now;
+            return false;
+        }
         if (d < t.best - kProgress) {
             t.best = d;
             t.best_ms = now;
@@ -381,7 +391,7 @@ public:
                 if (spots_.size() >= kMaxSpots) return std::nullopt;
                 Spot n;
                 n.id = next_id_++;
-                n.point = *wall;
+                n.point = n.origin = *wall;
                 n.hole = hole_at(*wall, pos.y, s.hole_radius);
                 n.started = now;
                 spots_.push_back(n);
@@ -403,7 +413,14 @@ public:
                 w = raiders.count(w->first) ? std::next(w) : sp.workers.erase(w);
             const bool expired = now - sp.started >= kGiveUpMs;
             if (!s.on || expired || sp.workers.empty()) {
-                for (const auto& w : sp.workers) out.push_back(action(WallAction::Release, sp, w.first));
+                for (const auto& w : sp.workers) {
+                    out.push_back(action(WallAction::Release, sp, w.first));
+                    if (expired) {
+                        Track& t = track_[w.first];
+                        t.gave_up = true;
+                        t.gave_up_at = -1;
+                    }
+                }
                 out.push_back(action(WallAction::GiveUp, sp, 0));
                 spots_.erase(spots_.begin() + static_cast<std::ptrdiff_t>(i));
                 continue;
@@ -427,6 +444,16 @@ public:
             ++i;
         }
         return out;
+    }
+
+    // The wall is thicker than the hole: the next wall point on the worker's line becomes the spot's point (the hole
+    // goes deeper), while it stays within kMaxAdvance across of where the spot began. False: no such spot, or too far.
+    bool advance(uint32_t spot, const Vec3& point, double feet_y, const WallSettings& s) {
+        Spot* sp = find(spot);
+        if (!sp || sp->gate || horizontal_distance(point, sp->origin) > kMaxAdvance) return false;
+        sp->point = point;
+        sp->hole = hole_at(point, feet_y, s.hole_radius);
+        return true;
     }
 
     // A hit's answer: the spot took damage when anything was damaged or removed.
@@ -491,12 +518,15 @@ private:
     struct Track {
         double best = 0;
         uint64_t best_ms = 0, last_look = 0;
+        bool gave_up = false;     // its spot was given up after 2 minutes
+        double gave_up_at = -1;   // its distance to the altar then (-1: not seen yet)
     };
     struct Spot {
         uint32_t id = 0;
         bool gate = false;
         uint32_t door = 0;
         Vec3 point;
+        Vec3 origin;  // where the spot began (advance stays near it)
         Hole hole;
         int32_t gate_damage = 0;
         uint64_t started = 0;

@@ -203,3 +203,17 @@ TEST_CASE("block rules: drops keep the remainder per material") {
     removed[0] = 100;  // terrain counts never drop
     CHECK(break_drops(removed, facts.f, carry).empty());
 }
+
+TEST_CASE("block rules (review I2): a hit worth less than 1/255 of a block's health damages nothing, so its entry is 0") {
+    MaterialFacts f[128] = {};
+    f[9] = {true, 4, 5000, 1, {}};  // metal of 5000 health
+    f[7] = {true, 4, 2550, 1, {}};  // exactly 255 hits at 10
+    BreakSpec s;
+    for (int i = 0; i < 5; ++i) s.damage[i] = 10;
+    float t[256];
+    build_break_table(f, s, 1.0f, t);
+    CHECK(t[128 + 9] == 0.0f);                       // 500 hits a byte would need: floor(255 / 500) = 0
+    CHECK(t[128 + 7] == doctest::Approx(255.0));     // one byte a hit still counts
+    build_break_table(f, s, 0.75f, t);               // the Survival mining factor
+    CHECK(t[128 + 7] == 0.0f);
+}

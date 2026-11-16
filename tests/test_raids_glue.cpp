@@ -261,3 +261,20 @@ TEST_CASE("raids glue: a raider with a player within 4 m is fighting, not held u
     CHECK(raids::player_near({30, 9, 33}, players, 4.0));        // across only: 3 m
     CHECK_FALSE(raids::player_near({0, 0, 0}, {}, 4.0));
 }
+
+namespace {
+uint32_t g_door_state = EMF_DOOR_CLOSED;
+uint32_t f_door_state(EmfWorld*, uint32_t) { return g_door_state; }
+}  // namespace
+
+TEST_CASE("raids glue (review): a gate is gone when its entity is, or when the id is no door any more") {
+    Rig rig;
+    rig.api.door_state = f_door_state;
+    emf::World w(kW);
+    CHECK(raids::gate_gone(w, 40));  // no entity
+    plant<gen::CurrentTransform>(40);
+    g_door_state = EMF_DOOR_CLOSED;
+    CHECK_FALSE(raids::gate_gone(w, 40));
+    g_door_state = EMF_DOOR_NONE;  // the id belongs to something else now
+    CHECK(raids::gate_gone(w, 40));
+}

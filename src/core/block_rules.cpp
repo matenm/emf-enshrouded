@@ -43,7 +43,9 @@ void build_break_table(const MaterialFacts facts[128], const BreakSpec& s, float
         }
         if (f.health <= 0) continue;
         const float dmg = static_cast<float>(s.damage[f.hardness]) * mining_factor;
-        if (dmg > 0.0f) table[128 + id] = static_cast<float>(f.health) / dmg;
+        const float hits = dmg > 0.0f ? static_cast<float>(f.health) / dmg : 0.0f;
+        // the kernel adds floor(255 / hits) bytes a hit: past 255 hits a hit damages nothing (and would still count)
+        if (hits > 0.0f && hits <= 255.0f) table[128 + id] = hits;
     }
 }
 

@@ -150,6 +150,12 @@ inline int32_t door_health(emf::World w, uint32_t door) {
     if (auto* h = w.get<emf::gen::ecs::Health>(door)) return h->dataStorage[0];
     return door_max_health(w, door);
 }
+// The gate is gone: its entity is, or the id is no door any more (a new entity took a broken gate's id).
+inline bool gate_gone(emf::World w, uint32_t door) {
+    if (!w.get<emf::gen::ecs::CurrentTransform>(door)) return true;
+    const EmfApi* a = emf::api();
+    return emf::has_v38() && a->door_state && a->door_state(w.raw(), door) == EMF_DOOR_NONE;
+}
 // The last hit: the gate is taken away (remove_building) once its health is at or below one hit's damage.
 inline bool gate_finish_due(int32_t health, int32_t per_hit) { return health > 0 && health <= per_hit; }
 // Takes the gate away like a pick-up; its item drops at its spot when `drops` (the "Broken blocks drop items" setting).

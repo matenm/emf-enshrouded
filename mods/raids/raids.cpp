@@ -267,18 +267,32 @@ void on_wall_hit(EmfWorld* raw, uint32_t, const EmfBreakResult* res, void* user)
     const raids::Vec3 altar = g_director.base().pos;
     for (const auto& sp : g_walls.spots()) {
         if (sp.id != ctx->spot) continue;
+        std::optional<raids::Vec3> deeper;  // the wall is thicker than the hole: the next wall point on a worker's line
+        double feet_y = 0;
         for (uint32_t r : sp.workers) {
             const auto p = pos_of(w, r);
             if (!p) continue;
             const auto line = raids::chest_line(*p, altar, raids::WallWork::kReach);
             const float f[3] = {float(line.first.x), float(line.first.y), float(line.first.z)};
             const float t[3] = {float(line.second.x), float(line.second.y), float(line.second.z)};
-            if (emf::find_wall(w, f, t)) continue;
+            if (const auto b = emf::find_wall(w, f, t)) {
+                if (!deeper) {
+                    deeper = raids::Vec3{b->x, b->y, b->z};
+                    feet_y = p->y;
+                }
+                continue;
+            }
             EMF_LOG(kMod, "raider %u: the wall at (%.1f, %.1f, %.1f) is open; on to the altar", r, sp.point.x, sp.point.y,
                     sp.point.z);
             wall_actions(w, g_walls.wall_clear(sp.id), config());
             return;
         }
+        if (deeper && raids::horizontal_distance(*deeper, sp.point) >= 0.5) {
+            if (g_walls.advance(sp.id, *deeper, feet_y, config().walls))
+                EMF_LOG(kMod, "the hole at (%.1f, %.1f, %.1f) goes deeper, to (%.1f, %.1f, %.1f)", sp.point.x, sp.point.y,
+                        sp.point.z, deeper->x, deeper->y, deeper->z);
+        }
+        return;
     }
 }
 
@@ -438,7 +452,7 @@ void walls_tick(emf::World w, uint64_t now, const std::vector<raids::Player>& pl
     if (!active) return;
     for (const auto& sp : g_walls.spots()) {
         if (!sp.gate) continue;
-        if (!w.get<gen::CurrentTransform>(sp.door)) {  // broken by the game, or taken away
+        if (raids::gate_gone(w, sp.door)) {  // broken by the game, taken away, or its id is someone else's now
             EMF_LOG(kMod, "gate %u is gone; on to the altar", sp.door);
             wall_actions(w, g_walls.wall_clear(sp.id), c);
             continue;

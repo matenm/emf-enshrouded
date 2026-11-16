@@ -34,7 +34,7 @@ struct BreakSpec {
 };
 
 // The kernel's table: hits to break per voxel material (0 = untouched). Damage mode: health / (damage[hardness] x
-// mining_factor); break mode: 1 for each material that can break.
+// mining_factor), left 0 past 255 hits (a hit would add no damage byte); break mode: 1 for each material that can break.
 void build_break_table(const MaterialFacts facts[128], const BreakSpec& s, float mining_factor, float table[256]);
 
 struct Sphere {
