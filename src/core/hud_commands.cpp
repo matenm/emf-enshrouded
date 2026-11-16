@@ -160,7 +160,9 @@ std::vector<std::string> list_lines(HudEditor& editor) {
     std::vector<std::string> out;
     out.push_back(v.gate.state == GateState::On ? "hud: on, layout \"" + v.layout_name + "\""
                                                 : "hud: off: " + v.gate.message);
-    if (v.scale_works)
+    if (v.scale_works && v.gate.state != GateState::On)
+        out.push_back("hud: scale works once the editor is on");
+    else if (v.scale_works)
         out.push_back("hud: scale on (pushes " + std::to_string(v.scale.pushes) + ", pops " + std::to_string(v.scale.pops) +
                       ", mismatches " + std::to_string(v.scale.mismatches) + ")");
     else

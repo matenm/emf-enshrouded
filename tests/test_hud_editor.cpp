@@ -144,6 +144,25 @@ TEST_CASE("editor: a hook that fails is not tried again") {
     CHECK_FALSE(e.snapshots().current()->active);
 }
 
+// The view read a failed install as "not hooked yet" and called every part working, with no note.
+TEST_CASE("editor: after a hook install that failed every part says it is off, and why") {
+    HudRig r;
+    r.install_ok = false;
+    r.install_why = "x";
+    HudEditor& e = r.make();
+    const HudView v = e.view();
+    REQUIRE(v.gate.state == GateState::HookFailed);
+    CHECK_FALSE(v.scale_works);
+    CHECK_FALSE(v.bars_work);
+    CHECK_FALSE(v.colours_work);
+    CHECK_FALSE(v.panel_works);
+    CHECK_FALSE(v.grow_works);
+    for (const std::string* note : {&v.scale_note, &v.bars_note, &v.colours_note, &v.panel_note, &v.grow_note}) {
+        CAPTURE(*note);
+        CHECK(note->find("could not be installed") != std::string::npos);
+    }
+}
+
 TEST_CASE("editor: edits clamp, publish at once and save now") {
     HudRig r;
     HudEditor& e = r.make();

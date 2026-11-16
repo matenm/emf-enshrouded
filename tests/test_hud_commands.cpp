@@ -124,6 +124,17 @@ TEST_CASE("hud.layout: list, save with spaces in the name, load, delete") {
     CHECK(run(e, {"hud.layout", "rename", "x"}) == Lines{"usage: hud.layout [save|load|delete <name>]"});
 }
 
+// While the editor is off nothing is pushed: "scale on (pushes 0 ...)" read as if it ran.
+TEST_CASE("hud.list: while the editor is off, scale is said to work once it is on") {
+    HudRig r;
+    r.set("enabled", "0");
+    HudEditor& e = r.make();
+    const Lines l = run(e, {"hud.list"});
+    REQUIRE(l.size() > 1);
+    CHECK(l[0].rfind("hud: off: ", 0) == 0);
+    CHECK(l[1] == "hud: scale works once the editor is on");
+}
+
 TEST_CASE("hud.list: the state, every part, the layouts") {
     HudRig r;
     HudEditor& e = r.make();

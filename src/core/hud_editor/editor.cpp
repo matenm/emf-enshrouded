@@ -290,7 +290,7 @@ HudView HudEditor::view() const {
     // Until the hooks go in (the editor's first turn on: it is off, or another HUD mod keeps it off) the states the hooks
     // set say nothing yet: what the build's signatures allow decides (those parts work once the editor is on, and the
     // gate's message says why it is off). Once they are in, a part the build has that does not work had its hook fail.
-    const bool waiting = !hooked_;
+    const bool waiting = !hooked_ && hook_error_.empty();
     const bool scale_here = waiting ? deps_.build_scale : v.scale.available;
     v.scale_works = scale_here && !v.scale.off;
     if (!scale_here)
@@ -338,6 +338,11 @@ HudView HudEditor::view() const {
         v.grow_note = "Status effects growing upward is not available on this game build.";
     else if (v.scale.off)
         v.grow_note = "Status effects growing upward stopped with scale for this session (see emf_core.log).";
+    if (!hook_error_.empty()) {  // the install failed: nothing of the editor runs this session
+        const std::string off = "Off: the HUD editor's hooks could not be installed (see emf_core.log).";
+        v.scale_works = v.bars_work = v.colours_work = v.panel_works = v.grow_works = false;
+        v.scale_note = v.bars_note = v.colours_note = v.panel_note = v.grow_note = off;
+    }
     return v;
 }
 
