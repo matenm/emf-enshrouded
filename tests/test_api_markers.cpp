@@ -305,3 +305,28 @@ TEST_CASE("the markers commands run on any game, also one the player joined (no 
     for (const auto& l : replies) status |= l.find("markers: ") != std::string::npos;
     CHECK(status);
 }
+
+TEST_CASE("markers: the console says when the game's HUD scope and its map screen were last seen") {
+    Fixture f;
+    const auto said = [](const std::string& part) {
+        for (const auto& l : markers_status())
+            if (l.find(part) != std::string::npos) return true;
+        return false;
+    };
+    CHECK(said("the game's HUD scope (doCachedEntityHealthWidgets): never seen"));
+    CHECK(said("the game's map screen (mapScaled): never seen"));
+    CHECK(said("canvases and world markers draw while the HUD scope was seen in the last 0.25 s and the map screen was "
+               "not"));
+    g_now = 100000;
+    alignas(16) uint8_t node[0x170] = {};
+    markers_ui_frame(kMarkerWorldUiHash, node, g_now - 120);
+    CHECK(said("the game's HUD scope (doCachedEntityHealthWidgets): seen 0.12 s ago"));
+    markers_ui_frame(kMarkerMapScaledHash, node, g_now - 40000);
+    g_now += 5000;
+    CHECK(said("the game's HUD scope (doCachedEntityHealthWidgets): seen 5.12 s ago"));
+    CHECK(said("the game's map screen (mapScaled): seen 45 s ago"));
+    g_now += 600000;
+    CHECK(said("the game's HUD scope (doCachedEntityHealthWidgets): seen 10 min ago"));
+    markers_ui_frame(kMarkerMapScaledHash, node, g_now + 3);  // the UI thread's clock a moment ahead
+    CHECK(said("the game's map screen (mapScaled): seen 0.00 s ago"));
+}

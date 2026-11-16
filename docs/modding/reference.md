@@ -946,8 +946,9 @@ m.flags = EMF_MARKER_WORLD | EMF_MARKER_GAME_MAP | EMF_MARKER_EDGE_ARROW | EMF_M
 api()->marker_send(0, &m, 1);  // on the server: every player with EMF sees it
 ```
 
-Console: `markers` (what is there, whether drawing and the game's map list are on), `markers.test [text] [game icon]`
-(a marker 10 m ahead of you; `markers.test clear` removes it).
+Console: `markers` (what is there, whether drawing and the game's map list are on, and when the game last showed its
+HUD and its map screen: canvases and world markers draw only while the HUD shows and the map does not),
+`markers.test [text] [game icon]` (a marker 10 m ahead of you; `markers.test clear` removes it).
 
 ## v34: the map screen's mouse, map actions, the ground
 

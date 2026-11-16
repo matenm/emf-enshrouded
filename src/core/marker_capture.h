@@ -63,6 +63,11 @@ struct MarkerSight {
     bool world_ui = false;  // the game showed its world-space UI within kMarkerFreshMs
     bool map_open = false;  // the map screen (mapScaled) within kMarkerFreshMs
 };
+// When the UI thread last saw those scopes (its clock; 0: never), for the console's `markers`.
+struct MarkerSeen {
+    uint64_t world_ui_ms = 0;  // doCachedEntityHealthWidgets
+    uint64_t map_ms = 0;       // mapScaled
+};
 
 struct MapView {
     float rect[4] = {};  // mapScaled: the whole map (x, y, w, h), UI units, last frame's layout
@@ -93,6 +98,7 @@ bool marker_ui_size(float* w, float* h);
 bool marker_camera(CameraSnap* out);
 bool marker_player_pos(double out[3]);
 MarkerSight marker_sight(uint64_t now_ms);
+MarkerSeen marker_seen();
 bool marker_map_view(MapView* out);
 uint32_t marker_capture_faults();  // reads that faulted (a bad UiPlayData pointer)
 void marker_capture_reset_for_tests();

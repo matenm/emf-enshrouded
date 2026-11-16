@@ -52,6 +52,17 @@ const char* why_of(MarkerStore::SetResult r) {
     }
 }
 
+// "never seen", "seen 0.12 s ago", "seen 45 s ago", "seen 10 min ago" (a time a moment ahead of now: 0).
+std::string seen_ago(uint64_t at, uint64_t now) {
+    if (!at) return "never seen";
+    const uint64_t d = now > at ? now - at : 0;
+    char b[48];
+    if (d < 10000) std::snprintf(b, sizeof b, "seen %.2f s ago", static_cast<double>(d) / 1000.0);
+    else if (d < 120000) std::snprintf(b, sizeof b, "seen %llu s ago", static_cast<unsigned long long>(d / 1000));
+    else std::snprintf(b, sizeof b, "seen %llu min ago", static_cast<unsigned long long>(d / 60000));
+    return b;
+}
+
 bool pos_in(EmfWorld* w, uint32_t entity, double out[3]) {
     CoreState* s = core_state();
     if (!s || !s->get_component || !w || !entity) return false;
@@ -261,6 +272,17 @@ std::vector<std::string> markers_status() {
                   "; camera " + (cam ? (now - c.frame_ms <= kMarkerFreshMs ? "fresh" : "not fresh (a menu, a pause or "
                                                                                     "a loading screen)")
                                      : "not seen yet"));
+    // where canvases and world markers draw (the overlay and the minimap check marker_sight): a player's report of
+    // panels that never show, or flash, says which of the two scopes the game did not open
+    const MarkerSeen seen = marker_seen();
+    out.push_back("  the game's HUD scope (doCachedEntityHealthWidgets): " + seen_ago(seen.world_ui_ms, now));
+    out.push_back("  the game's map screen (mapScaled): " + seen_ago(seen.map_ms, now));
+    char rule[160];
+    std::snprintf(rule, sizeof rule,
+                  "  canvases and world markers draw while the HUD scope was seen in the last %.2f s and the map screen "
+                  "was not (and the console is closed)",
+                  static_cast<double>(kMarkerFreshMs) / 1000.0);
+    out.push_back(rule);
     out.push_back(std::string("  the game's map list: ") +
                   (s->markers.list_why.empty() ? "on (EMF's entries for markers with a game icon)"
                                                : "off (" + s->markers.list_why + ")"));
@@ -343,7 +365,9 @@ void cmd_markers_test(EmfWorld*, int argc, const char* const* argv, void*) {
 
 bool add_marker_commands(CommandCenter& commands) {
     // anywhere: on a game the player joined too (markers are drawn on every game)
-    bool ok = commands.add("markers", ": the markers this game draws, and whether drawing and the game's map list are on",
+    bool ok = commands.add("markers",
+                           ": the markers this game draws, whether drawing and the game's map list are on, and when the "
+                           "game last showed its HUD and map screen",
                            cmd_markers, nullptr, nullptr, true);
     ok &= commands.add("markers.test", " [text] [game icon type, hex] | clear: a marker 10 m ahead of you", cmd_markers_test,
                        nullptr, nullptr, true);

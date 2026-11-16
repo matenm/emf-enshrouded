@@ -157,6 +157,13 @@ MarkerSight marker_sight(uint64_t now_ms) {
     return s;
 }
 
+MarkerSeen marker_seen() {
+    MarkerSeen s;
+    s.world_ui_ms = g_world_ui_ms.load(std::memory_order_relaxed);
+    s.map_ms = g_map_ms.load(std::memory_order_relaxed);
+    return s;
+}
+
 bool marker_map_view(MapView* out) {
     MapRects r;
     UiSize u;
