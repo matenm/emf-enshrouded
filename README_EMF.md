@@ -360,10 +360,15 @@ EMF's keys by default:
 | F6 | Companion: calls it, then opens its order wheel |
 | F7 | Hand-over: the host's wheel |
 | F8 | Bulk Craft: the wheel at a crafting station |
+| F9 | the HUD editor's page (press it again to close the console) |
+| F10 | Minimap: shows or hides it |
+| Numpad + / Numpad - | Minimap: zoom in / out |
 | F11 | Flame Blessings: the blessings wheel (the host's own; not F4, since Alt+F4 closes the game) |
+| Pause | the HUD editor: puts the whole HUD back (the layout before is kept as "Before reset") |
 | L | Quick Stack: tap to put things into nearby chests, hold at a chest for its wheel (the game also uses L: voice-over playback) |
 | K | Villager Jobs: a job for the villager you look at |
 | E | Bounty Board (from 1.2): reads the board you look at (E is also the game's interact key; the board itself has no game action) |
+| E | Beastmaster: the Beasts window at a stable that shows no E prompt of its own, looking at it within 4 m (at one with the game's E Open prompt, that prompt opens it) |
 
 The game's own default keys take every letter except K, so EMF's wheels sit on the free F-keys; the game also gets a
 mod's key press. Every mod's key can
