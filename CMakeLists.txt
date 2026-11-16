@@ -598,6 +598,7 @@ add_executable(emf_tests
   tests/test_raids_glue.cpp
   tests/test_loot_magnet.cpp
   tests/test_loot_magnet_glue.cpp
+  tests/test_loot_sweep.cpp
   tests/test_sleep.cpp
   tests/test_teleports.cpp
   tests/test_teleports_glue.cpp
