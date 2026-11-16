@@ -84,6 +84,7 @@ struct Script {
     std::set<uint32_t> hit_rules;                      // its emf.hit_rule ids (lua 1.23): removed on unload and pause
     std::set<uint32_t> enemy_orders;                   // its emf.enemy_order ids (lua 1.32): cancelled on unload and pause
     std::set<uint32_t> enemy_moves;                    // its emf.enemy_move ids (lua 1.33): cancelled on unload and pause
+    std::set<uint32_t> villager_moves;                 // its emf.villager_move ids (lua 1.39, a hold too): the same
     std::set<std::string> markers;                     // its emf.marker ids ("<id>:<name>", lua 1.25): removed with it
     std::set<std::pair<uint32_t, std::string>> sent_markers;  // emf.send_marker: (player or 0, id), unsent with it
     std::map<std::string, int> map_actions;            // emf.map_action (lua 1.26): "<id>:<name>" -> function; removed with it
@@ -307,6 +308,9 @@ int l_enemy_move(lua_State* L);  // move_bindings.cpp (lua 1.33)
 int l_enemy_move_cancel(lua_State* L);
 int l_enemy_moving(lua_State* L);
 void drop_enemy_moves(Host::Impl& h, Script& s);
+int l_villager_move(lua_State* L);  // move_bindings.cpp (lua 1.39)
+int l_villager_move_cancel(lua_State* L);
+int l_villager_moving(lua_State* L);
 int l_fog_at(lua_State* L);
 int l_map_markers(lua_State* L);
 int l_canvas(lua_State* L);

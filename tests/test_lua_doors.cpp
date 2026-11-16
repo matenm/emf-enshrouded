@@ -232,3 +232,76 @@ TEST_CASE("lua 1.34: emf.enemy_move takes stuck = seconds and peaceful = \"all\"
     CHECK_FALSE(logged("b1 ok"));
     CHECK_FALSE(logged("b2 ok"));
 }
+
+TEST_CASE("lua 1.39: emf.villager_move walks a villager through points (arrive, seconds, stuck, hold seconds or true); villager_moving, villager_move_cancel") {
+    Rig r(L"lua_vmoves");
+    r.fake.vmoving[80] = 1;
+    add_script(r.dir, "vm",
+               "emf.command('go', '', function(w)\n"
+               "  emf.log('id ' .. tostring(emf.villager_move(w, 80, {10, 20, 30}, {arrive = 3, seconds = 40, stuck = 10, hold = 30},\n"
+               "    function(world, id, status) emf.log('vdone ' .. id .. ' ' .. status) end)))\n"
+               "  emf.log('id2 ' .. tostring(emf.villager_move(w, 81, {{1, 2, 3}, {4, 5, 6}}, {hold = true})))\n"
+               "  local id, why = emf.villager_move(w, 13, {1, 2, 3})\n"
+               "  emf.log('no ' .. tostring(id) .. ' ' .. tostring(why))\n"
+               "  emf.log('bad ' .. tostring(pcall(emf.villager_move, w, 80, {1, 2, 3}, {peaceful = true})))\n"
+               "  emf.log('bad2 ' .. tostring(pcall(emf.villager_move, w, 80, {1, 2, 3}, {hold = 'long'})))\n"
+               "  emf.log('moving ' .. tostring(emf.villager_moving(w, 80)) .. ' ' .. tostring(emf.villager_moving(w, 82)))\n"
+               "  emf.log('cancel ' .. tostring(emf.villager_move_cancel(2)) .. ' ' .. tostring(emf.villager_move_cancel(9)))\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("vm.go");
+    CHECK(logged("id 1"));
+    CHECK(logged("id2 2"));
+    CHECK(logged("no nil a point is outside the villager's walk area"));
+    CHECK(logged("bad false"));
+    CHECK(logged("bad2 false"));
+    CHECK(logged("moving 1 nil"));
+    CHECK(logged("cancel true false"));
+    REQUIRE(r.fake.vmoves.size() == 2u);
+    const auto& a = r.fake.vmoves[0];
+    CHECK(a.o.size == sizeof(EmfMoveOrder));
+    CHECK(a.o.enemy == 80u);
+    CHECK(a.o.arrive == 3.0f);
+    CHECK(a.o.seconds == 40.0f);
+    CHECK(a.o.stuck_seconds == 10.0f);
+    CHECK(a.o.hold_seconds == 30.0f);
+    CHECK(a.o.flags == 0u);
+    const auto& b = r.fake.vmoves[1];
+    REQUIRE(b.points.size() == 2u);
+    CHECK(b.o.flags == EMF_MOVE_HOLD);
+    a.cb(kServer, 1, EMF_MOVE_ARRIVED, a.user);
+    CHECK(logged("vdone 1 arrived"));
+}
+
+TEST_CASE("lua 1.39: a pause cancels the script's villager moves, also one that arrived and holds; on a core older than v46 villager_move is nil and why") {
+    Rig r(L"lua_vmoves_drop");
+    add_script(r.dir, "vd",
+               "emf.command('go', '', function(w)\n"
+               "  emf.villager_move(w, 80, {1, 2, 3}, {hold = true}, function() emf.log('arrived') end)\n"
+               "end)\n"
+               "emf.command('boom', '', function() error('boom') end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("vd.go");
+    REQUIRE(r.fake.vmoves.size() == 1u);
+    r.fake.vmoves[0].cb(kServer, 1, EMF_MOVE_ARRIVED, r.fake.vmoves[0].user);  // it arrived and holds
+    CHECK(logged("arrived"));
+    r.run_command("vd.boom");
+    REQUIRE(host.status("vd").rfind("paused", 0) == 0);
+    REQUIRE(r.fake.vmove_cancels.size() == 1u);  // the hold ends with the script
+    CHECK(r.fake.vmove_cancels[0] == 1u);
+    // an older core
+    Rig o(L"lua_vmoves_old");
+    add_script(o.dir, "vo",
+               "emf.command('go', '', function(w)\n"
+               "  local id, why = emf.villager_move(w, 80, {1, 2, 3})\n"
+               "  emf.log('old ' .. tostring(id) .. ' ' .. tostring(why))\n"
+               "end)\n");
+    o.api.size = static_cast<uint32_t>(offsetof(EmfApi, villager_move));
+    o.api.version = 45;
+    Host h2(&o.api, o.dir);
+    h2.load_all();
+    o.run_command("vo.go");
+    CHECK(logged("old nil this EMF has no villager moves (EMF API v46)"));
+}

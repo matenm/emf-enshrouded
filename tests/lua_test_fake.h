@@ -90,6 +90,9 @@ struct Fake {
     std::vector<Move> moves;
     std::vector<uint32_t> move_cancels;
     std::map<uint32_t, uint32_t> moving;
+    std::vector<Move> vmoves;  // v46 villager moves
+    std::vector<uint32_t> vmove_cancels;
+    std::map<uint32_t, uint32_t> vmoving;
     bool remove_ok = true;
     uint32_t remove_refunded = 0;
     uint32_t tick = 0;  // what world_tick answers (60 per second of game time)
@@ -434,6 +437,22 @@ uint32_t f_enemy_move(EmfWorld*, EmfMoveOrder* o, EmfMoveCallback cb, void* user
 bool f_enemy_move_cancel(uint32_t id) {
     g->move_cancels.push_back(id);
     return id >= 1 && id <= g->moves.size();
+}
+uint32_t f_villager_move(EmfWorld*, EmfMoveOrder* o, EmfMoveCallback cb, void* user) {
+    if (o->enemy == 13) {
+        std::snprintf(o->why, sizeof o->why, "a point is outside the villager's walk area");
+        return 0;
+    }
+    g->vmoves.push_back({*o, {o->points, o->points + o->count}, cb, user});
+    return static_cast<uint32_t>(g->vmoves.size());
+}
+bool f_villager_move_cancel(uint32_t id) {
+    g->vmove_cancels.push_back(id);
+    return id >= 1 && id <= g->vmoves.size();
+}
+uint32_t f_villager_moving(EmfWorld*, uint32_t v) {
+    auto it = g->vmoving.find(v);
+    return it == g->vmoving.end() ? 0 : it->second;
 }
 uint32_t f_enemy_moving(EmfWorld*, uint32_t e) {
     auto it = g->moving.find(e);
@@ -1122,6 +1141,9 @@ EmfApi fake_api() {
     a.enemy_move = f_enemy_move;
     a.enemy_move_cancel = f_enemy_move_cancel;
     a.enemy_moving = f_enemy_moving;
+    a.villager_move = f_villager_move;
+    a.villager_move_cancel = f_villager_move_cancel;
+    a.villager_moving = f_villager_moving;
     a.give_item = f_give;
     a.put_items_ex = f_put_ex;
     a.take_items = f_take;
