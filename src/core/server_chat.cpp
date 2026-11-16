@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "chat_commands.h"
+#include "manifest.h"
 
 namespace emf::core {
 
@@ -274,11 +275,9 @@ std::optional<std::string> connection_name(const uint8_t* records, uint32_t hand
     char buf[64];
     if (!read(reinterpret_cast<const void*>(static_cast<uintptr_t>(text)), buf, static_cast<size_t>(length)))
         return std::nullopt;
-    for (size_t i = 0; i < length; ++i) {
-        const auto u = static_cast<unsigned char>(buf[i]);
-        if (u < 0x20 || u == 0x7f) return std::nullopt;
-    }
-    return std::string(buf, static_cast<size_t>(length));
+    std::string name(buf, static_cast<size_t>(length));
+    if (!display_name_ok(name)) return std::nullopt;  // control characters, bidi controls or bytes that are no UTF-8
+    return name;
 }
 
 std::optional<PlayerInfo> read_player_info(const uint8_t* entry, uint32_t entity) {

@@ -713,9 +713,7 @@ bool api_player_character_name(EmfWorld* w, uint32_t player, char* buf, uint32_t
     const auto* sys = static_cast<const uint8_t*>(WorldView(raw(w)).singleton(kCustomStringsSingleton));
     const auto name = custom_player_string(sys, id);
     if (!name) return false;
-    const size_t n = (std::min)(name->size(), static_cast<size_t>(size - 1));
-    std::memcpy(buf, name->data(), n);
-    buf[n] = '\0';
+    copy_out(*name, buf, size);  // cut between characters, never inside one
     return true;
 }
 
@@ -2025,9 +2023,7 @@ bool api_player_name(EmfWorld* w, uint32_t player, char* buf, uint32_t size) {
     const auto name = connection_name(records.data(), info->handle, info->account,
                                       [](const void* src, void* dst, size_t n) { return seh_read(src, dst, n); });
     if (!name || name->empty()) return false;
-    const size_t n = (std::min)(name->size(), static_cast<size_t>(size - 1));
-    std::memcpy(buf, name->data(), n);
-    buf[n] = '\0';
+    copy_out(*name, buf, size);  // cut between characters, never inside one
     return true;
 }
 

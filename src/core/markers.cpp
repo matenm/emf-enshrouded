@@ -8,6 +8,7 @@
 
 #include "core/bridge/json_out.h"
 #include "core/json.h"
+#include "core/manifest.h"
 
 namespace emf::core {
 
@@ -283,8 +284,8 @@ bool decode_markers(const std::string& text, DecodedMarkers* out) {
     const json::ParseResult r = json::parse(text);
     if (!r.value || !r.value->is(json::Value::Type::Object)) return false;
     const json::Value& top = *r.value;
-    out->owner = field_str(top.get("o"));
-    if (out->owner.empty() || out->owner.size() > kMarkerIdMax) return false;
+    out->owner = field_str(top.get("o"));  // printed by the console's markers: a name fit to print, or no message
+    if (!display_name_ok(out->owner) || out->owner.size() > kMarkerIdMax) return false;
     if (const json::Value* s = top.get("s")) {
         if (!s->is(json::Value::Type::Array) || s->arr.size() > kMarkersPerMessage) return false;
         for (const json::Value& v : s->arr) {

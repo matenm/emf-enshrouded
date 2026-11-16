@@ -47,9 +47,7 @@ std::optional<std::string> custom_player_string(const uint8_t* system, uint64_t 
             if (entry_id != id || len == 0 || len > kMaxCustomString || !text) return std::nullopt;
             std::string s(static_cast<size_t>(len), '\0');
             if (!seh_read(text, s.data(), s.size())) return std::nullopt;
-            if (fnv1a64(s) != id || !valid_utf8(s)) return std::nullopt;
-            for (unsigned char c : s)
-                if (c < 0x20 || c == 0x7f) return std::nullopt;
+            if (fnv1a64(s) != id || !display_name_ok(s)) return std::nullopt;
             return s;
         }
         slot = slot + 1 < capacity ? slot + 1 : 0;

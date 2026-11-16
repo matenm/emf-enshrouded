@@ -466,6 +466,26 @@ bool valid_utf8(const std::string& text) {
     return true;
 }
 
+bool display_name_ok(const std::string& text) {
+    if (text.empty()) return false;
+    for (size_t i = 0; i < text.size();) {
+        const size_t n = utf8_length(text, i);
+        if (!n) return false;
+        const auto b = [&](size_t k) { return static_cast<unsigned char>(text[i + k]); };
+        uint32_t cp = 0;
+        if (n == 1) cp = b(0);
+        else if (n == 2) cp = ((b(0) & 0x1Fu) << 6) | (b(1) & 0x3Fu);
+        else if (n == 3) cp = ((b(0) & 0x0Fu) << 12) | ((b(1) & 0x3Fu) << 6) | (b(2) & 0x3Fu);
+        else cp = 0x10000;  // above the BMP: no control or bidi control there
+        const bool control = cp < 0x20 || (cp >= 0x7F && cp <= 0x9F);
+        const bool bidi = cp == 0x061C || cp == 0x200E || cp == 0x200F || (cp >= 0x202A && cp <= 0x202E) ||
+                          (cp >= 0x2066 && cp <= 0x2069);
+        if (control || bidi) return false;
+        i += n;
+    }
+    return true;
+}
+
 size_t utf8_chars(const std::string& text) {
     size_t n = 0;
     for (unsigned char c : text)

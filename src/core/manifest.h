@@ -147,5 +147,10 @@ std::string setting_number_text(double v);
 size_t utf8_chars(const std::string& text);
 // `text` is well-formed UTF-8 (no stray, overlong or cut-off sequences, no surrogates, nothing above U+10FFFF).
 bool valid_utf8(const std::string& text);
+// `text` is a name fit to print in the chat, the console or the log: not empty, well-formed UTF-8, no control characters
+// (C0, DEL, C1: U+0080-U+009F) and none of the bidirectional controls that reorder the text around them (U+061C, U+200E,
+// U+200F, U+202A-U+202E, U+2066-U+2069), so a name cannot pose as another one or hide what follows it. Player names,
+// character names and the owner names of a server's markers are checked with it.
+bool display_name_ok(const std::string& text);
 
 }  // namespace emf::core

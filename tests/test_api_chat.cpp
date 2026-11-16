@@ -431,6 +431,32 @@ TEST_CASE("player_name: the name in the player's connection record; false withou
     CHECK_FALSE(api_table()->player_name(f.w(), 2, buf, sizeof buf));
 }
 
+TEST_CASE("player_name: a short buffer is cut between characters, never inside one") {
+    Fixture f;
+    f.player(2, 0x41, 0xB2);
+    alignas(8) static const char zoe[8] = "Zo\xc3\xab";  // Zoe with a diaeresis: 4 bytes, the last two one letter
+    static std::vector<uint8_t> records;
+    records.assign(static_cast<size_t>(server_layout::kConnectionSize) * server_layout::kConnectionCount, 0);
+    uint8_t* rec = records.data() + 1 * server_layout::kConnectionSize;  // handle 0x41: record 1
+    const uint32_t handle = 0x41, peer = 0x82;
+    const uint64_t account = 0xB2, ptr = reinterpret_cast<uint64_t>(zoe), len = 4;
+    std::memcpy(rec, &handle, 4);
+    std::memcpy(rec + server_layout::kConnectionPeer, &peer, 4);
+    std::memcpy(rec + server_layout::kConnectionAccount, &account, 8);
+    std::memcpy(rec + server_layout::kConnectionName, &ptr, 8);
+    std::memcpy(rec + server_layout::kConnectionNameLength, &len, 8);
+    f.state.read_connections = [](std::vector<uint8_t>* out) {
+        *out = records;
+        return true;
+    };
+    char whole[5];
+    CHECK(api_table()->player_name(f.w(), 2, whole, sizeof whole));
+    CHECK(std::string(whole) == "Zo\xc3\xab");
+    char tiny[4];
+    CHECK(api_table()->player_name(f.w(), 2, tiny, sizeof tiny));
+    CHECK(std::string(tiny) == "Zo");  // not "Zo" and half a letter
+}
+
 TEST_CASE("chat_broadcast on a joined client (this game hosts no server world): false, and no note") {
     Fixture f(false);
     f.host_player(1);
@@ -513,6 +539,25 @@ TEST_CASE("player_character_name (v30): the name from the server's table; false 
     CHECK_FALSE(api->player_character_name(f.w(), 2, buf, sizeof buf));
     g_name_id = emf::fnv1a64("Character 3");  // an id the table does not hold
     CHECK_FALSE(api->player_character_name(f.w(), 2, buf, sizeof buf));
+}
+
+TEST_CASE("player_character_name (v30): a short buffer is cut between characters, never inside one") {
+    Fixture f;
+    f.state.get_component = fake_gc_name;
+    const std::string name = "\xc3\x85sa \xc3\x96" "berg";  // two letters of two bytes each
+    NameTable t(name);
+    g_name_id = emf::fnv1a64(name);
+    f.server_ss.plant(f.server, "CustomPlayerStringsSystem", t.sys.data());
+    const EmfApi* api = api_table();
+    char buf[64];
+    REQUIRE(api->player_character_name(f.w(), 2, buf, sizeof buf));
+    CHECK(std::string(buf) == name);
+    char seven[7];  // 6 bytes fit: "\xc3\x85sa " and the first byte of the second letter
+    CHECK(api->player_character_name(f.w(), 2, seven, sizeof seven));
+    CHECK(std::string(seven) == "\xc3\x85sa ");
+    char two[2];  // 1 byte fits: half the first letter, so nothing
+    api->player_character_name(f.w(), 2, two, sizeof two);
+    CHECK(std::string(two).empty());
 }
 
 // ---- v30: chat_tell_ex / chat_broadcast_ex ----

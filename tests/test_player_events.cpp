@@ -197,6 +197,20 @@ TEST_CASE("player events: the reader lists the server world's players with accou
     CHECK(emf::core::read_players(&r.api, kServer)[1].ready);
 }
 
+TEST_CASE("player events: a 64-byte name (the longest a connection carries) is read whole") {
+    Rig r(L"player_events_long_name");
+    r.fake.components[{emf::gen::ecs::PlayerState::kHash, 2}].assign(sizeof(emf::gen::ecs::PlayerState), 0);
+    r.fake.components[{emf::gen::ecs::CurrentTransform::kHash, 2}].assign(sizeof(emf::gen::ecs::CurrentTransform), 0);
+    r.fake.player_info(1, 2, 0xB);
+    std::string name(60, 'x');
+    name += "\xc3\xa9\xc3\xa9";  // 64 bytes, the last four two letters
+    REQUIRE(name.size() == 64);
+    r.fake.names[2] = name;
+    const auto seen = emf::core::read_players(&r.api, kServer);
+    REQUIRE(seen.size() == 1);
+    CHECK(seen[0].name == name);
+}
+
 TEST_CASE("player events: the core's API table is v28 with on_player at its end") {
     const EmfApi* api = emf::core::api_table();
     REQUIRE(api);

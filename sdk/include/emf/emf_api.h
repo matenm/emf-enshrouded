@@ -1278,10 +1278,11 @@ typedef struct EmfApi {
      * and a notify for the host). Same line rules and limit (a broadcast counts its lines once). Any thread. True when
      * queued (or, in a game you host without [chat] players=1, shown to the host only); false (logged) when refused. */
     bool (*chat_broadcast)(const char* text);
-    /* The player's name, UTF-8, cut to size-1 bytes and NUL-terminated: the name their connection carries, which the
-     * game's chat shows as the speaker (their platform name, e.g. their Steam name; not the character's name). Read from
-     * the server's connection records, so players' chat must be on (as chat_tell). False (buf = "") when it is not known:
-     * not a player entity of this server world, no connection record for them, or players' chat is off. Server world;
+    /* The player's name, UTF-8 (at most 64 bytes), cut to size-1 bytes between characters and NUL-terminated: the name
+     * their connection carries, which the game's chat shows as the speaker (their platform name, e.g. their Steam name;
+     * not the character's name). Read from the server's connection records, so players' chat must be on (as chat_tell).
+     * False (buf = "") when it is not known: not a player entity of this server world, no connection record for them,
+     * players' chat is off, or a name with control characters or bidi controls (U+202E and the like). Server world;
      * same thread rules as get_component. */
     bool (*player_name)(EmfWorld* world, uint32_t player, char* buf, uint32_t size);
     /* cb(world, account, entity, text, user) for every chat line a player sends to the server that is not an EMF command
@@ -1443,7 +1444,8 @@ typedef struct EmfApi {
     uint32_t (*game_language)(char* code_out, uint32_t size);
 
     /* ---- v30: character names and chat lines without a speaker ---- */
-    /* The player's character name (the one the game's Social tab shows), UTF-8, cut to size-1 bytes and NUL-terminated.
+    /* The player's character name (the one the game's Social tab shows), UTF-8, cut to size-1 bytes between characters
+     * and NUL-terminated. A name with control characters or bidi controls (U+202E and the like) is not known.
      * It may already be there at the join (from the character's last visit to this world) or come when the player's game
      * sends it, a few seconds later, and it can change during a session: read it when you need it, never cache it. It is
      * display text a player's game set, not an identity: key data by the account. A player's grave carries the name too.

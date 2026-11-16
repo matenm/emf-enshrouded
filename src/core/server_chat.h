@@ -270,8 +270,8 @@ using MemoryRead = std::function<bool(const void* src, void* dst, size_t n)>;
 // kConnectionCount of them): the record of `handle` (else the one that holds `account`) points at the text at
 // kConnectionName with its length at kConnectionNameLength. Confirmed in game (a game hosted with [chat]
 // players=1, and a dump of the dedicated server): the player's platform (Steam) name, not the character's.
-// BasicPlayerInfos holds no name (checked in game). nullopt when no record is theirs or the text is not 1-64 bytes without
-// control characters.
+// BasicPlayerInfos holds no name (checked in game). nullopt when no record is theirs or the text is not 1-64 bytes that
+// display_name_ok takes (UTF-8 without control characters or bidi controls).
 std::optional<std::string> connection_name(const uint8_t* records, uint32_t handle, uint64_t account,
                                            const MemoryRead& read);
 

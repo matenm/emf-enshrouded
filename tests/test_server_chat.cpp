@@ -390,6 +390,17 @@ TEST_CASE("connection_name: the text at record +0x20 with its length at +0x28 (s
     CHECK_FALSE(connection_name(r.data(), 0x40, 0xCC, read).has_value());  // nobody holds that account
     set_name(3, bad, 8);
     CHECK_FALSE(connection_name(r.data(), 0x83, 0xA2, read).has_value());  // control characters: not a name
+    // a C1 control (U+0085), a bidi override (U+202E: the rest shows backwards), an isolate (U+2066), a mark (U+200F),
+    // bytes that are no UTF-8
+    alignas(8) static const char spoofs[5][16] = {"Bad\xc2\x85name", "Bad\xe2\x80\xaeman", "Bad\xe2\x81\xa6name",
+                                                  "Bad\xe2\x80\x8fname", "Bad\xff\xfename"};
+    for (const char* s : spoofs) {
+        set_name(3, s, std::strlen(s));
+        CHECK_FALSE_MESSAGE(connection_name(r.data(), 0x83, 0xA2, read).has_value(), s);
+    }
+    alignas(8) static const char zoe[8] = "Zo\xc3\xab";  // a letter beyond ASCII is fine
+    set_name(3, zoe, 4);
+    CHECK(connection_name(r.data(), 0x83, 0xA2, read) == std::optional<std::string>("Zo\xc3\xab"));
     set_name(3, long_name, 65);
     CHECK_FALSE(connection_name(r.data(), 0x83, 0xA2, read).has_value());  // longer than 64 bytes
     set_name(3, long_name, 0);

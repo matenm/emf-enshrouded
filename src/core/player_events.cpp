@@ -34,7 +34,7 @@ std::vector<RosterSeen> read_players(const EmfApi* api, EmfWorld* w) {
         constexpr size_t kReady = offsetof(gen::PlayerInput, fromClientIsReadyForGameplay);
         uint8_t ready = 1;
         if (!s.host && in && in_size > kReady && emf::seh_read(in + kReady, &ready, 1)) s.ready = ready != 0;
-        char name[64] = {};
+        char name[65] = {};  // a connection's name is 1-64 bytes: read whole
         if (api->player_name && api->player_name(w, id, name, sizeof name)) s.name = name;
         out.push_back(std::move(s));
     }

@@ -18,8 +18,8 @@ constexpr size_t kCustomStringsMap = 0x190, kEntryId = 0x10, kEntryText = 0x18, 
 constexpr size_t kMaxCustomString = 0x100;
 
 // The text of the entry `id` in the system's map: only when the entry's id is `id`, its length is 1 to 256 bytes, the text
-// hashes to `id` (FNV-1a64), is valid UTF-8 and holds no control characters; else nothing (a freed or reused entry, a
-// layout change after a game update). Every read is guarded. On the server world's thread; never cache the pointers.
+// hashes to `id` (FNV-1a64) and display_name_ok takes it (valid UTF-8, no control characters or bidi controls); else
+// nothing (a freed or reused entry, a layout change after a game update, a name that would garble the chat). Every read is guarded. On the server world's thread; never cache the pointers.
 std::optional<std::string> custom_player_string(const uint8_t* system, uint64_t id);
 
 }  // namespace emf::core

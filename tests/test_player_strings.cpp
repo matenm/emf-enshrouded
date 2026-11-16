@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "common/fnv.h"
+#include "core/manifest.h"
 #include "core/player_strings.h"
 
 using namespace emf::core;
@@ -118,6 +119,36 @@ TEST_CASE("custom_player_string: nothing for control characters or bad UTF-8") {
         t.add(home(id), id, bad);
         CHECK_FALSE_MESSAGE(custom_player_string(t.system(), id).has_value(), bad);
     }
+}
+
+TEST_CASE("custom_player_string: nothing for C1 controls or the bidi controls that reorder the text around them") {
+    // a C1 control (U+0085), bidi overrides and isolates (U+202E, U+202A, U+2066, U+2069), marks (U+200F, U+061C)
+    const char* const kSpoofs[] = {"Bad\xc2\x85name", "Bad\xe2\x80\xaeman", "Bad\xe2\x80\xaaname", "Bad\xe2\x81\xa6name",
+                                   "Bad\xe2\x81\xa9name", "Bad\xe2\x80\x8fname", "Bad\xd8\x9cname", "Bad\xc2\x9b[2J"};
+    for (const char* bad : kSpoofs) {
+        FakeTable t;
+        const uint64_t id = id_of(bad);
+        t.add(home(id), id, bad);
+        CHECK_FALSE_MESSAGE(custom_player_string(t.system(), id).has_value(), bad);
+    }
+}
+
+TEST_CASE("display_name_ok: well-formed UTF-8 without control characters or bidi controls") {
+    CHECK(display_name_ok("Ember"));
+    CHECK(display_name_ok("\xc3\x86r\xc3\xb8sk\xc3\xb8"));          // AEroskoe with its letters
+    CHECK(display_name_ok("\xd7\xa9\xd7\x9c\xd7\x95\xd7\x9d"));    // Hebrew letters (right to left, no controls)
+    CHECK(display_name_ok("\xe4\xb8\xb8\xe5\xa4\xaa"));            // CJK
+    CHECK(display_name_ok("A\xe2\x80\x90" "B"));                   // U+2010 (a hyphen), next to the controls
+    CHECK(display_name_ok("A\xc2\xa0" "B"));                       // U+00A0 (no-break space), right after C1
+    CHECK_FALSE(display_name_ok(""));
+    CHECK_FALSE(display_name_ok("Bad\nname"));
+    CHECK_FALSE(display_name_ok("Bad\x7f" "name"));
+    CHECK_FALSE(display_name_ok("Bad\xff"));
+    CHECK_FALSE(display_name_ok("Cut\xc3"));
+    // a C1 control (U+0085), bidi overrides and isolates (U+202E, U+202A, U+2066, U+2069), marks (U+200F, U+061C)
+    const char* const kBad[] = {"Bad\xc2\x85name", "Bad\xe2\x80\xaeman", "Bad\xe2\x80\xaaname", "Bad\xe2\x81\xa6name",
+                                "Bad\xe2\x81\xa9name", "Bad\xe2\x80\x8fname", "Bad\xd8\x9cname", "Bad\xc2\x9b[2J"};
+    for (const char* bad : kBad) CHECK_FALSE_MESSAGE(display_name_ok(bad), bad);
 }
 
 TEST_CASE("custom_player_string: a name with non-ASCII letters") {

@@ -244,6 +244,12 @@ TEST_CASE("wire format: markers and removals round trip; broken or oversized mes
     CHECK_FALSE(decode_markers("{not json", &bad));
     CHECK_FALSE(decode_markers("[1,2]", &bad));
     CHECK_FALSE(decode_markers("{\"o\":\"\",\"s\":[]}", &bad));  // no owner
+    // an owner name is printed (the console's markers): control characters and bidi controls are refused
+    CHECK_FALSE(decode_markers(encode_markers("evil\xe2\x80\xae" "lld.dom", {mk("x")}, {}), &bad));
+    CHECK_FALSE(decode_markers(encode_markers("evil\xc2\x9b[2J", {mk("x")}, {}), &bad));
+    CHECK_FALSE(decode_markers("{\"o\":\"line\\nbreak\",\"s\":[]}", &bad));
+    REQUIRE(decode_markers(encode_markers("My Mod.dll", {mk("x")}, {}), &bad));  // a module name with a space
+    CHECK(bad.owner == "My Mod.dll");
     std::vector<EmfMarker> many(300, mk("x"));
     CHECK_FALSE(decode_markers(encode_markers("lua", many, {}), &bad));  // more than 256 in one message
 }
