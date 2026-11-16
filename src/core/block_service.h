@@ -31,6 +31,9 @@ struct BlockEngine {
     std::function<bool(const Sphere& s, const float table[256], bool instant, KernelCount* out)> kernel;
     // count x the item with this GUID as loose pickups at pos; the number dropped.
     std::function<uint32_t(const uint8_t item_guid[16], uint32_t count, const float pos[3])> drop;
+    // Ruin protection: how far a sphere may reach (shrink_off_world over the world as it is); 0 skips it. Not asked
+    // for a request with EMF_BREAK_WORLD. Unset: the full radius.
+    std::function<float(const Sphere& s)> shrink;
 };
 
 // A finished request, for its callback (after the step).

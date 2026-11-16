@@ -3,6 +3,7 @@
 #include <doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -137,13 +138,18 @@ bool f_region(const void* slice, void* editor) {
     const auto* sl = static_cast<const S*>(slice);
     CHECK(sl->count == 1);
     const Req& r = sl->data[0];
-    CHECK(r.sx == 1);
-    CHECK(r.sy == 1);
-    CHECK(r.sz == 1);
+    CHECK(r.sx >= 1);
+    CHECK(r.sx <= 16);
+    CHECK(r.sy <= 16);
+    CHECK(r.sz <= 16);
     CHECK(r.level == 6);
     g_editor_seen = editor;
-    const auto it = g_voxels.find({r.x, r.y, r.z});
-    r.buf[0] = it == g_voxels.end() ? 0 : it->second;
+    for (uint32_t k = 0; k < r.sz; ++k)  // the game's order: x + sx * (y + sy * z)
+        for (uint32_t j = 0; j < r.sy; ++j)
+            for (uint32_t i = 0; i < r.sx; ++i) {
+                const auto it = g_voxels.find({r.x + static_cast<int>(i), r.y + static_cast<int>(j), r.z + static_cast<int>(k)});
+                r.buf[i + r.sx * (j + r.sy * k)] = it == g_voxels.end() ? 0 : it->second;
+            }
     return true;
 }
 uint8_t f_damage_get(void* store, const uint32_t cell[3]) {
@@ -678,4 +684,44 @@ TEST_CASE("api block_at and find_wall (v45): world is 1 for the world's own bloc
     REQUIRE(ok);
     CHECK(v44.info.material == 7);
     CHECK(static_cast<uint32_t>(v44.info.world) == 0xABABABABu);
+}
+
+TEST_CASE("block glue: a break stops just short of the world's own blocks (ruin protection); EMF_BREAK_WORLD breaks them too; a block of unknown origin counts as the world's") {
+    Fixture f;
+    // the break at (10, 20, 30), 1.5 m; a ruin cell 1 m away: (22, 40, 60) -> (11.25, 20.25, 30.25)
+    g_base_columns = {{2, 7}};
+    g_voxels[{22, 40, 60}] = 0xFF8A;
+    g_base[{22, 40, 60}] = 0xF78A;  // shipped stone (weathered paint)
+    g_voxels[{18, 40, 60}] = 0xFF87;  // a player's block on the other side, 0.83 m away (shipped air): no matter
+    f.ask();
+    f.step();
+    REQUIRE(g_calls.size() == 2);  // damage mode: pass 0 and pass 1
+    const double d = std::sqrt(1.25 * 1.25 + 0.25 * 0.25 + 0.25 * 0.25);  // centre to the ruin cell's centre
+    CHECK(g_calls[0].radius == doctest::Approx(d - 0.01).epsilon(0.001));
+    CHECK(g_calls[0].radius < d);
+    // with EMF_BREAK_WORLD the radius stays
+    g_calls.clear();
+    f.ask(EMF_BREAK_WORLD);
+    f.step();
+    REQUIRE(g_calls.size() == 2);
+    CHECK(g_calls[0].radius == doctest::Approx(1.5f));
+    // the column not loaded: no cell's origin is known, so the player's block (0.83 m away) is spared too
+    g_calls.clear();
+    g_base_columns.clear();
+    f.ask();
+    f.step();
+    REQUIRE(g_calls.size() == 2);
+    const double dp = std::sqrt(0.75 * 0.75 + 0.25 * 0.25 + 0.25 * 0.25);
+    CHECK(g_calls[0].radius == doctest::Approx(dp - 0.01).epsilon(0.001));
+    // a ruin cell next to the centre (the centre is a cell corner: 0.43 m to the nearest cell centre)
+    g_calls.clear();
+    g_voxels[{20, 40, 60}] = 0xFF8A;
+    g_base_columns = {{2, 7}};
+    g_base[{20, 40, 60}] = 0xFF8A;
+    f.ask();
+    f.step();
+    REQUIRE(g_calls.size() == 2);
+    CHECK(g_calls[0].radius == doctest::Approx(std::sqrt(3 * 0.25 * 0.25) - 0.01).epsilon(0.001));
+    REQUIRE(!g_answers.empty());
+    CHECK(g_answers.back().r.status == EMF_BREAK_DONE);
 }

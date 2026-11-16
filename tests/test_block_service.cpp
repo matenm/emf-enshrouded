@@ -222,3 +222,38 @@ TEST_CASE("block service: instant requests use table 1.0, damage requests health
     CHECK_FALSE(f.instants[1]);
     CHECK(f.stone_entries[1] == doctest::Approx(1000.0 / (50 * 2)));
 }
+
+TEST_CASE("block service: each sphere asks how far it may reach (ruin protection): a smaller radius reaches the kernel, 0 skips the sphere, EMF_BREAK_WORLD asks nothing") {
+    g_answers.clear();
+    BlockService s;
+    Fake f;
+    BlockEngine e = f.engine();
+    std::vector<Sphere> asked;
+    float give = 0.6f;
+    e.shrink = [&](const Sphere& sp) {
+        asked.push_back(sp);
+        return give;
+    };
+    std::string why;
+    REQUIRE(s.request(req(), on_done, nullptr, &why) != 0);
+    deliver(s.step(e));
+    REQUIRE(asked.size() == 1);
+    CHECK(asked[0].r == 1);
+    REQUIRE(f.spheres.size() == 1);
+    CHECK(f.spheres[0].r == doctest::Approx(0.6f));
+    give = 0;  // next to the world's own blocks: skipped
+    REQUIRE(s.request(req(), on_done, nullptr, &why) != 0);
+    deliver(s.step(e));
+    CHECK(f.spheres.size() == 1);
+    REQUIRE(g_answers.size() == 2);
+    CHECK(g_answers[1].r.status == EMF_BREAK_DONE);
+    CHECK(g_answers[1].r.damaged == 0);
+    EmfBreakBlocks w = req();
+    w.flags = EMF_BREAK_WORLD;
+    asked.clear();
+    REQUIRE(s.request(w, on_done, nullptr, &why) != 0);
+    deliver(s.step(e));
+    CHECK(asked.empty());
+    REQUIRE(f.spheres.size() == 2);
+    CHECK(f.spheres[1].r == 1);
+}

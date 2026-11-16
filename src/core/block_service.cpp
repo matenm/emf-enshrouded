@@ -72,11 +72,17 @@ std::vector<BlockDone> BlockService::step(const BlockEngine& e) {
         build_break_table(facts, r.spec, factor, table);
         KernelCount k;
         bool ok = true;
-        for (const Sphere& s : r.spheres)
+        for (const Sphere& whole : r.spheres) {
+            Sphere s = whole;
+            if (!r.spec.world && e.shrink) {
+                s.r = e.shrink(whole);
+                if (!(s.r > 0)) continue;  // right next to the world's own blocks: skipped
+            }
             if (!e.kernel || !e.kernel(s, table, r.spec.instant, &k)) {
                 ok = false;
                 break;
             }
+        }
         if (!ok) {
             done.push_back(answer(r, EMF_BREAK_FAILED, &k));
             // the rest of this step waits, in front of what came in meanwhile

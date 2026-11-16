@@ -157,6 +157,8 @@ float mining_factor(void* balancing) {
     return 1.0f;
 }
 
+float shrink_sphere(void* editor, const Sphere& s);  // below, after the reads
+
 void blocks_program(void* ctx, void*) {
     if (!g_on.load() || !g_service) return;
     const ProgramCall* call = current_program_call();
@@ -202,6 +204,7 @@ void blocks_program(void* ctx, void*) {
         }
         return true;
     };
+    e.shrink = [&](const Sphere& s) -> float { return shrink_sphere(h.editor, s); };
     e.drop = [&](const uint8_t guid[16], uint32_t count, const float pos[3]) -> uint32_t {
         PendingDrop d{};
         std::memcpy(d.guid, guid, 16);
@@ -253,6 +256,7 @@ constexpr size_t kColumnHandle = 0xA0;
 constexpr uint32_t kBaseLevel = 6;  // the level every VoxelWorld caller reads (the full 0.5 m cells)
 std::atomic<bool> g_base_off{false};  // a fault: every building cell counts unknown (protected) until a restart
 std::atomic<bool> g_base_test_off{false};
+std::atomic<bool> g_shrink_said{false};
 
 bool base_reader_usable() {
     return !g_base_test_off.load() && !g_base_off.load() && g_deps.fns.column_acquire && g_deps.fns.brick_seek &&
@@ -362,6 +366,49 @@ struct BaseCache {
         return true;
     }
 };
+
+// Ruin protection for one sphere: the cells of its box read at once (the region read, x + sx * (y + sy * z)), each
+// building cell judged against the shipped world (world_verdict), the radius shrunk off the world's own and the unknown
+// ones (shrink_off_world). A box that cannot be read: 0 (the sphere is skipped: never break what cannot be judged).
+float shrink_sphere(void* editor, const Sphere& s) {
+    int32_t lo[3];
+    uint32_t n[3];
+    const float c[3] = {s.x, s.y, s.z};
+    for (int a = 0; a < 3; ++a) {
+        lo[a] = static_cast<int32_t>(std::floor((c[a] - s.r) * 2.0f));
+        const auto hi = static_cast<int32_t>(std::floor((c[a] + s.r) * 2.0f));
+        n[a] = static_cast<uint32_t>(hi - lo[a] + 1);
+        if (n[a] > 16) return 0.0f;  // larger than the game's own reads (radius <= 3.5: at most 15)
+    }
+    if (!g_deps.fns.region_read || g_reads_off.load()) {
+        if (!g_shrink_said.exchange(true))
+            say("ruin protection: the game's voxel read is not available: breaks spare every block (EMF_BREAK_WORLD "
+                "still breaks)");
+        return 0.0f;
+    }
+    std::vector<uint16_t> cells(static_cast<size_t>(n[0]) * n[1] * n[2], 0);
+    const ReadReq q{cells.data(), cells.size(), n[0], n[1], n[2], kReadLevel, lo[0], lo[1], lo[2], 0};
+    const ReadSlice sl{&q, 1};
+    bool ok = false;
+    if (!call_region(g_deps.fns.region_read, &sl, editor, &ok)) {
+        if (!g_reads_off.exchange(true)) say("block reads off (the game's voxel region read faulted)");
+        return 0.0f;
+    }
+    if (!ok) return 0.0f;  // part of the box is not loaded
+    if (!base_reader_usable() && !g_shrink_said.exchange(true))
+        say("ruin protection: the shipped world cannot be read on this game build: breaks spare every building block "
+            "(EMF_BREAK_WORLD still breaks)");
+    auto cache = std::make_unique<BaseCache>();
+    cache->editor = editor;
+    return shrink_off_world(s.x, s.y, s.z, s.r, [&](int32_t i, int32_t j, int32_t k) {
+        const uint16_t cur = cells[static_cast<size_t>(i - lo[0]) +
+                                   n[0] * (static_cast<size_t>(j - lo[1]) + n[1] * static_cast<size_t>(k - lo[2]))];
+        if ((cur & 0xFF) < 0x80) return 0;
+        uint16_t base = 0;
+        const bool known = cache->cell(i, j, k, &base);
+        return world_verdict(cur, known, base);
+    });
+}
 
 struct Reads {
     void* editor = nullptr;
@@ -542,6 +589,7 @@ ProgramSpec blocks_setup(BlockGlueDeps deps) {
     g_watchdog_said = g_cb_fault_said = g_kernel_said = g_factor_said = false;
     g_reads_off = false;
     g_base_off = false;
+    g_shrink_said = false;
     g_last_run_ms = now();
     const bool usable = g_deps.fns.kernel && g_deps.fns.config_find;
     {
