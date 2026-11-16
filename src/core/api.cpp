@@ -6,6 +6,7 @@
 #include "api.h"
 #include "api_sizes.h"
 #include "common/pattern_find.h"
+#include "core/manifest.h"
 
 #include <intrin.h>
 
@@ -687,8 +688,7 @@ uint32_t api_find_item(EmfWorld* w, const char* name) {
 // v29: the game's item names and language (game_text.h, item_text.h)
 uint32_t copy_out(const std::string& s, char* buf, uint32_t size) {
     if (buf && size) {
-        size_t n = s.size() < size - 1 ? s.size() : size - 1;
-        while (n > 0 && n < s.size() && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80) --n;  // whole characters
+        const size_t n = utf8_fit(s, size - 1);  // whole characters
         std::memcpy(buf, s.data(), n);
         buf[n] = 0;
     }

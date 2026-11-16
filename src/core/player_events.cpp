@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "common/seh.h"
+#include "core/manifest.h"
 #include "emf/generated/components.hpp"
 
 namespace emf::core {
@@ -115,7 +116,9 @@ bool PlayerEvents::call(EmfWorld* w, const Watcher& x, const RosterEvent& ev) {
     e.player = ev.entity;
     e.killer = ev.killer;
     e.host = ev.host ? 1 : 0;
-    std::snprintf(e.name, sizeof e.name, "%s", ev.name.c_str());
+    const size_t name_bytes = utf8_fit(ev.name, sizeof e.name - 1);  // cut between characters, never inside one
+    std::memcpy(e.name, ev.name.data(), name_bytes);
+    e.name[name_bytes] = 0;
     if (d_.call && d_.call(x.cb, w, &e, x.user)) return true;
     {
         std::lock_guard<std::mutex> l(m_);

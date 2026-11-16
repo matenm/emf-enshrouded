@@ -211,6 +211,19 @@ TEST_CASE("player events: a 64-byte name (the longest a connection carries) is r
     CHECK(seen[0].name == name);
 }
 
+// The event's name field holds 63 bytes and a NUL: a 64-byte name was cut to 63 bytes, inside its last letter.
+TEST_CASE("player events: a mod's event carries a long name cut between characters") {
+    Svc s;
+    REQUIRE(s.p.watch(record, nullptr));
+    std::string name(60, 'x');
+    name += "\xc3\xa9\xc3\xa9";  // 64 bytes, the last four two letters
+    s.seen = {{1, 0xA, true, true, name}};
+    s.load();
+    s.step();
+    REQUIRE(g_got.size() == 1);
+    CHECK(g_got[0].name == std::string(60, 'x') + "\xc3\xa9");  // 62 bytes: the whole letters that fit
+}
+
 TEST_CASE("player events: the core's API table is v28 with on_player at its end") {
     const EmfApi* api = emf::core::api_table();
     REQUIRE(api);

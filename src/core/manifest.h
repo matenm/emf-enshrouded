@@ -150,6 +150,8 @@ std::string scan_code_shown(const std::string& value, const std::function<std::s
 std::string setting_number_text(double v);
 // Characters (UTF-8 code points) in `text`.
 size_t utf8_chars(const std::string& text);
+// How many of `text`'s first bytes fit in `max_bytes` without cutting a character (UTF-8).
+size_t utf8_fit(const std::string& text, size_t max_bytes);
 // `text` is well-formed UTF-8 (no stray, overlong or cut-off sequences, no surrogates, nothing above U+10FFFF).
 bool valid_utf8(const std::string& text);
 // `text` is a name fit to print in the chat, the console or the log: not empty, well-formed UTF-8, no control characters

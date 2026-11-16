@@ -147,7 +147,11 @@ TEST_CASE("display_name_ok: well-formed UTF-8 without control characters or bidi
     CHECK_FALSE(display_name_ok("Cut\xc3"));
     // a C1 control (U+0085), bidi overrides and isolates (U+202E, U+202A, U+2066, U+2069), marks (U+200F, U+061C)
     const char* const kBad[] = {"Bad\xc2\x85name", "Bad\xe2\x80\xaeman", "Bad\xe2\x80\xaaname", "Bad\xe2\x81\xa6name",
-                                "Bad\xe2\x81\xa9name", "Bad\xe2\x80\x8fname", "Bad\xd8\x9cname", "Bad\xc2\x9b[2J"};
+                                "Bad\xe2\x81\xa9name", "Bad\xe2\x80\x8fname", "Bad\xd8\x9cname", "Bad\xc2\x9b[2J",
+                                // line and paragraph separators (U+2028, U+2029: some viewers break the line there) and
+                                // the interlinear annotation controls (U+FFF9-FFFB)
+                                "Bad\xe2\x80\xa8name", "Bad\xe2\x80\xa9name", "Bad\xef\xbf\xb9name",
+                                "Bad\xef\xbf\xbbname"};
     for (const char* bad : kBad) CHECK_FALSE_MESSAGE(display_name_ok(bad), bad);
 }
 

@@ -482,10 +482,18 @@ bool display_name_ok(const std::string& text) {
         const bool control = cp < 0x20 || (cp >= 0x7F && cp <= 0x9F);
         const bool bidi = cp == 0x061C || cp == 0x200E || cp == 0x200F || (cp >= 0x202A && cp <= 0x202E) ||
                           (cp >= 0x2066 && cp <= 0x2069);
-        if (control || bidi) return false;
+        // line and paragraph separators (some viewers break the line there), interlinear annotation controls
+        const bool breaks = cp == 0x2028 || cp == 0x2029 || (cp >= 0xFFF9 && cp <= 0xFFFB);
+        if (control || bidi || breaks) return false;
         i += n;
     }
     return true;
+}
+
+size_t utf8_fit(const std::string& text, size_t max_bytes) {
+    size_t n = text.size() < max_bytes ? text.size() : max_bytes;
+    while (n > 0 && n < text.size() && (static_cast<unsigned char>(text[n]) & 0xC0) == 0x80) --n;
+    return n;
 }
 
 size_t utf8_chars(const std::string& text) {
