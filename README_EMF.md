@@ -44,7 +44,7 @@ game and EMF work, a cookbook of tested recipes, the full API reference, and wha
 | `mods/bulk_craft/` | Bulk Craft (off by default): craft one by hand, then F8 at the station (or `/craft 25`, every player) crafts many through the game's own crafting, at the recipe's pace (see below) |
 | `mods/blessings/` | Flame Blessings (off by default): god mode, endless health, stamina and mana, no fall damage, per player and at once; the host's own in the Mods tab or on the F11 wheel, `/blessings` for admins on any player; shown on screen, told in chat, nothing saved (see below) |
 | `mods/beastmaster/` | Beastmaster (Lua, off by default): tame wolves, boars, sabretooths and hounds (bears, aurochs and snakes with the EMF creature packs, which EMF builds itself), keep 8, call as many as your active slots (1-4, by level), choose them at a stable (the game's animal bed: E); hold F3 for the beast wheel, `/beastmaster` for every player; rare wild pack beasts (see below) |
-| `mods/necromancer/` | Necromancer (Lua, off by default): raise up to 3 skeleton warriors that stay and follow you (a lich and a bone golem with the EMF creature packs, which EMF builds itself), cast raging spirits (flaming skulls, 6 s); hold F2 for the summoning wheel, shared with Beastmaster; `/necromancer` for every player (see below) |
+| `mods/necromancer/` | Necromancer (Lua, off by default): raise up to 3 skeleton warriors that stay and follow you (a lich, a bone golem and bone wolves with the EMF creature packs, which EMF builds itself), cast raging spirits (flaming skulls, 6 s); hold F2 for the summoning wheel, shared with Beastmaster; `/necromancer` for every player (see below) |
 | `mods/minimap/` | Minimap (Lua sample, off by default): the game's own map around you in a corner of the screen, north up, your arrow turning with you; F10 shows or hides it, Numpad + and - zoom; built on the canvas API as an example to copy (`mods/minimap/README.md`) |
 | `mods/loot_scale/` | more materials per loot stack (x2 by default, off by default) by hooking the game's loot amount getter by its bytes; plants picked with E, chopping and mining (which never read that setting) get the difference after the game's PickupEvent, each with its own factor (0 = the same, so from 1.1.0 they follow the main factor); switching it off takes effect at the next start; factor 1 is the world's amounts at once for everything that follows it |
 | `content/emberbrand/` | an example of a new item (an EML data patch; [docs/modding/content.md](docs/modding/content.md)) |
@@ -898,8 +898,8 @@ yours (never on bosses); while you build, your undead step aside and come back a
 the game's crafting key): with Beastmaster installed, F2 and F3 open one "Summons" wheel with both classes' sections
 (Lua 1.9 wheel groups; `shared_wheel` off gives a mod its own wheel). The undead pack (`emf_necromancer_undead`, in the
 **EMF creature packs** download, which EMF builds when the game starts) adds a lich (`/necromancer raise
-lich`, 40 % mana, one; on the skeleton mage) and a bone golem (`raise golem`, 60 %, one; 3 m, on the Vukah elite, 2x
-health). Details: `mods/necromancer/README.md`.
+lich`, 40 % mana, one; on the skeleton mage), a bone golem (`raise golem`, 60 %, one; 3 m, on the Vukah elite, 2x
+health) and bone wolves (`raise wolf`, 35 %, two; on the game wolf, 1.5x health). Details: `mods/necromancer/README.md`.
 
 ## Writing a mod
 ```cpp

@@ -1,12 +1,12 @@
 # Necromancer (`necromancer`, a Lua mod)
 
-A Necromancer class for Enshrouded. Raise skeleton warriors that stay with you, follow you and fight, raise a lich and a
-bone golem with the **undead pack**, and cast raging spirits: flaming skulls that rush your foe for a few seconds.
+A Necromancer class for Enshrouded. Raise skeleton warriors that stay with you, follow you and fight, raise a lich, a
+bone golem and bone wolves with the **undead pack**, and cast raging spirits: flaming skulls that rush your foe for a few seconds.
 Their kills are yours: XP and loot.
 
 It needs the `lua` mod 1.9 or newer (in the EMF zip). It is installed **switched off**: switch it on in the Mods tab
 (the key under Esc) or in EMF.exe, then restart the game. It works next to **Beastmaster**: with both installed, one
-summoning wheel holds your undead and your beasts. The lich and the bone golem come in the **EMF creature packs**
+summoning wheel holds your undead and your beasts. The lich, the bone golem and the bone wolf come in the **EMF creature packs**
 download: install it with EMF.exe and EMF builds it when the game starts, no EML needed (below).
 
 ## How it goes
@@ -19,6 +19,8 @@ download: install it with EMF.exe and EMF builds it when the game starts, no EML
    fights with the moves of the game's Vukah elite (hunched, long arms, fists), with twice its health, for 60 % of
    your maximum mana.
    At most 1.
+   **Raise Bone Wolf** (wheel, or `/necromancer raise wolf`; the undead pack): a wolf's skeleton with a horned skull
+   that runs and bites with the game wolf's moves, with 1.5x its health, for 35 % of your maximum mana. At most 2.
 2. **Your undead stay** until they fall. A fallen one is gone (raise a new one); its body goes a second later, so our
    own minions never drop loot. When you reload the world, the undead you had come back beside you, free of mana.
 3. **Raging Spirits** (wheel, or `/necromancer spirits`): two flaming skulls for 8 % of your maximum mana. They rush
@@ -27,9 +29,9 @@ download: install it with EMF.exe and EMF builds it when the game starts, no EML
    6 s, at most 10 at a time (the oldest go first). Spirits are never saved.
 4. **Attack** sends your undead at the creature you look at (within 40 m), or at what hit you in the last 10 s.
    **Gather** calls them to you.
-5. **Dismiss:** **Dismiss Skeleton** (or Lich, Bone Golem) on the wheel returns one of that kind to the ground, the
+5. **Dismiss:** **Dismiss Skeleton** (or Lich, Bone Golem, Bone Wolf) on the wheel returns one of that kind to the ground, the
    newest; **Dismiss all** (with two or more) returns every one. In the chat: `/necromancer dismiss skeleton` (or
-   `lich`, `golem`) and `/necromancer dismiss` for all. A dismissed one is gone: raise a new one when you need it.
+   `lich`, `golem`, `wolf`) and `/necromancer dismiss` for all. A dismissed one is gone: raise a new one when you need it.
 6. **Kills:** when a minion's or a spirit's hit leaves a foe at 25 % health or less, you land the killing blow (XP and
    loot are yours). Never on bosses, mini-bosses or players.
 7. **They stay close:** a minion more than 40 m from you comes back after 3 s; more than 80 m at once.
@@ -44,7 +46,7 @@ download: install it with EMF.exe and EMF builds it when the game starts, no EML
    too, and come back beside you, free, a second after you land (the first time a note says so). Before 1.3.0 one far
    from you was brought to your side while you glided, in the air, and fell.
 
-**The wheel (hold F2):** Raise Skeleton (n/3), Raise Lich (n/1), Raise Bone Golem (n/1), Raging Spirits, Gather
+**The wheel (hold F2):** Raise Skeleton (n/3), Raise Lich (n/1), Raise Bone Golem (n/1), Raise Bone Wolf (n/2), Raging Spirits, Gather
 (**Come back** while they stepped aside by `/necromancer aside`), Attack, then **Dismiss <kind>** for each kind you
 have (and **Dismiss all** with two or more). The labels are short so they fit the wheel; the mouse wheel turns the
 page when there are more than 8 items. With Beastmaster installed and **One wheel** on in both mods, F2 and F3 open
@@ -62,10 +64,11 @@ All of these work from the game's chat for every player (`/necromancer <word>`) 
 | `/necromancer raise` | raise a skeleton warrior beside you |
 | `/necromancer raise lich` | raise a lich beside you (the undead pack) |
 | `/necromancer raise golem` | raise a bone golem beside you (the undead pack) |
+| `/necromancer raise wolf` | raise a bone wolf beside you (the undead pack) |
 | `/necromancer spirits` | raging spirits at what you look at (else the nearest foe) |
 | `/necromancer attack` | your undead attack what you look at (else what hit you) |
 | `/necromancer gather` | your undead come to you |
-| `/necromancer dismiss skeleton` (or `lich`, `golem`) | one undead of that kind returns to the ground (the newest) |
+| `/necromancer dismiss skeleton` (or `lich`, `golem`, `wolf`) | one undead of that kind returns to the ground (the newest) |
 | `/necromancer dismiss` (or `dismiss all`) | all your undead return to the ground |
 | `/necromancer list` | how many undead of each kind you have |
 | `/necromancer aside` | your undead step aside (leave for now), or come back; they do it on their own while someone builds next to them |
@@ -83,6 +86,8 @@ All of these work from the game's chat for every player (`/necromancer <word>`) 
 | Mana to raise a lich (`lich_mana_pct`) | 40 % | |
 | Bone golems at once (`golem_cap`) | 1 | 0-2; 0 = none |
 | Mana to raise a bone golem (`golem_mana_pct`) | 60 % | |
+| Bone wolves at once (`wolf_cap`) | 2 | 0-4; 0 = none |
+| Mana to raise a bone wolf (`wolf_mana_pct`) | 35 % | |
 | Mana for raging spirits (`spirit_mana_pct`) | 8 % | |
 | Spirits per cast (`spirits_per_cast`), A spirit lasts (`spirit_life_s`) | 2, 6 s | |
 | Spirits at once (`spirit_cap`) | 10 | the oldest go first |
@@ -96,22 +101,25 @@ An EML data patch that adds new undead, made with Meshy and fitted to game skele
 those creatures' animations and AI:
 - the Lich, `Necromancer_Lich` (template `c4e1a7d2-6b3f-4d8e-9a10-5f2b7c3d9e02`), on the skeleton mage;
 - the Bone Golem, `Necromancer_BoneGolem` (template `e7b3c9d1-2a4f-4e6b-8c15-9d2f4a6b8e02`), on the Vukah elite
-  (`Enemy_Vukah_Melee_Elite_Armored`), as tall as it (3 m).
+  (`Enemy_Vukah_Melee_Elite_Armored`), as tall as it (3 m);
+- the Bone Wolf, `Necromancer_BoneWolf` (template `a6cec2a9-fc9e-4e40-8ea5-bef4aa716603`), on the game wolf
+  (`Enemy_Wildbeast_wolf_earlygame`): a copy of the wolf's skeleton fitted to the bone wolf's own proportions, with
+  the wolf's animations made for it.
 
 It is in the **EMF creature packs** download on EMF's Nexus page. Install it with EMF.exe ("Install a downloaded
 file") or put its folder in the `mods` folder next to the game; EMF builds it when the game starts (it is EML content:
 EML or ShroudForge can apply it too).
 The lich's template sets
-the damage (DamageMod multiplier x1.3); its health (x1.5) comes from Necromancer when it raises a lich, and the golem's
-(x2) when it raises a golem.
+the damage (DamageMod multiplier x1.3); its health (x1.5) comes from Necromancer when it raises a lich, the golem's
+(x2) when it raises a golem and the bone wolf's (x1.5) when it raises a bone wolf.
 
-Without the pack (or when its content was not built), Raise Lich and Raise Bone Golem say that they come with the
+Without the pack (or when its content was not built), Raise Lich, Raise Bone Golem and Raise Bone Wolf say that they come with the
 EMF creature packs and how to install them, and nothing else changes. Undead saved in a world stay saved while the pack is missing
 (one note when you load) and come back once it loads.
 
 To rebuild it from its sources (for modders; the sources are not in the repository): `python -I
 tools/models/make_mod.py tools/models/packs/necromancer_undead.json`. The pack holds the new model and its texture, plus
-instructions that copy and change the game's skeleton mage and Vukah elite at load time; no game files are copied into it.
+instructions that copy and change the game's skeleton mage, Vukah elite and wolf at load time; no game files are copied into it.
 
 ## Good to know
 
@@ -121,8 +129,8 @@ instructions that copy and change the game's skeleton mage and Vukah elite at lo
   needs it:** the host (or the server) and every player who joins, because it changes the game's data (an EML patch).
   The wheel and the line on screen are the host's.
 - The bodies are the game's own: skeleton warriors (`Enemy_Skeleton_Melee01`) made your allies, and the flying skull
-  the game's skull summons use (`Player_Companion_FlyingSkull`); the lich and the golem are the undead pack's.
+  the game's skull summons use (`Player_Companion_FlyingSkull`); the lich, the golem and the bone wolf are the undead pack's.
 - Your undead are taken out of the world while their owner is away, and come back when they return.
 - Old saves (version 1.0) load as they were: their skeletons come back as skeleton warriors.
 - Raising and casting work with the wheel or the chat command; there are no spell items for them. The undead you can
-  raise are the skeleton warrior, the lich and the bone golem.
+  raise are the skeleton warrior, the lich, the bone golem and the bone wolf.

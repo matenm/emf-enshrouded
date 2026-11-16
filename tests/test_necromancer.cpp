@@ -641,10 +641,10 @@ TEST_CASE("necromancer: without the undead pack the lich is refused with a note,
     CHECK(n.reply("necromancer.list").find("Liches 1/1") != std::string::npos);  // kept: it comes back with the pack
 }
 
-TEST_CASE("necromancer: a lich or golem that cannot rise says it comes with the EMF creature packs and how to install them") {
+TEST_CASE("necromancer: a lich, golem or bone wolf that cannot rise says it comes with the EMF creature packs and how to install them") {
     NecroRig n;
     n.r.fake.spawn_fails = true;  // no lich in this game: no pack, or its content was not built
-    for (const char* kind : {"lich", "golem"}) {
+    for (const char* kind : {"lich", "golem", "wolf"}) {
         const std::string raise = n.reply(std::string("necromancer.raise ") + kind);
         CHECK_MESSAGE(raise.find("EMF creature packs") != std::string::npos, raise);
         CHECK_MESSAGE(raise.find("Install them with EMF.exe") != std::string::npos, raise);
@@ -716,6 +716,34 @@ TEST_CASE("necromancer: a bone golem keeps 2x the game's base health") {
     h.dataStorage[2] = 120;
     n.seconds(1);
     CHECK(h.dataStorage[3] == 120);  // 120 + 120 = 2 x 120
+}
+
+// ---- kinds (the undead pack): the Bone Wolf ----
+namespace {
+constexpr const char* kBoneWolf = "a6cec2a9-fc9e-4e40-8ea5-bef4aa716603";
+}
+
+TEST_CASE("necromancer: a bone wolf is its own kind (cap 2, 35 % mana, 1.5x health), raised by name, saved and on the wheel") {
+    NecroRig n;
+    n.spawnable(4);
+    CHECK(n.reply("necromancer.raise wolf").find("A bone wolf rises (1/2)") != std::string::npos);
+    REQUIRE(n.r.fake.spawns.size() == 1);
+    CHECK(guid_of(n.r.fake.spawns[0].guid) == kBoneWolf);
+    CHECK(n.added(1, EMF_ATTR_MANA, -35));
+    CHECK(n.faction(1234) == kAlly);
+    auto& h = component<ecs::Health>(n.r.fake, 1234);
+    h.dataStorage[2] = 60;
+    n.seconds(1);
+    CHECK(h.dataStorage[3] == 30);  // 60 + 30 = 1.5 x 60
+    CHECK(n.reply("necromancer raise bone wolf").find("A bone wolf rises (2/2)") != std::string::npos);  // two words
+    n.seconds(1);
+    CHECK(n.reply("necromancer raise bone wolves").find("at most 2") != std::string::npos);
+    CHECK(n.reply("necromancer.list").find("Bone Wolves 2/2") != std::string::npos);
+    n.seconds(2);
+    CHECK(n.saved().find("k 0x00000000000000aa wolf 2") != std::string::npos);
+    press_key(n, VK_F2);
+    REQUIRE(n.r.fake.wheels.size() == 1);
+    CHECK(item_at(n.r.fake.wheels[0].items, "Raise Bone Wolf (2/2)") >= 0);
 }
 
 // ---- stepping aside: the game keeps a no-build zone around every creature with the enemy AI (add_no_buildzones_enemy),

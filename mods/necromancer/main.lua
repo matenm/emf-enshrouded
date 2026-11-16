@@ -1,5 +1,5 @@
--- Necromancer: raise skeleton warriors (and, with the undead pack, a lich) that stay and follow you; cast raging spirits
--- that rush your foe.
+-- Necromancer: raise skeleton warriors (and, with the undead pack, a lich, a bone golem and bone wolves) that stay and
+-- follow you; cast raging spirits that rush your foe.
 -- Tests: tests/test_necromancer.cpp.
 local minions_mod = require("minions")
 local spirits_mod = require("spirits")
@@ -10,6 +10,7 @@ emf.emits({ "StartGuardingEvent", "AddThreatTargetEvent" })
 local SKELETON = "b3e66f3b-7b13-4fa0-a68c-d2a41d8c84d9"  -- Enemy_Skeleton_Melee01, made an ally
 local LICH = "c4e1a7d2-6b3f-4d8e-9a10-5f2b7c3d9e02"      -- Necromancer_Lich (emf_necromancer_undead: a skeleton mage copy)
 local GOLEM = "e7b3c9d1-2a4f-4e6b-8c15-9d2f4a6b8e02"     -- Necromancer_BoneGolem (the undead pack: a heavy skeleton copy)
+local BONE_WOLF = "a6cec2a9-fc9e-4e40-8ea5-bef4aa716603" -- Necromancer_BoneWolf (the undead pack: a wolf copy)
 local SPIRIT = "442ac9a3-ea47-4129-878d-73659f94f9d4"    -- Player_Companion_FlyingSkull
 local SPIRIT_AIM_M, SPIRIT_NEAR_M = 30, 12
 local ATTACK_RANGE_M, HIT_MEMORY_S = 40, 10
@@ -43,6 +44,8 @@ local KINDS = {
 	  mana = "lich_mana_pct", health_mul = 1.5, pack = "the Necromancer undead pack" },
 	{ id = "golem", name = "bone golem", title = "Bone Golem", plural = "Bone Golems", template = GOLEM,
 	  cap = "golem_cap", mana = "golem_mana_pct", health_mul = 2, pack = "the Necromancer undead pack" },
+	{ id = "wolf", name = "bone wolf", title = "Bone Wolf", plural = "Bone Wolves", template = BONE_WOLF,
+	  cap = "wolf_cap", mana = "wolf_mana_pct", health_mul = 1.5, pack = "the Necromancer undead pack" },
 }
 
 minions = minions_mod.new({ setting = setting, now = now, tell = tell, save = save, kinds = KINDS })
@@ -176,8 +179,8 @@ local function command(word, help, action)
 	word_list[#word_list + 1] = word
 end
 
-command("raise", "[skeleton|lich|golem]: raise a skeleton warrior (or, with the undead pack, a lich or a bone golem) "
-	.. "beside you (mana)", actions.raise)
+command("raise", "[skeleton|lich|golem|wolf]: raise a skeleton warrior (or, with the undead pack, a lich, a bone golem "
+	.. "or a bone wolf) beside you (mana)", actions.raise)
 command("spirits", ": raging spirits rush the creature you look at, or the nearest foe (mana)", actions.spirits)
 command("list", ": your undead", actions.list)
 command("gather", ": your undead come to you (also after aside)", actions.gather)
@@ -187,7 +190,7 @@ command("aside", ": your undead step aside (leave for now) or come back; while y
 		if not account then return "Your account is not known yet." end
 		return minions:toggle_aside(world, account, player)
 	end)
-command("dismiss", "[skeleton|lich|golem|all]: one undead of that kind returns to the ground (the newest); nothing or "
+command("dismiss", "[skeleton|lich|golem|wolf|all]: one undead of that kind returns to the ground (the newest); nothing or "
 	.. "all: every one", actions.dismiss)
 
 emf.command(emf.id, "<word>: " .. table.concat(word_list, ", "), function(world, args)

@@ -61,8 +61,8 @@ Included mods:
                  creature packs download, which EMF builds when the game starts; see
                  game\emf\mods\beastmaster\README.md)
   necromancer    raise skeleton warriors and cast raging spirits; hold F2 for the summoning wheel (shared with
-                 Beastmaster), /necromancer for every player (a Lua mod; OFF by default; the lich and the bone golem
-                 are in the EMF creature packs download, which EMF builds when the game starts; see
+                 Beastmaster), /necromancer for every player (a Lua mod; OFF by default; the lich, the bone golem
+                 and the bone wolf are in the EMF creature packs download, which EMF builds when the game starts; see
                  game\emf\mods\necromancer\README.md)
 
 Other mods and loaders (Creative Mode, Auto Loot Plus, XHL mods, EML, ShroudForge, Shroudweave, ...) keep working:
