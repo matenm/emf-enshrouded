@@ -364,6 +364,12 @@ void cmd_markers_test(EmfWorld*, int argc, const char* const* argv, void*) {
         command_reply_line("markers.test: " + why);
 }
 
+void cmd_screen(EmfWorld*, int, const char* const*, void*) {
+    const CoreState* s = core_state();
+    command_reply_line(game_screen_line(game_screen().screen(GetTickCount64()), game_screen().offset(),
+                                        s && s->exe.server));
+}
+
 }  // namespace
 
 bool add_marker_commands(CommandCenter& commands) {
@@ -374,6 +380,10 @@ bool add_marker_commands(CommandCenter& commands) {
                            cmd_markers, nullptr, nullptr, true);
     ok &= commands.add("markers.test", " [text] [game icon type, hex] | clear: a marker 10 m ahead of you", cmd_markers_test,
                        nullptr, nullptr, true);
+    ok &= commands.add("screen",
+                       ": which game screen is open (the game's chat, a menu, play) and whether mods' keys read as up "
+                       "(they do while the game's chat or rename box is open)",
+                       cmd_screen, nullptr, nullptr, true);
     return ok;
 }
 

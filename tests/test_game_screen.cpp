@@ -107,3 +107,18 @@ TEST_CASE("hud_screen_offset_at: the offset from the signature's bytes, only whe
     CHECK(hud_screen_offset_at(code) == 0u);
     CHECK(hud_screen_offset_at(nullptr) == 0u);
 }
+
+TEST_CASE("game_screen_line: the screen by the game's own name, and whether mods' keys read as up") {
+    CHECK(game_screen_line(kScreenTextChat, 0x1cd8, false) ==
+          "screen: 43 TextChat: mods' keys read as up (the game's text box has them)");
+    CHECK(game_screen_line(kScreenRename, 0x1cd8, false) ==
+          "screen: 47 Rename: mods' keys read as up (the game's text box has them)");
+    CHECK(game_screen_line(kScreenInGame, 0x1cd8, false) == "screen: 1 InGame: mods' keys as usual");
+    CHECK(game_screen_line(9, 0x1cd8, false) == "screen: 9 Backpack: mods' keys as usual");
+    CHECK(game_screen_line(53, 0x1cd8, false) == "screen: 53 YcPlayground: mods' keys as usual");
+    CHECK(game_screen_line(200, 0x1cd8, false) == "screen: 200: mods' keys as usual");
+    CHECK(game_screen_line(std::nullopt, 0x1cd8, false) == "screen: not known (no game world on this client right now)");
+    CHECK(game_screen_line(std::nullopt, 0, false) ==
+          "screen: not known: the chat key gate is off (the HudScreenRead signature is not usable on this game build)");
+    CHECK(game_screen_line(std::nullopt, 0, true) == "screen: the dedicated server has no game screen");
+}

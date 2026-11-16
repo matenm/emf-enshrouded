@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdint>
 #include <optional>
+#include <string>
 
 namespace emf::core {
 
@@ -50,6 +51,9 @@ private:
 // The HUD screen byte's offset in UiPlayData from the HudScreenRead match (the u32 at +4), or 0 when the match's compare
 // (+11) is not with TextChat or the offset is not plausible.
 uint32_t hud_screen_offset_at(const uint8_t* match);
+
+// The console's `screen` line: the screen with the game's name for it, and whether mods' keys read as up.
+std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, bool server);
 
 GameScreen& game_screen();
 TypingKeyGate& typing_gate();

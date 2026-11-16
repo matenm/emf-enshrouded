@@ -346,3 +346,18 @@ TEST_CASE("client tick: the game's HUD screen byte is read from UiPlayData at th
     CHECK(*game_screen().screen(GetTickCount64()) == kScreenTextChat);
     game_screen().seen(kScreenInGame, GetTickCount64());  // leave no typing state for later tests
 }
+
+TEST_CASE("screen: the console says which game screen is open and whether mods' keys read as up, on any game") {
+    Fixture f;
+    CommandCenter center;
+    REQUIRE(add_marker_commands(center));
+    std::vector<std::string> replies;
+    game_screen().set_offset(0x1cd8);
+    game_screen().seen(kScreenTextChat, GetTickCount64());
+    center.run_without_world("screen", [&](const std::string& l) { replies.push_back(l); }, "this is someone else's game");
+    game_screen().seen(kScreenInGame, GetTickCount64());
+    game_screen().set_offset(0);
+    bool said = false;
+    for (const auto& l : replies) said |= l == "screen: 43 TextChat: mods' keys read as up (the game's text box has them)";
+    CHECK(said);
+}

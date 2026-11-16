@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include <cstring>
+#include <iterator>
 
 #include "common/seh.h"
 
@@ -62,6 +63,28 @@ uint32_t hud_screen_offset_at(const uint8_t* match) {
     uint32_t off = 0;
     std::memcpy(&off, code + 4, sizeof off);
     return off > 0 && off < 0x10000 ? off : 0;  // UiPlayData is some KB, not more
+}
+
+std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, bool server) {
+    // keen::HudScreenType as the game reflects it
+    static const char* const kNames[] = {
+        "Invalid", "InGame", "SystemMenu", "SettingsMenu", "InGameMenu", "Map", "Journal", "Character", "PlayerCrafting",
+        "Backpack", "SkillTree", "SkillTreeRespec", "FlameAltar", "AltarUpgrade", "FlameUpgrade", "AltarDeactivate",
+        "AltarReskill", "AltarItemPickup", "LoreReading", "Signpost", "LogicEditor", "ReadOnlyLootChest", "StorageChest",
+        "Collection", "FeedingStation", "StationBasedCrafting", "NpcDialog", "NpcCrafting", "FactoryCrafting",
+        "BlueprintMultiTool", "BlueprintMultiToolMaterialCatalog", "OvergrowthMultiTool", "DecayMultiTool",
+        "ScrewdriverMultiToolBuildingMode", "ScrewdriverMultiToolGraphManager", "ScrewdriverMultiToolEntityConfig",
+        "TerraformingSideMenu", "NpcSummonerMenu", "UserFeedback", "TwitchDrops", "RedeemCommerceProducts",
+        "CommerceProductChest", "ItemTinting", "TextChat", "Social", "ShroudForge", "CharacterCustomization", "Rename",
+        "TakeScreenshot", "InfoPopup", "NewCommerceUnlock", "NoUi", "TechGallery", "YcPlayground"};
+    if (server) return "screen: the dedicated server has no game screen";
+    if (!offset)
+        return "screen: not known: the chat key gate is off (the HudScreenRead signature is not usable on this game build)";
+    if (!screen) return "screen: not known (no game world on this client right now)";
+    std::string line = "screen: " + std::to_string(*screen);
+    if (*screen < std::size(kNames)) line += std::string(" ") + kNames[*screen];
+    return line + (screen_takes_text(*screen) ? ": mods' keys read as up (the game's text box has them)"
+                                              : ": mods' keys as usual");
 }
 
 GameScreen& game_screen() {
