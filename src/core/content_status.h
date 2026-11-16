@@ -1,7 +1,9 @@
 #pragma once
 // What the core tells the player about EML content at this start, from what the loader told it in the environment
 // variable EMF_CONTENT_STATUS (src/loader/content_status_env.h; docs/engine_parts/content_loader.md):
-//   built / current   one line in the console ("EML content: 3 mods (built in 28 s)")
+//   built / current   one line in the console ("EML content: 3 mods (built in 28 s)"); when the message holds a mod's
+//                     warning (a creature pack that could not add a creature), it goes into that line and on screen
+//                     once a world loads
 //   failed            a line in the console and on screen once a world loads, and a save backup before that world
 //                     (mod items vanish when a world loads without their mod): the backup ignores min_minutes
 //   off               only with [content] mode=on (the loader sends it only then): why, in the console
@@ -39,10 +41,17 @@ inline ContentLines content_lines(const std::optional<emf::loader::ContentStatus
     ContentLines l;
     if (!s) return l;
     const std::string mods = std::to_string(s->mods) + (s->mods == 1 ? " mod" : " mods");
-    if (s->kind == "built") {
-        l.console = "EML content: " + mods + " (built in " + content_seconds(s->ms) + ")";
-    } else if (s->kind == "current") {
-        l.console = "EML content: " + mods + " (unchanged since the last build)";
+    if (s->kind == "built" || s->kind == "current") {
+        l.console = "EML content: " + mods +
+                    (s->kind == "built" ? " (built in " + content_seconds(s->ms) + ")" : " (unchanged since the last build)");
+        // a good build whose mods warned (a creature pack that could not add a creature): its message says which
+        if (!s->message.empty()) {
+            std::string what = s->message;
+            while (!what.empty() && (what.back() == '.' || what.back() == ' ')) what.pop_back();
+            l.console += "; a mod reported a problem: " + what;
+            l.notice = "An EML mod reported a problem while its content was built: " + what +
+                       ". The rest of the content is in; emf\\content.log has every line.";
+        }
     } else if (s->kind == "failed" || s->kind == "failed_again") {
         std::string why = s->message.empty() ? std::string("an unknown error") : s->message;
         // a Lua error from EML: the mod and its message, not the stack traceback players cannot use (content.log

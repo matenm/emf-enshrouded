@@ -60,6 +60,20 @@ TEST_CASE("content status: current line") {
     CHECK_FALSE(l.backup);
 }
 
+// A creature pack caught its own failure: the build was good, but the bear was not added. The player hears of it.
+TEST_CASE("content status: a good build whose mods warned: the console line and a notice say which and what") {
+    auto l = content_lines(status("built", 3, 28000, "emf_beastmaster_bear: Bear: not added: out of references"), true);
+    CHECK(l.console == "EML content: 3 mods (built in 28 s); a mod reported a problem: emf_beastmaster_bear: Bear: not "
+                       "added: out of references");
+    CHECK(l.notice == "An EML mod reported a problem while its content was built: emf_beastmaster_bear: Bear: not added: "
+                      "out of references. The rest of the content is in; emf\\content.log has every line.");
+    CHECK_FALSE(l.backup);  // nothing to save the world from: the content is in
+    l = content_lines(status("current", 3, 28000, "a: b (and 1 more)"), true);
+    CHECK(l.console == "EML content: 3 mods (unchanged since the last build); a mod reported a problem: a: b (and 1 more)");
+    CHECK(l.notice == "An EML mod reported a problem while its content was built: a: b (and 1 more). The rest of the "
+                      "content is in; emf\\content.log has every line.");
+}
+
 TEST_CASE("content status: off line") {
     // the loader says "off" only with [content] mode=on; without a status (mode=auto, no emf_content.dll) nothing
     auto l = content_lines(status("off", 0, 0, "off (emf_content.dll is not installed)"), true);
