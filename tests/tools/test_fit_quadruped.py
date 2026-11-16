@@ -146,6 +146,34 @@ class FitQuadrupedTests(unittest.TestCase):
             self.assertLess(float(rump), 0.05)
             self.assertGreater(float(tail), 0.8)  # the tail's first 15% blends from the hips
 
+    def test_sides_keep_each_leg_on_its_own_side_of_the_centre_line(self):
+        """--sides: a bar between the hind legs (a skeleton's pelvis) hangs on the pelvis on the centre line instead of
+        on a leg, no vertex carries weight from a leg on the other side, and the lower legs still walk on the leg
+        bones."""
+        with tempfile.TemporaryDirectory() as d:
+            fig, plain, sided = (os.path.join(d, n) for n in ("animal.glb", "plain.glb", "sided.glb"))
+            self.assertEqual(blender("make_test_quadruped.py", fig, "--hind-bar")[0], 0)
+            self.assertEqual(blender("fit_to_game_skeleton.py", BOAR, fig, plain)[0], 0)
+            code, log = blender("fit_to_game_skeleton.py", BOAR, fig, sided, "--sides")
+            self.assertEqual(code, 0, log[-2000:])
+            self.assertIn("FIT sides:", log)
+            self.assertGreater(sides(plain)[1], 0.05)  # without: the bar's middle hangs on the legs
+            cross, mid = sides(sided)
+            self.assertLess(cross, 1e-3)
+            self.assertLess(mid, 1e-3)
+            self.assertGreater(weights(sided)[2], 0.5)
+
+
+def sides(fitted):
+    """(cross, mid): the most weight a vertex carries from the boar's legs on the other side of the centre line, and
+    from any leg on the centre line."""
+    code, log = blender(os.path.join(HERE, "blender_side_weights.py"), fitted, *LEG_ROOTS)
+    if code != 0:
+        raise AssertionError(log[-2000:])
+    found = {parts[0]: float(parts[1]) for parts in (line.split() for line in log.splitlines())
+             if len(parts) == 2 and parts[0] in ("CROSS", "MID")}
+    return found["CROSS"], found["MID"]
+
 
 def bbox(path):
     code, log = blender(os.path.join(HERE, "blender_bbox.py"), path)

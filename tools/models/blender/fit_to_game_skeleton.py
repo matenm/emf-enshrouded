@@ -3,6 +3,7 @@
   blender --background --factory-startup --python fit_to_game_skeleton.py -- \
       <game.glb> <creature.glb> <out.glb> [--uv-from 1] [--material 1] [--size 1.0] [--vertex-colors]
       [--width fit|keep|<scale>] [--tail own|hips|fit] [--own-proportions <sidecar.json>] [--rigid <bone>,...]
+      [--sides]
 
 Steps:
  1. Import the game model (armature with jNNN bones + its body meshes) and the creature (any rig; it is dropped).
@@ -23,6 +24,9 @@ Steps:
     --own-proportions) moves the game's tail bones along the creature's own tail, keeping their spacing, and weights
     the tail along its length (a long or curled tail on a short tail's bones). --rigid <bone>,... puts
     everything below those bones on them (a cat's paw on the wrist, not on the game creature's clawed fingers).
+    --sides keeps each leg's weight on its own side of the centre line, fading out towards it, the rest going to the
+    spine bone the leg hangs from (../quad_landmarks.py side_weights): thin parts between two legs (a skeleton's
+    pelvis and ribs) follow the body instead of tearing apart when the legs swing opposite ways.
  4. --own-proportions <sidecar.json>: the creature keeps its own shape. After the weights it goes back to its
     original proportions (uniformly scaled to the game body's height, times --size), and the sidecar lists every game
     joint moved into that shape by the inverse of the fit (../quad_landmarks.py unwarp, own_space): positions in this
@@ -40,8 +44,9 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from quad_landmarks import (clean_detail_weights, fit_z, kept_head_bones, landmarks, main_bones,  # noqa: E402
-                            own_space, rigid_weights, tail_slices, unwarp, warp_y, width_scale)
+from quad_landmarks import (clean_detail_weights, fit_z, kept_head_bones, landmarks, leg_chains,  # noqa: E402
+                            main_bones, own_space, rigid_weights, side_weights, tail_slices, unwarp, warp_y,
+                            width_scale)
 from quad_landmarks import along, tail_chain_weights, tail_curve, tail_distances  # noqa: E402
 
 argv = sys.argv[sys.argv.index("--") + 1:]
@@ -76,6 +81,7 @@ if own_path and keep_head:  # the mesh returns to its own shape anyway; the head
     keep_head = False
     print("FIT note: --keep-head is not used with --own-proportions (the head lines up with the game's head for the "
           "weights, and the game's neck and head bones move into the creature's head)")
+sides = bool(opt("--sides", False))  # each leg's weight only on its own side of the centre line
 width_mode = opt("--width", "fit")  # fit (the game body's width), keep (the creature's proportions) or a scale
 if width_mode is True:
     raise SystemExit("fit_to_game_skeleton: --width needs fit, keep or a number")
@@ -252,6 +258,8 @@ if tail_mode == "fit" and not own_path:
     raise SystemExit("fit_to_game_skeleton: --tail fit needs --own-proportions (the game skeleton itself cannot move)")
 if tail_mode == "fit" and head_b is None:
     raise SystemExit("fit_to_game_skeleton: --tail fit needs a _Head bone on the game skeleton (to find its spine)")
+if sides and head_b is None:
+    raise SystemExit("fit_to_game_skeleton: --sides needs a _Head bone on the game skeleton (to find its legs)")
 if head_b is not None:
     try:
         main = main_bones({b.name: (b.parent.name if b.parent else None) for b in bones},
@@ -331,6 +339,29 @@ if head_b is not None:
                 body.vertex_groups[n].add([vi], w, "REPLACE")
         print("FIT tail fit: %d game tail bones (%s..%s) along the creature's tail, %d of %d tail vertices reached"
               % (len(chain), chain[0].name, chain[-1].name, len(dist), sum(in_tail)))
+
+    # --sides: each leg's weight only on its own side of the centre line (the x of the spine bone it hangs from)
+    if sides:
+        chains = leg_chains({b.name: (b.parent.name if b.parent else None) for b in bones},
+                            {b.name: (arm.matrix_world @ b.head_local).z for b in bones}, head_b.name)
+        legs = [(chain_bones, (arm.matrix_world @ bones[root].head_local).x,
+                 (arm.matrix_world @ bones[parent].head_local).x, parent) for root, parent, chain_bones in chains]
+        names = {g_.index: g_.name for g_ in body.vertex_groups}
+        weights = [{names[g_.group]: g_.weight for g_ in v.groups if g_.weight > 0} for v in body.data.vertices]
+        new_weights = side_weights(weights, [(body.matrix_world @ v.co).x for v in body.data.vertices], legs)
+        changed = 0
+        for v, old, new in zip(body.data.vertices, weights, new_weights):
+            if new == old:
+                continue
+            changed += 1
+            for n in old:
+                body.vertex_groups[n].remove([v.index])
+            for n, w in new.items():
+                if n not in body.vertex_groups:
+                    body.vertex_groups.new(name=n)
+                body.vertex_groups[n].add([v.index], w, "REPLACE")
+        print("FIT sides: legs %s on their own side, vertices changed %d"
+              % (", ".join("%s (from %s)" % (root, parent) for root, parent, _ in chains), changed))
 
 # --rigid: everything below the named bones moves onto them (a paw follows the wrist, not the game creature's fingers)
 if rigid:

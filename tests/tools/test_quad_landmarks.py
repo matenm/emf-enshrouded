@@ -370,6 +370,49 @@ class MainBoneTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.main(table, "head")
 
+    def test_the_four_legs_come_with_the_spine_bone_they_hang_from(self):
+        legs = ql.leg_chains({n: p or None for n, (p, _) in BOAR.items()}, {n: z for n, (_, z) in BOAR.items()},
+                             "j010_Head")
+        self.assertEqual(sorted((root, parent) for root, parent, _ in legs),
+                         [("j032", "j005_Chest"), ("j037", "j005_Chest"), ("j048", "j001_Pelvis"),
+                          ("j052", "j001_Pelvis")])
+        self.assertEqual(next(bones for root, _, bones in legs if root == "j048"), {"j048", "j049", "j050", "j051"})
+
+
+class SideTests(unittest.TestCase):
+    """--sides: a vertex hangs on a leg only on that leg's side of the body's centre line (a skeleton's pelvis between
+    the hind legs follows the pelvis instead of tearing apart when the legs swing opposite ways)."""
+    # (bones, x of the leg's root, x of the bone it hangs from, that bone): left (+x) and right hind legs
+    LEGS = [({"thigh_l", "shin_l"}, 0.10, 0.0, "pelvis"), ({"thigh_r", "shin_r"}, -0.10, 0.0, "pelvis")]
+
+    def sides(self, ws, x):
+        return ql.side_weights([ws], [x], self.LEGS)[0]
+
+    def assertWeights(self, got, want):
+        self.assertEqual(set(got), set(want))
+        for b, w in want.items():
+            self.assertAlmostEqual(got[b], w)
+
+    def test_a_vertex_on_the_centre_line_hangs_on_the_pelvis(self):
+        self.assertWeights(self.sides({"thigh_l": 0.6, "thigh_r": 0.4}, 0.0), {"pelvis": 1.0})
+
+    def test_a_vertex_on_its_legs_side_keeps_the_leg(self):
+        self.assertWeights(self.sides({"thigh_l": 0.8, "pelvis": 0.2}, 0.12), {"thigh_l": 0.8, "pelvis": 0.2})
+
+    def test_the_other_legs_weight_goes_to_the_pelvis(self):
+        self.assertWeights(self.sides({"thigh_l": 0.7, "thigh_r": 0.3}, 0.12), {"thigh_l": 0.7, "pelvis": 0.3})
+
+    def test_the_leg_fades_out_towards_the_centre_line(self):
+        # the fade runs over half the way from the centre line to the leg's root: 0..0.05 here
+        self.assertWeights(self.sides({"shin_r": 1.0}, -0.025), {"shin_r": 0.5, "pelvis": 0.5})
+
+    def test_bones_off_the_legs_are_untouched(self):
+        self.assertWeights(self.sides({"tail": 0.5, "spine": 0.5}, 0.0), {"tail": 0.5, "spine": 0.5})
+
+    def test_a_leg_on_the_centre_line_has_no_side_and_is_untouched(self):
+        legs = [({"mid"}, 0.0, 0.0, "pelvis")]
+        self.assertEqual(ql.side_weights([{"mid": 1.0}], [0.3], legs), [{"mid": 1.0}])
+
 
 if __name__ == "__main__":
     unittest.main()

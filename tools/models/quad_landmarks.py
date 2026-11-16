@@ -165,12 +165,20 @@ def tail_slices(points, g):
     return {k for k in fill if k * STEP > start and (fill[k] < THIN_FILL * ref or reach[k] < THIN_REACH * width)}
 
 
-def main_bones(parents, z, head):
-    """The bones that keep their copied weights: the spine (`head` and every bone above it) and the four legs, the
-    four branches off the spine (outside the head) that reach lowest in the rest pose, with every bone in them. Game
+def _spine(parents, head):
+    spine, b = set(), head
+    while b is not None:
+        spine.add(b)
+        b = parents.get(b)
+    return spine
+
+
+def leg_chains(parents, z, head):
+    """The four legs: the four branches off the spine (outside the head) that reach lowest in the rest pose. Game
     skeletons do not name every leg (the boar's leg bones have numbers only), but feet are always far lower than a
-    tail or a helper bone. `parents`: bone -> parent (None at the root); `z`: bone -> its rest-pose height.
-    Raises ValueError when fewer than four branches leave the spine."""
+    tail or a helper bone. `parents`: bone -> parent (None at the root); `z`: bone -> its rest-pose height. Returns
+    [(root, the spine bone it hangs from, every bone in the leg)]. Raises ValueError when fewer than four branches
+    leave the spine."""
     children = {}
     for b, p in parents.items():
         children.setdefault(p, []).append(b)
@@ -181,15 +189,50 @@ def main_bones(parents, z, head):
             out |= subtree(c)
         return out
 
-    spine, b = set(), head
-    while b is not None:
-        spine.add(b)
-        b = parents.get(b)
-    branches = [subtree(c) for s in spine - {head} for c in children.get(s, []) if c not in spine]
+    spine = _spine(parents, head)
+    branches = [(c, s, subtree(c)) for s in spine - {head} for c in children.get(s, []) if c not in spine]
     if len(branches) < 4:
         raise ValueError("%d branches leave the spine, a four-legged skeleton has at least 4" % len(branches))
-    legs = sorted(branches, key=lambda br: min(z[x] for x in br))[:4]
-    return spine.union(*legs)
+    return sorted(branches, key=lambda br: min(z[x] for x in br[2]))[:4]
+
+
+def main_bones(parents, z, head):
+    """The bones that keep their copied weights: the spine (`head` and every bone above it) and the four legs
+    (leg_chains), with every bone in them. Raises ValueError when fewer than four branches leave the spine."""
+    return _spine(parents, head).union(*(bones for _, _, bones in leg_chains(parents, z, head)))
+
+
+SIDE_FADE = 0.5  # --sides: a leg's weight fades out over this share of the way from the centre line to its root
+
+
+def side_weights(weights, xs, legs):
+    """A vertex hangs on a leg only on that leg's side of the centre line, and the leg's weight fades out towards the
+    line over SIDE_FADE of the way from it to the leg's root; what a leg loses goes to the bone the leg hangs from.
+    Thin parts between two legs (a skeleton's pelvis, a web of sinew) then follow the body instead of tearing apart when
+    the legs swing opposite ways. `weights`: per vertex {bone: weight}; `xs`: per vertex its x; `legs`: [(the leg's
+    bones, x of its root, x of the bone it hangs from (the centre line), that bone)]; a leg whose root is on the centre
+    line has no side and stays as it is. Returns new per-vertex dicts."""
+    sided = []
+    for bones, root_x, centre_x, parent in legs:
+        span = (root_x - centre_x) * SIDE_FADE
+        if abs(span) > 1e-9:
+            sided.append((bones, centre_x, span, parent))
+    out = []
+    for ws, x in zip(weights, xs):
+        new = dict(ws)
+        for bones, centre_x, span, parent in sided:
+            keep = min(1.0, max(0.0, (x - centre_x) / span))
+            if keep >= 1.0:
+                continue
+            for b in bones & set(new):
+                moved = new[b] * (1.0 - keep)
+                if keep > 0.0:
+                    new[b] -= moved
+                else:
+                    del new[b]
+                new[parent] = new.get(parent, 0.0) + moved
+        out.append(new)
+    return out
 
 
 def kept_head_bones(use, total):
