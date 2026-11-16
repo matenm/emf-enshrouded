@@ -894,7 +894,7 @@ mod tests {
         let mut lines: Vec<(i32, String)> = Vec::new();
         let logger = Logger::new(Some(collect), &mut lines as *mut _ as *mut c_void);
         let ((), warnings) = with_log_collecting(logger, || {
-            let mod_id = "emf_beastmaster_bear";
+            let mod_id = String::from("emf_beastmaster_bear");  // as EML has it
             tracing::warn_span!(target: "eml::lua", "lua", mod_id).in_scope(|| {
                 tracing::warn!(target: "eml::lua", "emf_beastmaster_bear:\tBear: not added: out of references");
             });
