@@ -23,6 +23,8 @@
 #include "emf/storage.hpp"
 #include "magnet_glue.h"
 #include "magnet_logic.h"
+#include "sweep_glue.h"
+#include "sweep_logic.h"
 
 namespace gen = emf::gen::ecs;
 
@@ -33,6 +35,7 @@ constexpr double kFixed = 4294967296.0;
 // ---- settings (the change callback may run on any world's thread) ----
 struct Config {
     magnet::Rules rules;
+    sweep::SweepRules sweep;  // 2.0: what else near a player comes to them (ground items, plants, chests, smashing)
     bool default_on = true;
     std::string key;         // the host's toggle key ("" = none)
     bool debug_log = true;   // one log line per death noted and per corpse decided
@@ -68,13 +71,33 @@ void read_settings() {
     c.default_on = emf::setting_bool(kMod, "default_on", true);
     c.key = emf::setting_text(kMod, "toggle_key", "");
     c.debug_log = emf::setting_bool(kMod, "debug_log", true);
+    // the sweep's groups: a switch and a reach each (0 = the general reach)
+    const auto group = [](const char* key, bool def) {
+        sweep::Group g;
+        g.on = emf::setting_bool(kMod, key, def);
+        g.reach = emf::setting_float(kMod, (std::string(key) + "_reach").c_str(), 0.0);
+        return g;
+    };
+    auto& gr = c.sweep.groups;
+    gr[static_cast<size_t>(sweep::Kind::Ground)] = group("pick_ground", true);
+    gr[static_cast<size_t>(sweep::Kind::Collectible)] = group("pick_collectibles", true);
+    gr[static_cast<size_t>(sweep::Kind::Mushroom)] = group("pick_mushrooms", false);
+    gr[static_cast<size_t>(sweep::Kind::Firefly)] = group("pick_fireflies", false);
+    gr[static_cast<size_t>(sweep::Kind::Plant)] = group("pick_plants", false);
+    gr[static_cast<size_t>(sweep::Kind::Chest)] = group("open_chests", false);
+    gr[static_cast<size_t>(sweep::Kind::Smash)] = group("smash", false);
+    c.sweep.reach = c.rules.radius;
+    c.sweep.base_radius = c.rules.base_radius;
+    c.sweep.ignore = sweep::Ignore::parse(emf::setting_text(kMod, "ignore", ""));
     std::lock_guard<std::mutex> l(g_config_lock);
     g_config = c;
 }
 
-// ---- loot events for the program (server tick -> a game worker thread) ----
+// ---- loot events (and a chest's accept) for the program (server tick -> a game worker thread) ----
 struct Request {
     uint32_t guest, host, session;
+    bool accept = false;    // the game's accept of the chest's offer (it rolls the loot), not the loot event
+    uint32_t offer_id = 0;  // the offer it accepts
 };
 std::mutex g_requests_lock;
 std::vector<Request> g_requests;
@@ -86,9 +109,14 @@ void magnet_program(void* ctx) {
         mine.swap(g_requests);
     }
     const uint32_t session = emf::server_session();
-    for (const auto& r : mine)
-        if (r.session == session)
-            if (auto* e = emf::emit<gen::LootInteractionEvent>(ctx)) magnet::fill_loot_event(*e, r.guest, r.host);
+    for (const auto& r : mine) {
+        if (r.session != session) continue;
+        if (r.accept) {
+            if (auto* e = emf::emit<gen::AcceptOfferedInteractionEvent>(ctx)) sweep::fill_accept(*e, r.guest, r.host, r.offer_id);
+        } else if (auto* e = emf::emit<gen::LootInteractionEvent>(ctx)) {
+            magnet::fill_loot_event(*e, r.guest, r.host);
+        }
+    }
 }
 
 // ---- server tick state ----
@@ -101,6 +129,9 @@ uint32_t g_session = 0;
 std::map<uint32_t, std::string> g_item_names;  // item id -> debug name (the game's names do not change)
 emf::keys::Edge g_key;
 int g_looted = 0;  // corpses looted this session (for loot.status)
+sweep::Sweeper g_sweeper;
+uint64_t g_sweep_ms = 0, g_walk_said_ms = 0;
+std::map<sweep::Kind, int> g_swept;  // what the sweep collected this session, by group (for loot.status)
 bool g_told_gear = false;   // the host heard "gear stays" this session
 bool g_told_no_time = false;  // the log said once that the game gave a death no time
 
@@ -195,6 +226,59 @@ bool toggle(emf::World w, uint32_t player, int want, bool* now_on) {
     return true;
 }
 
+// 2.0: what else lies near the players whose magnet is on (ground items, collectibles, mushrooms, fireflies, plants,
+// chests, barrels to smash), once a second: the loot event or a chest's accept for the program, a hit for a barrel.
+void sweep_tick(emf::World w, const Config& c, const std::vector<magnet::Looter>& looters, uint32_t session, uint64_t now) {
+    double reach = 0;
+    for (size_t k = 1; k < sweep::kKinds; ++k)
+        if (c.sweep.groups[k].on) reach = (std::max)(reach, c.sweep.reach_of(static_cast<sweep::Kind>(k)));
+    std::vector<sweep::Player> players;
+    std::vector<magnet::Vec3> places;
+    for (const auto& l : looters) {
+        players.push_back({l.id, l.pos, l.on});
+        if (l.on) places.push_back(l.pos);
+    }
+    if (reach <= 0 || places.empty()) return;
+    LARGE_INTEGER f, t0, t1;
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&t0);
+    const auto things = sweep::things_near(w, places, reach, [w](uint32_t item) { return item_name(w, item); });
+    QueryPerformanceCounter(&t1);
+    const double walk_ms = static_cast<double>(t1.QuadPart - t0.QuadPart) * 1000.0 / static_cast<double>(f.QuadPart);
+    if (c.debug_log && now - g_walk_said_ms >= 60000) {
+        g_walk_said_ms = now;
+        EMF_LOG(kMod, "sweep: %zu things near the players read in %.1f ms (once a second)", things.size(), walk_ms);
+    }
+    const auto acts = g_sweeper.tick(now, session, players, things, g_bases, c.sweep);
+    std::map<sweep::Kind, int> looted;
+    int accepted = 0, smashed = 0;
+    for (const auto& a : acts) {
+        if (a.act == sweep::Act::Smash) {
+            if (emf::has_v18() && emf::damage(w, a.player, a.entity, a.amount)) ++smashed;
+            continue;
+        }
+        std::lock_guard<std::mutex> lock(g_requests_lock);
+        if (g_requests.size() >= 256) break;
+        Request r{a.player, a.entity, session};
+        r.accept = a.act == sweep::Act::Accept;
+        r.offer_id = a.offer_id;
+        g_requests.push_back(r);
+        if (r.accept)
+            ++accepted;
+        else
+            ++looted[a.kind];
+    }
+    for (const auto& [k, n] : looted) g_swept[k] += n;
+    if (smashed) g_swept[sweep::Kind::Smash] += smashed;
+    if (c.debug_log && !acts.empty()) {
+        std::string what;
+        for (const auto& [k, n] : looted) what += (what.empty() ? "" : ", ") + std::to_string(n) + " " + sweep::kind_name(k);
+        if (accepted) what += (what.empty() ? "" : ", ") + std::to_string(accepted) + " chest(s) opened";
+        if (smashed) what += (what.empty() ? "" : ", ") + std::to_string(smashed) + " smashed";
+        EMF_LOG(kMod, "sweep: %s", what.c_str());
+    }
+}
+
 void on_tick(emf::World w) {
     if (!w.is_server() || g_switched_off) return;  // switched off in the Mods tab: no more looting from now on
     const Config c = config();
@@ -204,6 +288,7 @@ void on_tick(emf::World w) {
         g_session = session;
         g_bases_ms = 0;
         g_looted = 0;
+        g_swept.clear();
         g_told_gear = false;
         if (!g_file.ready()) g_toggles.clear();
     }
@@ -295,6 +380,10 @@ void on_tick(emf::World w) {
         if (g_magnet.should_tell_full(late.player, session) && late.player == emf::local_player())
             EMF_NOTIFY("Loot Magnet: the loot did not come (is your inventory full?); it stays where it was");
     }
+    if (now - g_sweep_ms >= 1000) {
+        g_sweep_ms = now;
+        sweep_tick(w, c, looters, session, now);
+    }
 }
 
 // The player a command means: a chat sender's entity, else the host.
@@ -336,7 +425,19 @@ void cmd_status(emf::World w, const std::vector<std::string>&) {
               magnet_on(w, player, c) ? "on" : "off", c.rules.window_ms / 1000.0, c.rules.radius,
               c.rules.delay_ms / 1000.0, c.rules.materials_only ? (c.rules.include_ammo ? "materials and ammo only" : "materials only")
                                                                 : "everything");
-    EMF_REPLY("%d corpse(s) looted this session; /loot.toggle switches yours", g_looted);
+    std::string groups;
+    for (size_t k = 1; k < sweep::kKinds; ++k) {
+        const auto kind = static_cast<sweep::Kind>(k);
+        if (!c.sweep.groups[k].on) continue;
+        char part[64];
+        std::snprintf(part, sizeof part, "%s%s (%.0f m)", groups.empty() ? "" : ", ", sweep::kind_name(kind), c.sweep.reach_of(kind));
+        groups += part;
+    }
+    EMF_REPLY("Also: %s", groups.empty() ? "nothing else (every group is off)" : groups.c_str());
+    std::string swept;
+    for (const auto& [k, n] : g_swept) swept += (swept.empty() ? "" : ", ") + std::to_string(n) + " " + sweep::kind_name(k);
+    EMF_REPLY("%d corpse(s) looted this session%s%s; /loot.toggle switches yours", g_looted, swept.empty() ? "" : ", ",
+              swept.c_str());
 }
 }  // namespace
 
@@ -351,7 +452,8 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         if (key == "enabled") g_switched_off = !switch_on();
         read_settings();
     });
-    if (!emf::add_program("loot_magnet", EMF_WORLD_SERVER, {}, {"LootInteractionEvent"}, magnet_program)) {
+    if (!emf::add_program("loot_magnet", EMF_WORLD_SERVER, {}, {"LootInteractionEvent", "AcceptOfferedInteractionEvent"},
+                          magnet_program)) {
         EMF_LOG(kMod, "could not add the loot_magnet program: off");
         return false;
     }
@@ -393,7 +495,10 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         EMF_LOG(kMod, "the command loot.status could not be added (see the core log)");
     emf::on_tick(on_tick);
     const Config c = config();
-    EMF_LOG(kMod, "ready: corpses within %.0f m come to players whose magnet is on (default %s); /loot.toggle", c.rules.radius,
-            c.default_on ? "on" : "off");
+    std::string groups;
+    for (size_t k = 1; k < sweep::kKinds; ++k)
+        if (c.sweep.groups[k].on) groups += std::string(groups.empty() ? "" : ", ") + sweep::kind_name(static_cast<sweep::Kind>(k));
+    EMF_LOG(kMod, "ready: corpses within %.0f m come to players whose magnet is on (default %s), and %s; /loot.toggle",
+            c.rules.radius, c.default_on ? "on" : "off", groups.empty() ? "nothing else" : groups.c_str());
     return true;
 }

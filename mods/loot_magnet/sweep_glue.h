@@ -98,9 +98,9 @@ inline std::vector<Thing> things_near(emf::World w, const std::vector<magnet::Ve
         if (!tr) return;
         const magnet::Vec3 p{tr->transform.position.x / kFixed, tr->transform.position.y / kFixed,
                              tr->transform.position.z / kFixed};
-        bool near = false;
-        for (const auto& place : places) near = near || magnet::horizontal_distance(p, place) <= reach;
-        if (near) out.push_back(read_thing(w, id, name_of));
+        bool in_reach = false;
+        for (const auto& place : places) in_reach = in_reach || magnet::horizontal_distance(p, place) <= reach;
+        if (in_reach) out.push_back(read_thing(w, id, name_of));
     });
     return out;
 }
