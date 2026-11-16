@@ -139,6 +139,26 @@ class RoundTripTests(unittest.TestCase):
         self.assertLess(clip["positionFactor"], 0.011 / 32767)
         self.check(poses, clip, rest, 20)
 
+    def test_a_smooth_motion_keeps_a_fraction_of_its_frames_as_keys(self):
+        # the game samples a Hermite spline between keys: a frame the spline already gives is not stored (EML holds
+        # two Lua references per 16 bytes of clip data while it builds content, and all mods share 1,000,000)
+        poses = motion(60)
+        rest = [IDENTITY] * 3
+        clip = ja.encode(poses, rest, fps=60, loop=True, hierarchy_hash=7)
+        blocks = ja.parse(clip)
+        keys = sum(len(k) for blk in blocks for name in ("rot", "pos", "scl") for _, k in blk[name][0].values())
+        tracks = sum(len(blk[name][0]) for blk in blocks for name in ("rot", "pos", "scl"))
+        self.assertLess(keys, tracks * 61 / 3)  # under a third of the 61 frames per animated track
+        self.check(poses, clip, rest, 60)
+
+    def test_a_sudden_turn_keeps_the_keys_it_needs(self):
+        # still, then 90 degrees in two frames, then still: the frames around the turn stay keys
+        def at(f):
+            return turn((0, 0, 1), 0.0 if f < 20 else (math.pi / 4 if f == 20 else math.pi / 2))
+        poses = [[(at(f), (0.0, 0.0, 0.0), (1.0, 1.0, 1.0))] for f in range(41)]
+        clip = ja.encode(poses, [IDENTITY], fps=60, loop=False, hierarchy_hash=7)
+        self.check(poses, clip, [IDENTITY], 40)
+
     def test_a_quaternion_that_flips_sign_is_not_a_spin(self):
         # q and -q are the same rotation: the encoder keeps neighbouring keys on the same side
         poses = [[(tuple(c * (1 if f % 2 else -1) for c in turn((0, 1, 0), 0.01 * f)), (0, 0, 0), (1, 1, 1))]

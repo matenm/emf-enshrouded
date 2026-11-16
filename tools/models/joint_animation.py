@@ -20,6 +20,9 @@ TANGENT_SCALE = 2.0 ** -17   # rotation and scale tangents (per frame)
 BLOCK = 63                   # frames per block (blocks share their boundary frame)
 LAST_FRACTION = 0.999        # a clip that does not loop holds its last frame at this fraction
 SECTIONS = (("rot", "OrientationJoints", 4), ("pos", "PositionJoints", 3), ("scl", "ScaleJoints", 3))
+# encode stores a frame as a key only where the spline between its neighbouring keys misses it by more than this:
+# radians for rotations, metres for positions, the factor for scales
+TOLERANCE = {"rot": 5e-4, "pos": 5e-5, "scl": 5e-5}
 
 _parsed = {}
 
@@ -164,10 +167,40 @@ def _q16(v, scale):
     return max(-32767, min(32767, int(round(v / scale))))
 
 
+def _miss(name, got, want):
+    """How far a spline value is from the frame's own: the angle between two rotations (the spline's normalised, as
+    the game does), else the largest component difference."""
+    if name == "rot":
+        ng = math.sqrt(sum(x * x for x in got)) or 1.0
+        nw = math.sqrt(sum(x * x for x in want)) or 1.0
+        return 2 * math.acos(min(1.0, abs(sum(x * y for x, y in zip(got, want))) / (ng * nw)))
+    return max(abs(x - y) for x, y in zip(got, want))
+
+
+def _key_frames(name, values, tangents, start, last):
+    """The frames of start..last stored as keys: the first, the last, and each next key as far on as the spline from
+    the key before still gives every frame between within TOLERANCE (the game samples that spline: _keyed)."""
+    tol = TOLERANCE[name]
+    keys = [start]
+    while keys[-1] < last:
+        a = keys[-1]
+        good = a + 1
+        for b in range(a + 2, last + 1):
+            dt = b - a
+            if any(_miss(name, tuple(values[a][n] * h0 + tangents[a][n] * dt * h1 + values[b][n] * h2
+                                     + tangents[b][n] * dt * h3 for n in range(len(values[a]))), values[f]) > tol
+                   for f in range(a + 1, b) for h0, h1, h2, h3 in (_hermite((f - a) / dt),)):
+                break
+            good = b
+        keys.append(good)
+    return keys
+
+
 def encode(poses, rest, fps=60, loop=False, hierarchy_hash=0):
     """A clip from poses for frames 0..N (N + 1 poses; a loop's last pose is its first again), N = frameCount.
-    Every frame is a key. rest: per joint (rotation, position, scale): joints that stay at it in a block are left to
-    the rest pose. hierarchy_hash: the skeleton's (copy it from a game clip on the same skeleton)."""
+    A frame is a key where the spline between the keys around it would miss it (_key_frames, TOLERANCE); every key
+    keeps the frame's own tangent. rest: per joint (rotation, position, scale): joints that stay at it in a block are
+    left to the rest pose. hierarchy_hash: the skeleton's (copy it from a game clip on the same skeleton)."""
     n = len(poses) - 1
     joints = len(rest)
     channels = {"rot": [], "pos": [], "scl": []}
@@ -236,11 +269,11 @@ def encode(poses, rest, fps=60, loop=False, hierarchy_hash=0):
         for name, field, comps in SECTIONS:
             vscale, tscale = scales[name]
             keyed, const, still = per[name]
-            mask = (1 << (last - start + 1)) - 1
-            raw += struct.pack("<%dQ" % len(keyed), *([mask] * len(keyed)))
+            frames = {j: _key_frames(name, channels[name][j], tangents[name][j], start, last) for j in keyed}
+            raw += struct.pack("<%dQ" % len(keyed), *[sum(1 << (f - start) for f in frames[j]) for j in keyed])
             for j in keyed:
                 raw += struct.pack("<H", j)
-                for f in range(start, last + 1):
+                for f in frames[j]:
                     v, m = channels[name][j][f], tangents[name][j][f]
                     raw += struct.pack("<%dh" % (2 * comps), *([_q16(x, vscale) for x in v]
                                                               + [_q16(x, tscale) for x in m]))
