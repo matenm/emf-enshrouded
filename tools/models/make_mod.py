@@ -60,7 +60,9 @@ pack.json:
         "model_guid": "...",                          # FIXED forever once shared   are kept
         "width": 4.0, "yaw": 0, "material": 2,        # fitted to this width (metres), turned, every mesh in one slot
         "texture": {"albedo_dir": "tex/stable", "slot": 2},  # optional, as a creature's, or instead:
-        "materials": {"0": "<game material GUID>"}    # each slot wears a game material (blender/game_materials.py)
+        "materials": {"0": "<game material GUID>"}    # each slot wears a game material (blender/game_materials.py);
+                                                      #   "name:<debugName>" finds it by name; a creature may name
+                                                      #   one too, for a slot its texture does not replace
       }
     ],
     "content_scripts": ["beastmaster_stable.lua"]     # optional: Lua files run after the creatures with EMF's helper
@@ -221,6 +223,18 @@ local function flat_levels(size, r, g, b, a)
 	return levels
 end
 
+-- a game material by its debugName (a material's GUID is not in the survey; its name is)
+local materials_by_name
+local function material_named(name)
+	if not materials_by_name then
+		materials_by_name = {}
+		for _, r in ipairs(game.assets.get_resources_by_type("keen::RenderMaterialResource")) do
+			materials_by_name[tostring(r.data.debugName)] = tostring(r.guid)
+		end
+	end
+	return materials_by_name[name]
+end
+
 -- a copy of the model's material in one slot: our albedo and the maps named in texture.maps (PNG levels), the other
 -- maps flat at the source's average
 local function make_material(c, m)
@@ -304,8 +318,10 @@ local function make_model(c)
 		m.renderData.hash = game.assets.create_content(buffer.wrap(require(c.name .. "_blob")))
 		-- a prop on the game's own materials: each slot names one (the game's art stays the game's)
 		for _, s in ipairs(c.materials or {}) do
-			m.materials[s.slot + 1].material = s.material
-			log(string.format("%%s: slot %%d wears the game material %%s", c.name, s.slot, s.material))
+			local guid = s.material or material_named(s.material_name)
+			assert(guid, "no game material named " .. tostring(s.material_name))
+			m.materials[s.slot + 1].material = guid
+			log(string.format("%%s: slot %%d wears the game material %%s", c.name, s.slot, tostring(guid)))
 		end
 		if c.texture then
 			local ok, result = pcall(make_material, c, m)
@@ -711,6 +727,11 @@ def listing_entry(c):
                                "source_template", "template_name")}
     if c.get("faction"):
         entry["faction"] = c["faction"]  # e.g. "PlayerAlly": the creature never attacks players
+    if c.get("materials"):  # slots that wear another game material (a fur atlas for blender/fur_cards.py)
+        entry["materials"] = material_slots(c["name"], c["materials"])
+        if c.get("texture") and int(c["texture"].get("slot", 1)) in [s["slot"] for s in entry["materials"]]:
+            raise SystemExit("%s: slot %d has a game material and our texture: one of them" %
+                             (c["name"], int(c["texture"].get("slot", 1))))
     if c.get("template_add"):
         entry["template_add"] = [{"type": component_type(a["type"]), "value": a["value"]} for a in c["template_add"]]
     if c.get("template_set"):
@@ -879,13 +900,21 @@ def prop_entry(p):
     if p.get("materials"):
         if p.get("texture"):
             raise SystemExit("prop %s: \"materials\" (the game's own) or \"texture\" (ours), not both" % p["name"])
-        slots = []
-        for k, guid in p["materials"].items():
-            if not str(k).isdigit():
-                raise SystemExit("prop %s: material slots are numbers, not '%s'" % (p["name"], k))
-            slots.append({"slot": int(k), "material": guid})
-        entry["materials"] = sorted(slots, key=lambda s: s["slot"])
+        entry["materials"] = material_slots("prop " + p["name"], p["materials"])
     return entry
+
+
+def material_slots(who, materials):
+    """{"<slot>": "<game material GUID>" or "name:<its debugName>"} as the list the generated mod.lua reads."""
+    slots = []
+    for k, value in materials.items():
+        if not str(k).isdigit():
+            raise SystemExit("%s: material slots are numbers, not '%s'" % (who, k))
+        if str(value).startswith("name:"):
+            slots.append({"slot": int(k), "material_name": str(value)[5:]})
+        else:
+            slots.append({"slot": int(k), "material": value})
+    return sorted(slots, key=lambda s: s["slot"])
 
 
 def write_scripts(src, pack, listing, content_modules=(), props=()):

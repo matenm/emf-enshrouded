@@ -130,7 +130,7 @@ end
 -- a model the packs do not use: the game has render data even when one source model is gone
 if not server then resources["keen::RenderModel"]["other-model"] = model("other-model") end
 for _, g in ipairs(server and {} or { "mat-0", "mat-1" }) do
-	resources["keen::RenderMaterialResource"][g] = { guid = g, data = { images = {
+	resources["keen::RenderMaterialResource"][g] = { guid = g, data = { debugName = "mock_" .. g, images = {
 		{ texture = texture("Material_x_albedo_map_0", "BC7_srgb_block", 2048) },
 		{ texture = texture("Material_x_normal_map_0", "BC5_unorm_block", 2048) },
 		{ texture = texture("Material_x_material_map_0", "BC1_RGB_unorm_block", 2048) },

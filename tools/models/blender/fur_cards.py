@@ -2,13 +2,15 @@
 
   blender --background --factory-startup --python fur_cards.py -- <fitted.glb> <out.glb> --tufts <tufts.json> --slot N
       [--count 1200] [--length 0.22] [--lift 25] [--legs 0.3] [--face 0.12] [--albedo body.png --fur-colour r,g,b]
-      [--seed 1]
+      [--colour-gamma 1.0] [--root bottom|top] [--seed 1]
 
 The game's furred animals are a plain body under alpha-tested cards that each show one tuft of a strand atlas. This
 adds such cards as a second mesh, named game_material_<N>: the slot of the base creature's own fur material, which
 the pack then leaves as the game's (tools/models/make_mod.py replaces only the body's slot). No game texture is copied.
 
---tufts   a JSON list of the atlas's tufts as [u0, v0, u1, v1] (v down the picture; a tuft's root is its bottom edge)
+--tufts   a JSON list of the atlas's tufts as [u0, v0, u1, v1] (v down the picture)
+--root    the edge of a tuft's rectangle its strands grow from: bottom (the wolf's and the boar's atlas) or top
+          (the yak's hanging hair)
 --count   how many cards (four triangles each)
 --length  a card's length in metres (each varies from 0.8 to 1.2 of it; its width follows its tuft's shape)
 --lift    degrees a card stands off the skin at its root (half of that at its tip, so it droops)
@@ -16,7 +18,8 @@ the pack then leaves as the game's (tools/models/make_mod.py replaces only the b
 --face    no cards on the front this part of the body's length (face and horns)
 --albedo  the body's colour picture: each card's vertex colour is the body's colour at its root divided by
           --fur-colour (the fur atlas's own colour, 0-1), so the game's fur shader, which multiplies the two, shows the
-          body's colour; without it the cards keep the atlas's colour
+          body's colour; without it the cards keep the atlas's colour. --colour-gamma raises the stored value to
+          that power (2.2 where the shader reads vertex colours as linear light)
 
 Cards lie along the coat: toward the tail and down, in the skin's plane. A card takes the bone weights of the body
 vertex nearest its root, so it moves as one piece. The creature faces -Y (as the fitter leaves it).
@@ -48,6 +51,8 @@ slot, count, seed = int(opt("--slot")), int(opt("--count", "1200")), int(opt("--
 length, lift = float(opt("--length", "0.22")), math.radians(float(opt("--lift", "25")))
 legs, face = float(opt("--legs", "0.3")), float(opt("--face", "0.12"))
 fur_colour = [float(x) for x in opt("--fur-colour", "1,1,1").split(",")]
+colour_gamma = float(opt("--colour-gamma", "1.0"))
+root_top = opt("--root", "bottom") == "top"
 
 for o in list(bpy.data.objects):
     bpy.data.objects.remove(o)
@@ -119,7 +124,8 @@ while len(card_owner) < count and tries < count * 60:
     mid = root + d1 * (size / 2)
     tip = mid + d2 * (size / 2)
     base = len(card_v)
-    for row, (centre, v) in enumerate(((root, rect[3]), (mid, (rect[1] + rect[3]) / 2), (tip, rect[1]))):
+    v_root, v_tip = (rect[1], rect[3]) if root_top else (rect[3], rect[1])
+    for row, (centre, v) in enumerate(((root, v_root), (mid, (rect[1] + rect[3]) / 2), (tip, v_tip))):
         for k, u in ((-0.5, rect[0]), (0.5, rect[2])):
             card_v.append(tuple(centre + side * (k * width)))
             card_uv.append((u, 1.0 - v))  # Blender's v grows up the picture
@@ -130,7 +136,7 @@ while len(card_owner) < count and tries < count * 60:
         uv = sum(uvs[tri_loops[t][k]] * bary[k] for k in range(3))
         x = min(albedo.shape[1] - 1, max(0, int(uv[0] % 1.0 * albedo.shape[1])))
         y = min(albedo.shape[0] - 1, max(0, int(uv[1] % 1.0 * albedo.shape[0])))
-        colour = tuple(min(1.0, float(albedo[y, x, k]) / max(fur_colour[k], 1e-3)) for k in range(3))
+        colour = tuple(min(1.0, float(albedo[y, x, k]) / max(fur_colour[k], 1e-3)) ** colour_gamma for k in range(3))
     card_col.append(colour)
     card_owner.append(kd.find(p)[1])
 if len(card_owner) < count:

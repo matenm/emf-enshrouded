@@ -391,6 +391,37 @@ class MakeModTests(unittest.TestCase):
             self.assertIn("flat material", out.stdout)
             self.assertNotIn("flat normal", out.stdout)
 
+    def run_bear(self, d, bear):
+        make_mod.write_scripts(d, {"id": "test_pack", "title": "Test"}, [make_mod.listing_entry(bear)])
+        for name, text in (("data", STUB_DATA), ("blob", 'return "blob"\n')):
+            with open(os.path.join(d, "beast_bear_%s.lua" % name), "w", encoding="utf-8") as f:
+                f.write(text)
+        mock = os.path.join(HERE, "..", "..", "tools", "models", "mock_eml.lua")
+        return subprocess.run(["lua", mock, d], capture_output=True, text=True, timeout=60)
+
+    @unittest.skipUnless(shutil.which("lua"), "needs lua 5.4 on PATH")
+    def test_a_creature_slot_wears_a_game_material_found_by_name(self):
+        """A fur-card mesh draws with a game fur material: the pack names it by its debugName or its GUID."""
+        with tempfile.TemporaryDirectory() as d:
+            out = self.run_bear(d, dict(BEAR, materials={"1": "name:mock_mat-1"}))
+            self.assertEqual(out.returncode, 0, out.stderr)
+            self.assertIn("beast_bear: slot 1 wears the game material mat-1", out.stdout)
+        with tempfile.TemporaryDirectory() as d:
+            out = self.run_bear(d, dict(BEAR, materials={"0": "mat-1"}))
+            self.assertIn("beast_bear: slot 0 wears the game material mat-1", out.stdout)
+        with tempfile.TemporaryDirectory() as d:  # a name the game does not have: this creature is not added
+            out = self.run_bear(d, dict(BEAR, materials={"1": "name:gone"}))
+            self.assertIn("no game material named gone", out.stdout + out.stderr)
+            self.assertNotIn("added beast_bear", out.stdout)
+
+    def test_a_slot_takes_a_game_material_or_our_texture(self):
+        with self.assertRaises(SystemExit) as e:
+            make_mod.listing_entry(dict(BEAR, materials={"1": "name:fur"}, texture={"albedo_dir": "x", "slot": 1}))
+        self.assertIn("slot 1", str(e.exception))
+        make_mod.listing_entry(dict(BEAR, materials={"0": "name:fur"}, texture={"albedo_dir": "x", "slot": 1}))
+        with self.assertRaises(SystemExit):
+            make_mod.listing_entry(dict(BEAR, materials={"fur": "name:fur"}))
+
     @unittest.skipUnless(shutil.which("lua"), "needs lua 5.4 on PATH")
     def test_on_a_dedicated_server_the_template_is_made_without_the_model(self):
         """A dedicated server's data has no render data: the template copy and its edits are made, the model and the
