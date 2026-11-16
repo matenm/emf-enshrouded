@@ -147,8 +147,8 @@ TEST_CASE("a faulting program hook is reported once, naming the module of the ca
     CHECK(faults[0].find("emf_tests.exe") != std::string::npos);
 }
 
-// The name came from the ANSI path: a mod file named with letters outside the code page was named wrongly, and the
-// marker owner check (well-formed UTF-8) then refused every marker of that mod.
+// The name came from the ANSI path: a mod file named with letters outside the code page was named wrongly (in hook
+// owners and the log). Markers name their owner with module_name_of, which was UTF-8 already.
 TEST_CASE("module_stem_of names a mod by its file name without the extension, in UTF-8") {
     wchar_t exe[MAX_PATH];
     GetModuleFileNameW(nullptr, exe, MAX_PATH);

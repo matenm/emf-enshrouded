@@ -13,6 +13,7 @@
 #include "common/offsets.h"
 #include "core/api.h"
 #include "core/api_sizes.h"
+#include "core/game_screen.h"
 #include "core/marker_capture.h"
 #include "fake_world.h"
 
@@ -329,4 +330,19 @@ TEST_CASE("markers: the console says when the game's HUD scope and its map scree
     CHECK(said("the game's HUD scope (doCachedEntityHealthWidgets): seen 10 min ago"));
     markers_ui_frame(kMarkerMapScaledHash, node, g_now + 3);  // the UI thread's clock a moment ahead
     CHECK(said("the game's map screen (mapScaled): seen 0.00 s ago"));
+}
+
+TEST_CASE("client tick: the game's HUD screen byte is read from UiPlayData at the signature's offset (the chat key gate)") {
+    Fixture f;
+    f.uipd[0x1cd8] = kScreenTextChat;
+    game_screen().set_offset(0x1cd8);
+    markers_client_tick(f.cw());
+    const auto seen = game_screen().screen(GetTickCount64());
+    game_screen().set_offset(0);
+    REQUIRE(seen.has_value());
+    CHECK(*seen == kScreenTextChat);
+    f.uipd[0x1cd8] = kScreenInGame;
+    markers_client_tick(f.cw());  // no offset (signature not usable): the old reading stays and goes stale
+    CHECK(*game_screen().screen(GetTickCount64()) == kScreenTextChat);
+    game_screen().seen(kScreenInGame, GetTickCount64());  // leave no typing state for later tests
 }

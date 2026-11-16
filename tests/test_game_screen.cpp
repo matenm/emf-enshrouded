@@ -90,3 +90,20 @@ TEST_CASE("typing gate: key codes outside 1-255 are never hidden after typing an
     CHECK_FALSE(gate.any());
     CHECK_FALSE(gate.hide(300, true, false));
 }
+
+TEST_CASE("hud_screen_offset_at: the offset from the signature's bytes, only when its compare is with TextChat") {
+    // movzx r15d, byte [rdi+0x1cd8]; cmp r15b, 0x2b; mov [rbp+...], r15b ...
+    uint8_t code[] = {0x44, 0x0F, 0xB6, 0xBF, 0xD8, 0x1C, 0x00, 0x00, 0x41, 0x80, 0xFF, 0x2B, 0x44, 0x88, 0xBD};
+    CHECK(hud_screen_offset_at(code) == 0x1cd8u);
+    code[11] = 0x2c;  // compares with another screen: not the read we know
+    CHECK(hud_screen_offset_at(code) == 0u);
+    code[11] = 0x2b;
+    code[4] = 0x00;  // a zero offset
+    code[5] = 0x00;
+    CHECK(hud_screen_offset_at(code) == 0u);
+    code[4] = 0x00;
+    code[5] = 0x00;
+    code[6] = 0x01;  // beyond 64 KB: UiPlayData is not that large
+    CHECK(hud_screen_offset_at(code) == 0u);
+    CHECK(hud_screen_offset_at(nullptr) == 0u);
+}

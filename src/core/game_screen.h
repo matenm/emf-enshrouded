@@ -47,6 +47,10 @@ private:
     std::atomic<uint64_t> held_[4] = {};
 };
 
+// The HUD screen byte's offset in UiPlayData from the HudScreenRead match (the u32 at +4), or 0 when the match's compare
+// (+11) is not with TextChat or the offset is not plausible.
+uint32_t hud_screen_offset_at(const uint8_t* match);
+
 GameScreen& game_screen();
 TypingKeyGate& typing_gate();
 // The player types in one of the game's text boxes right now (GetTickCount64 clock).

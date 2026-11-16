@@ -3,6 +3,8 @@
 
 #include <windows.h>
 
+#include <cstring>
+
 #include "common/seh.h"
 
 namespace emf::core {
@@ -52,6 +54,14 @@ bool TypingKeyGate::any() const {
     for (const auto& w : held_)
         if (w.load(std::memory_order_relaxed)) return true;
     return false;
+}
+
+uint32_t hud_screen_offset_at(const uint8_t* match) {
+    uint8_t code[12];
+    if (!match || !emf::seh_read(match, code, sizeof code) || code[11] != kScreenTextChat) return 0;
+    uint32_t off = 0;
+    std::memcpy(&off, code + 4, sizeof off);
+    return off > 0 && off < 0x10000 ? off : 0;  // UiPlayData is some KB, not more
 }
 
 GameScreen& game_screen() {

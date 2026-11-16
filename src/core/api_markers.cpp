@@ -14,6 +14,7 @@
 #include "common/world_view.h"
 #include "core/api.h"
 #include "core/fault_report.h"
+#include "core/game_screen.h"
 #include "core/marker_capture.h"
 #include "core/system_programs.h"
 
@@ -178,7 +179,9 @@ void markers_client_tick(EmfWorld* client) {
         mk.client = client;
     }
     const WorldView view(raw(client));
-    marker_capture_set_uipd(static_cast<uint8_t*>(view.singleton("G38UiPlayData")), now_ms(s));
+    auto* uipd = static_cast<uint8_t*>(view.singleton("G38UiPlayData"));
+    marker_capture_set_uipd(uipd, now_ms(s));
+    game_screen().read(uipd, GetTickCount64());  // the chat key gate (game_screen.h): the game's clock, as the hooks read it
     uint32_t me = 0;
     const auto* lpd = static_cast<const uint8_t*>(view.singleton("LocalPlayerData"));
     double p[3];

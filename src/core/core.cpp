@@ -44,6 +44,7 @@
 #include "content_status.h"
 #include "buff_service.h"
 #include "ground_glue.h"
+#include "game_screen.h"
 #include "marker_capture.h"
 #include "minimap_draw.h"
 #include "inventory.h"
@@ -1543,6 +1544,17 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
                 g_doors.reset();
             }
         }
+    }
+    // the chat key gate (client only): the HUD screen byte's offset from the chat window's own read of it
+    if (!g_state->exe.server) {
+        const auto& r = g_state->sigs[static_cast<size_t>(emf::Sig::HudScreenRead)];
+        const uint32_t off = emf::is_usable(r, known) ? emf::core::hud_screen_offset_at(reinterpret_cast<const uint8_t*>(r.addr)) : 0;
+        emf::core::game_screen().set_offset(off);
+        if (off)
+            emf::logf("chat key gate: on (mods' keys read as up while the game's chat or rename box is open)");
+        else
+            emf::logf("chat key gate: off (the HudScreenRead signature is not usable on this game build): mods' hotkeys "
+                      "also fire while typing in the game's chat");
     }
     // v33 markers (client only): the camera block's offset and the game's map list from the guards' matched code
     // (private plans/2026-11-11-markers-step1.ledger.md, Task 1)
