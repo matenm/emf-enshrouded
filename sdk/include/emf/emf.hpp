@@ -1072,9 +1072,9 @@ inline bool has_v44() { return api() && api()->size >= offsetof(EmfApi, find_wal
 inline uint32_t break_blocks(World w, EmfBreakBlocks& req, EmfBreakCallback cb = nullptr, void* user = nullptr) {
     req.size = sizeof req;
     if (!has_v44() || !api()->break_blocks) {
-        const char* text = "this EMF core is too old (break_blocks needs API v44)";
-        std::strncpy(req.why, text, sizeof req.why - 1);
-        req.why[sizeof req.why - 1] = 0;
+        static const char kText[] = "this EMF core is too old (break_blocks needs API v44)";
+        static_assert(sizeof kText <= sizeof req.why, "the text fits");
+        std::memcpy(req.why, kText, sizeof kText);
         return 0;
     }
     return api()->break_blocks(w.raw(), &req, cb, user);
