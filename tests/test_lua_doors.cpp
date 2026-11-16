@@ -305,3 +305,19 @@ TEST_CASE("lua 1.39: a pause cancels the script's villager moves, also one that 
     o.run_command("vo.go");
     CHECK(logged("old nil this EMF has no villager moves (EMF API v46)"));
 }
+
+TEST_CASE("lua 1.39 (review M4): a cancel of a walking villager move still lets its function hear 'cancelled'") {
+    Rig r(L"lua_vmoves_cancel");
+    add_script(r.dir, "vc",
+               "emf.command('go', '', function(w)\n"
+               "  id = emf.villager_move(w, 80, {1, 2, 3}, function(world, i, status) emf.log('heard ' .. status) end)\n"
+               "end)\n"
+               "emf.command('stop', '', function(w) emf.villager_move_cancel(id) end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("vc.go");
+    REQUIRE(r.fake.vmoves.size() == 1u);
+    r.run_command("vc.stop");  // deferred: the core answers at the next step
+    r.fake.vmoves[0].cb(kServer, 1, EMF_MOVE_CANCELLED, r.fake.vmoves[0].user);
+    CHECK(logged("heard cancelled"));
+}

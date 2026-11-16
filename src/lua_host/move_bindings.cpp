@@ -67,8 +67,10 @@ void move_cb_body(EmfWorld* w, uint32_t id, uint32_t status, void* user) {
     bool mine = false;  // not after a drop (a pause or a reload)
     if (!slot->villager)
         mine = s->enemy_moves.erase(id) > 0;
-    else if (slot->hold && status == EMF_MOVE_ARRIVED)
+    else if (slot->hold && status == EMF_MOVE_ARRIVED) {
         mine = s->villager_moves.count(id) > 0;  // it holds on: a pause or a reload still ends it
+        if (mine) s->villager_holds.insert(id);
+    }
     else
         mine = s->villager_moves.erase(id) > 0;
     if (!s->L || slot->ref == LUA_NOREF) return;
@@ -297,7 +299,10 @@ int l_villager_move_cancel(lua_State* L) {
     const lua_Integer id = luaL_checkinteger(L, 1);
     const EmfApi* a = s->host->api;
     const bool ok = has_v46(a) && id > 0 && id <= 0xffffffff && a->villager_move_cancel(static_cast<uint32_t>(id));
-    if (id > 0 && id <= 0xffffffff) s->villager_moves.erase(static_cast<uint32_t>(id));
+    // a hold that arrived calls back no more: forget it now; a walking move is forgotten at its "cancelled" (which a
+    // cancel from outside a server callback brings at the next step)
+    if (id > 0 && id <= 0xffffffff && s->villager_holds.erase(static_cast<uint32_t>(id)))
+        s->villager_moves.erase(static_cast<uint32_t>(id));
     lua_pushboolean(L, ok);
     return 1;
 }
@@ -322,6 +327,7 @@ void drop_enemy_moves(Host::Impl& h, Script& s) {
         if (has_v40(h.api)) h.api->enemy_move_cancel(id);
     const std::vector<uint32_t> vids(s.villager_moves.begin(), s.villager_moves.end());
     s.villager_moves.clear();
+    s.villager_holds.clear();
     for (const uint32_t id : vids)
         if (has_v46(h.api)) h.api->villager_move_cancel(id);
 }

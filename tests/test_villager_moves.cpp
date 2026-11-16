@@ -1,4 +1,4 @@
-// Villager moves (API v45): a villager walked to points by re-sending the game's own GoToPosition (fake world).
+// Villager moves (API v46): a villager walked to points by re-sending the game's own GoToPosition (fake world).
 // Live 2026-11-16: the game's villagers roam within 30 m of home (60 m across) and are teleported home beyond 51 m;
 // points 20 m and 28 m from home were walked to and held by re-sending every 2 s; a point 40 m out failed (path result
 // 7, MaxIterationsReached), the villager roamed near home.
@@ -16,6 +16,7 @@
 #include "core/api.h"
 #include "core/api_sizes.h"
 #include "core/dispatcher.h"
+#include "core/move_orders.h"
 #include "core/villager_moves.h"
 #include "fake_world.h"
 #include "emf/emf_api.h"
@@ -120,6 +121,13 @@ struct Fake {
         auto& w = get<gen::DynamicPathWalker>(e);
         w.state = static_cast<gen::PathWalkerState>(walker_state);
         w.lastPathfindingResult = static_cast<gen::PathfindingResult>(path_result);
+    }
+    // a new path query answered (lastResultTick moves on) for the target (x, y, z)
+    void path_answer(uint8_t path_result, double x, double y, double z, uint32_t e = kVillager) {
+        auto& w = get<gen::DynamicPathWalker>(e);
+        w.lastPathfindingResult = static_cast<gen::PathfindingResult>(path_result);
+        ++w.lastResultTick;
+        w.targetPosition = {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)};
     }
     VillagerMoves::Deps deps() {
         VillagerMoves::Deps d;
@@ -324,7 +332,7 @@ TEST_CASE("villager moves: paused with no player within 150 m, in Start, InsideW
     CHECK(f.done[0].status == EMF_MOVE_TIMEOUT);
 }
 
-TEST_CASE("villager moves: arrived within arrive across and arrive + 2 up or down; also when Roam ended at the walker's TargetReached within arrive + 3; earlier points go on to the next at once") {
+TEST_CASE("villager moves: arrived within arrive across and arrive + 2 up or down; also when Roam ended at the walker's TargetReached within arrive + 3; earlier points go on to the next at the next step") {
     Fake f;
     f.villager();
     VillagerMoves m(f.deps());
@@ -334,7 +342,8 @@ TEST_CASE("villager moves: arrived within arrive across and arrive + 2 up or dow
     f.walking_to(10, 10, 0);
     f.go(m, 8.5, 13.5, 0);  // 1.5 m across, 3.5 up: within 2 and 2 + 2
     CHECK(f.done.empty());
-    REQUIRE(f.sends.size() == 2);  // on to the second point at once
+    f.step(m);
+    REQUIRE(f.sends.size() == 2);  // on to the second point at the next step (its state takes it)
     CHECK(f.sends[1].x == doctest::Approx(20));
     f.walking_to(20, 10, 0);
     f.go(m, 15, 10, 0);  // 5 m short: the walker reached the path's last node (up to 5 m from the point)
@@ -402,16 +411,17 @@ TEST_CASE("villager moves: stuck after stuck_seconds without a metre closer, at 
         std::string why;
         REQUIRE(m.add(kWorld, order({{0, 10, 40}}), f.cb(), &why) != 0);
         f.walking_to(0, 10, 40);
-        f.walker(2, 7);
+        f.walker(2);
+        f.path_answer(7, 0, 10, 40);
         f.step(m);
         CHECK(f.done.empty());  // once
         f.state(kRoam);
         f.get<gen::NpcCommon>(kVillager).currentTargetPosition = {3, 10, 4};  // its own roam point instead
-        f.walker(2, 0);
+        f.path_answer(1, 3, 10, 4);
         f.steps(m, 1100);
         REQUIRE(f.sends.size() == 2);
         f.walking_to(0, 10, 40);
-        f.walker(2, 7);
+        f.path_answer(7, 0, 10, 40);
         f.step(m);
         REQUIRE(f.done.size() == 1);
         CHECK(f.done[0].status == EMF_MOVE_STUCK);
@@ -635,6 +645,10 @@ TEST_CASE("api (v46): villager_move from a server world callback only; the enemy
     CoreState state;
     state.log_line = [](const std::string&) {};
     state.villager_moves = &moves;
+    MoveOrders::Deps md;
+    md.get = f.deps().get;
+    MoveOrders enemy_moves(md);
+    state.moves = &enemy_moves;
     set_core_state(&state);
     EmfWorld* w = reinterpret_cast<EmfWorld*>(fw.p());
     Dispatcher disp;
@@ -667,11 +681,247 @@ TEST_CASE("api (v46): villager_move from a server world callback only; the enemy
         CHECK(api_table()->villager_moving(world, kVillager) == id);
         CHECK(api_table()->villager_move_cancel(id));
         CHECK(api_table()->villager_moving(world, kVillager) == 0u);
-        // enemy_move takes no hold
+        // enemy_move takes no hold (move orders on, so the refusal is the hold's)
         m.flags = EMF_MOVE_HOLD;
         CHECK(api_table()->enemy_move(world, &m, nullptr, nullptr) == 0u);
+        CHECK(std::string(m.why).find("villager_move") != std::string::npos);
     });
     CHECK(f.sends.size() >= 2);  // the point, then "stop where you stand"
     CHECK(f.sends[0].npc == kNpcId);
     set_core_state(nullptr);
+}
+
+// ---- after the review ----
+
+TEST_CASE("villager moves (review I1): a hold after the walker stopped short of its point (TargetReached) keeps holding there") {
+    Fake f;
+    f.villager();
+    VillagerMoves m(f.deps());
+    auto o = order({{20, 10, 0}});
+    o.hold_forever = true;
+    std::string why;
+    const uint32_t id = m.add(kWorld, o, f.cb(), &why);
+    f.walking_to(20, 10, 0);
+    f.go(m, 15.5, 10, 0);  // 4.5 m short: a point it cannot stand on
+    f.walker(8);
+    f.state(kIdle, kRoam);
+    f.step(m);
+    REQUIRE(f.done.size() == 1);
+    CHECK(f.done[0].status == EMF_MOVE_ARRIVED);
+    f.steps(m, 30000, 500);
+    CHECK(m.moving(kWorld, kVillager) == id);  // still holding at 4.5 m
+}
+
+TEST_CASE("villager moves (review I2): a hold sends nothing while the villager is paused (a player talks to it, no player near, deciding to sleep)") {
+    for (int how = 0; how < 3; ++how) {
+        Fake f;
+        f.villager();
+        VillagerMoves m(f.deps());
+        auto o = order({{3, 10, 0}});  // 1 m away: arrives at once
+        o.hold_forever = true;
+        std::string why;
+        REQUIRE(m.add(kWorld, o, f.cb(), &why) != 0);
+        f.step(m);
+        REQUIRE(f.done.size() == 1);
+        if (how == 0) f.get<gen::NpcCommon>(kVillager).interactionStates = 2;  // greeting
+        if (how == 1) f.get<gen::NpcCommon>(kVillager).closestPlayerDistance = 200.0f;
+        if (how == 2) f.state(kGoToTarget, kIdle, 5);  // WantsToSleep
+        const size_t sent = f.sends.size();
+        f.steps(m, 10000, 500);
+        CHECK_MESSAGE(f.sends.size() == sent, "case ", how);
+        CHECK(m.count() == 1);
+    }
+}
+
+TEST_CASE("villager moves (review I3): a hold coming back from afar while it gets closer is not cut off; a chat with another villager waits") {
+    Fake f;
+    f.villager();
+    VillagerMoves m(f.deps());
+    auto o = order({{3, 10, 0}});
+    o.hold_forever = true;
+    std::string why;
+    const uint32_t id = m.add(kWorld, o, f.cb(), &why);
+    f.step(m);
+    REQUIRE(f.done.size() == 1);
+    // the morning: it wakes in a bed 25 m away and walks back slowly (1 m every 1.5 s, 37 s in all)
+    f.state(kSleep);
+    f.place(kVillager, 3, 10, 2);
+    f.step(m);
+    f.place(kVillager, 3, 10, 5);
+    f.step(m);  // moving while asleep is no teleport here (3 m)
+    for (double z = 7; z <= 25; z += 2) {
+        f.place(kVillager, 3, 10, z);
+        f.step(m);
+    }
+    f.state(kRoam, kIdle, 1);
+    f.get<gen::NpcCommon>(kVillager).currentTargetPosition = {3, 10, 0};
+    for (double z = 25; z >= 1; z -= 1) {
+        f.place(kVillager, 3, 10, z);
+        f.steps(m, 1500, 500);
+    }
+    CHECK(m.moving(kWorld, kVillager) == id);
+    // a chat with another villager away from the point: no send, the clock waits
+    f.go(m, 10, 10, 0);
+    f.state(kSocializing);
+    const size_t sent = f.sends.size();
+    f.steps(m, 30000, 500);
+    CHECK(f.sends.size() == sent);
+    CHECK(m.moving(kWorld, kVillager) == id);
+}
+
+TEST_CASE("villager moves (review I4): stop where you stand only when our order runs: not to a villager asleep, sitting or talking") {
+    {
+        Fake f;  // a move that times out at night
+        f.villager();
+        VillagerMoves m(f.deps());
+        auto o = order({{20, 10, 0}});
+        o.seconds = 5;
+        std::string why;
+        REQUIRE(m.add(kWorld, o, f.cb(), &why) != 0);
+        f.state(kSleep);
+        f.steps(m, 6000, 500);
+        REQUIRE(f.done.size() == 1);
+        CHECK(f.done[0].status == EMF_MOVE_TIMEOUT);
+        CHECK(f.sends.size() == 1);  // only the move's own send: no stop to a sleeping villager
+        CHECK(f.dropped == std::vector<uint32_t>{kNpcId});  // its queued sends dropped all the same
+    }
+    {
+        Fake f;  // a cancel while it sits
+        f.villager();
+        VillagerMoves m(f.deps());
+        std::string why;
+        const uint32_t id = m.add(kWorld, order({{20, 10, 0}}), f.cb(), &why);
+        f.steps(m, 2000);  // the first send is old now
+        f.state(kSitting);
+        const size_t sent = f.sends.size();
+        CHECK(m.cancel(id));
+        CHECK(f.sends.size() == sent);
+    }
+    {
+        Fake f;  // a cancel while it walks our order: stopped
+        f.villager();
+        VillagerMoves m(f.deps());
+        std::string why;
+        const uint32_t id = m.add(kWorld, order({{20, 10, 0}}), f.cb(), &why);
+        f.walking_to(20, 10, 0);
+        f.steps(m, 2000);
+        const size_t sent = f.sends.size();
+        CHECK(m.cancel(id));
+        CHECK(f.sends.size() == sent + 1);
+    }
+}
+
+TEST_CASE("villager moves (review I5): a path result counts only when it is new since our send and for our point; progress forgives") {
+    Fake f;
+    f.villager();
+    f.get<gen::ActiveNpcStateSaved>(kVillager).overrideRoamingRange = true;
+    f.get<gen::ActiveNpcStateSaved>(kVillager).roamingRange = 45;
+    VillagerMoves m(f.deps());
+    std::string why;
+    f.walker(2, 6);  // an old failed path of its own routine, before our send
+    REQUIRE(m.add(kWorld, order({{0, 10, 40}}), f.cb(), &why) != 0);
+    f.walking_to(0, 10, 40);
+    f.steps(m, 3000);
+    CHECK(f.done.empty());  // the stale result is no strike
+    f.path_answer(6, 7, 10, 7);  // a failed path of its own (another target)
+    f.steps(m, 3000);
+    CHECK(f.done.empty());
+    f.path_answer(7, 0, 10, 40);  // ours: strike 1
+    f.step(m);
+    f.place(kVillager, 2, 10, 2);  // it gets 2 m closer: forgiven
+    f.step(m);
+    f.path_answer(7, 0, 10, 40);  // strike 1 again
+    f.steps(m, 1100);
+    CHECK(f.done.empty());
+    f.path_answer(7, 0, 10, 40);  // strike 2
+    f.step(m);
+    REQUIRE(f.done.size() == 1);
+    CHECK(f.done[0].status == EMF_MOVE_STUCK);
+}
+
+TEST_CASE("villager moves (review minors): the next point waits for a state that takes it; stay set mid-walk ends it at once; the limit counts a pending cancel; a cancelled hold says nothing; one npcId, one move") {
+    {
+        Fake f;  // reached point 1 while sitting: point 2 waits
+        f.villager();
+        VillagerMoves m(f.deps());
+        std::string why;
+        REQUIRE(m.add(kWorld, order({{3, 10, 0}, {12, 10, 0}}), f.cb(), &why) != 0);
+        f.state(kSitting);
+        f.step(m);  // 1 m from point 1: reached
+        f.steps(m, 3000);
+        CHECK(f.sends.size() == 1);
+        f.state(kIdle);
+        f.step(m);
+        REQUIRE(f.sends.size() == 2);
+        CHECK(f.sends[1].x == doctest::Approx(12));
+    }
+    {
+        Fake f;  // the player says stay while it walks: cancelled at once, nothing sent to a frozen villager
+        f.villager();
+        VillagerMoves m(f.deps());
+        std::string why;
+        REQUIRE(m.add(kWorld, order({{20, 10, 0}}), f.cb(), &why) != 0);
+        f.walking_to(20, 10, 0);
+        f.steps(m, 2000);
+        f.get<gen::ActiveNpcStateSaved>(kVillager).overrideRoamingRange = true;
+        f.get<gen::ActiveNpcStateSaved>(kVillager).roamingRange = 0;
+        const size_t sent = f.sends.size();
+        f.step(m);
+        REQUIRE(f.done.size() == 1);
+        CHECK(f.done[0].status == EMF_MOVE_CANCELLED);
+        CHECK(f.sends.size() == sent);
+    }
+    {
+        Fake g;  // 256 moves, one of them cancelled for the next step: a new move on that villager is taken
+        VillagerMoves n(g.deps());
+        std::string why;
+        uint32_t first = 0;
+        for (uint32_t i = 0; i < kVillagerMovesMax; ++i) {
+            g.villager(1000 + i, 0x100000 + i);
+            const uint32_t id = n.add(kWorld, order({{10, 10, 0}}, 1000 + i), nullptr, &why);
+            REQUIRE(id != 0);
+            if (!first) first = id;
+        }
+        CHECK(n.cancel(first, false));
+        CHECK(n.add(kWorld, order({{12, 10, 0}}, 1000), nullptr, &why) != 0);
+    }
+    {
+        Fake f;  // two moves end in one step; the first one's callback cancels the second, which arrived to hold
+        f.villager(kVillager, kNpcId);
+        f.villager(kOther, kOtherNpcId);
+        VillagerMoves m(f.deps());
+        std::string why;
+        auto hold = order({{3, 10, 0}}, kOther);
+        hold.hold_forever = true;
+        std::vector<uint32_t> heard;
+        uint32_t held = 0;
+        const uint32_t a = m.add(kWorld, order({{3, 10, 0}}, kVillager),
+                                 [&](EmfWorld*, uint32_t id, uint32_t) { heard.push_back(id); m.cancel(held); }, &why);
+        held = m.add(kWorld, hold, [&](EmfWorld*, uint32_t id, uint32_t) { heard.push_back(id); }, &why);
+        f.step(m);  // both 1 m from their points
+        REQUIRE(!heard.empty());
+        CHECK(heard[0] == a);
+        CHECK(heard.size() == 1);  // the cancelled hold's "arrived" is not said
+    }
+    {
+        Fake f;  // a second entity with the same npcId (a copy of the template): refused while the first moves
+        f.villager(kVillager, kNpcId);
+        f.villager(kOther, kNpcId);
+        VillagerMoves m(f.deps());
+        std::string why;
+        REQUIRE(m.add(kWorld, order({{10, 10, 0}}, kVillager), nullptr, &why) != 0);
+        CHECK(has(refused(f, m, order({{10, 10, 0}}, kOther)), "npcId"));
+    }
+}
+
+TEST_CASE("villager moves: fill_npc_command writes the game's GoToPosition (type 1, the npcId, 32.32 fixed point, rotation w 1, scale 1)") {
+    gen::NpcCommandEvent e{};
+    fill_npc_command(&e, NpcSendQueue::Send{kNpcId, 1.5, -2.25, 3000.0});
+    CHECK(static_cast<int>(e.type) == 1);
+    CHECK(e.npcId.value == kNpcId);
+    CHECK(e.targetTransform.position.x == static_cast<int64_t>(1.5 * 4294967296.0));
+    CHECK(e.targetTransform.position.y == static_cast<int64_t>(-2.25 * 4294967296.0));
+    CHECK(e.targetTransform.position.z == static_cast<int64_t>(3000.0 * 4294967296.0));
+    CHECK(e.targetTransform.orientation.w == 1.0f);
+    CHECK(e.targetTransform.scale.x == 1.0f);
 }

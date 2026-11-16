@@ -50,8 +50,9 @@ Point point_of(const emf::gen::float3& f) { return {f.x, f.y, f.z}; }
 
 // active_npc::State
 constexpr uint8_t kStart = 1, kFindBed = 2, kIdle = 3, kDecideTask = 4, kFindTarget = 5, kGoToTarget = 6, kRoam = 7,
-                  kSleep = 8, kWaitPlayer = 13, kInsideWater = 16, kFinishTask = 17;
-constexpr uint8_t kWantsToSleep = 5;               // active_npc::Decision
+                  kSleep = 8, kSitting = 9, kInteracting = 10, kSocializing = 11, kWaitPlayer = 13, kInsideWater = 16,
+                  kFinishTask = 17;
+constexpr uint8_t kWantsToSocialize = 4, kWantsToSleep = 5;  // active_npc::Decision
 constexpr uint8_t kTargetReached = 8, kNotReachable = 9;  // PathWalkerState
 constexpr uint8_t kTalkBits = 0x0b;                 // NpcInteractionState: turning, greeting, playing a sequence
 constexpr double kTargetSame = 0.1;                 // m: NpcCommon.currentTargetPosition is our point
@@ -61,6 +62,9 @@ bool paused(uint8_t s, uint8_t decision, const gen::NpcCommon* c) {
     if (s == kStart || s == kFindBed || s == kSleep || s == kInsideWater || decision == kWantsToSleep) return true;
     return c && (!(c->closestPlayerDistance < kVillagerPauseM) || (c->interactionStates & kTalkBits) != 0);
 }
+// Busy with something that ends by itself (sitting, interacting, a chat): nothing sent, the clocks wait.
+bool busy(uint8_t s) { return s == kSitting || s == kInteracting || s == kSocializing; }
+
 // States that take a GoToPosition cleanly (the game switches them to Roam); others end by themselves (sitting,
 // interacting, socializing, avoiding water or a build cursor). A hold never takes it from WaitingCloseToPlayer.
 bool takes_order(uint8_t s, bool holding) {
@@ -74,6 +78,17 @@ bool takes_order(uint8_t s, bool holding) {
     }
 }
 }  // namespace
+
+void fill_npc_command(void* event, const NpcSendQueue::Send& s) {
+    auto* e = static_cast<gen::NpcCommandEvent*>(event);
+    e->type = gen::NpcCommandType::GoToPosition;
+    e->npcId.value = s.npc;  // the villager's template ActiveNpcState.npcId
+    e->targetTransform.position.x = std::llround(s.x * 4294967296.0);
+    e->targetTransform.position.y = std::llround(s.y * 4294967296.0);
+    e->targetTransform.position.z = std::llround(s.z * 4294967296.0);
+    e->targetTransform.orientation.w = 1.0f;
+    e->targetTransform.scale = {1.0f, 1.0f, 1.0f};
+}
 
 void NpcSendQueue::push(uint32_t npc, double x, double y, double z) {
     std::lock_guard<std::mutex> l(m_);
@@ -177,7 +192,14 @@ uint32_t VillagerMoves::add(EmfWorld* world, const Order& o, Callback cb, std::s
     uint32_t id = 0;
     {
         std::lock_guard<std::mutex> l(m_);
-        const bool replaces = moving_locked(world, o.villager) != 0;
+        bool replaces = false;
+        for (const Move& x : moves_) {
+            if (x.world != world) continue;
+            if (x.villager == o.villager) replaces = true;  // a cancel still pending counts: its place frees now
+            else if (x.npc == npc && !x.cancelled)
+                return no("another villager with the same npcId (a copy of its template) is moving: the game would send "
+                          "both");
+        }
         if (!replaces && moves_.size() >= kVillagerMovesMax) return no("too many villager moves (256)");
         for (size_t i = 0; i < moves_.size(); ++i)
             if (moves_[i].villager == o.villager && moves_[i].world == world) {
@@ -216,10 +238,21 @@ void VillagerMoves::send(Move& m, uint64_t now) {
     if (d_.go_to) d_.go_to(m.npc, p[0], p[1], p[2]);
     m.last_send = now;
     ++m.sends;
+    if (const auto* w = comp<gen::DynamicPathWalker>(d_, m.world, m.villager)) m.send_tick = w->lastResultTick;
 }
 
-void VillagerMoves::stop(const Move& m) {
+void VillagerMoves::stop(const Move& m, uint64_t now) {
     if (d_.drop) d_.drop(m.npc);
+    if (m.no_stop) return;
+    const auto* a = comp<gen::DynamicActiveNpcState>(d_, m.world, m.villager);
+    if (!a) return;
+    const uint8_t s = static_cast<uint8_t>(a->state), decision = static_cast<uint8_t>(a->decision);
+    const auto* c = comp<gen::NpcCommon>(d_, m.world, m.villager);
+    if (paused(s, decision, c) || !takes_order(s, false)) return;  // asleep, sitting, talking: nothing of ours runs
+    const Point& p = m.points[m.next];
+    const bool alive = s == kRoam && c && dist3(point_of(c->currentTargetPosition), p) <= kTargetSame;
+    const bool fresh = m.last_send != 0 && now - m.last_send <= kVillagerStopFreshMs;
+    if (!alive && !fresh) return;  // it is on its own routine already
     Point at{};
     if (d_.go_to && place(m, at)) d_.go_to(m.npc, at[0], at[1], at[2]);
 }
@@ -235,6 +268,11 @@ int VillagerMoves::tick(Move& m, uint64_t now) {
     const double jump = dist3(at, m.last);
     m.last = at;
     if (jump > kVillagerJumpM) return EMF_MOVE_STUCK;  // the game teleported it (stuck, or beyond its leash)
+    if (const auto* saved = comp<gen::ActiveNpcStateSaved>(d_, m.world, m.villager);
+        saved && saved->overrideRoamingRange && !(saved->roamingRange > 0)) {
+        m.no_stop = true;  // the player told it to stay: the game freezes it, a send would do nothing
+        return EMF_MOVE_CANCELLED;
+    }
     const uint8_t s = static_cast<uint8_t>(a->state), prev = static_cast<uint8_t>(a->previousState);
     const uint8_t decision = static_cast<uint8_t>(a->decision);
     const auto* c = comp<gen::NpcCommon>(d_, m.world, m.villager);
@@ -247,31 +285,39 @@ int VillagerMoves::tick(Move& m, uint64_t now) {
         up <= m.arrive + kMoveUpDown)
         reached = true;  // the walker stopped at the path's last node, up to 5 m short of a point it cannot stand on
     if (reached) {
-        if (m.next + 1 >= m.points.size()) return EMF_MOVE_ARRIVED;
+        if (m.next + 1 >= m.points.size()) {
+            // a hold counts "at its point" as far off as it stopped (the walker may stop up to 5 m short)
+            m.hold_radius = (std::min)((std::max)(m.arrive, flat + 0.5), m.arrive + kVillagerTargetedReach + 0.5);
+            return EMF_MOVE_ARRIVED;
+        }
         ++m.next;
-        m.sends = m.struck_send = m.strikes = 0;
+        m.sends = m.strikes = 0;
         m.since = now;
         m.best = dist3(at, m.points[m.next]);
-        send(m, now);
+        m.last_send = 0;  // sent by the next step, when its state takes it
         return -1;
     }
     if (m.until && now >= m.until) return EMF_MOVE_TIMEOUT;
-    if (paused(s, decision, c)) {  // the game does not run it now: the stuck clock waits
+    if (paused(s, decision, c) || busy(s)) {  // the game does not run it now, or it sits or talks: the clocks wait
         m.since = now;
         m.best = dist;
         return -1;
     }
-    // the path not found for this point, counted once per send (live: path result 7 for a point outside the area)
-    if (w && m.sends > m.struck_send) {
+    // the path not found for this point: a result newer than our send, for our point, counted once (live: path result
+    // 7 for a point outside the area); a metre of progress forgives
+    if (w && m.sends > 0 && w->lastResultTick != m.send_tick && w->lastResultTick != m.struck_tick) {
         const uint8_t r = static_cast<uint8_t>(w->lastPathfindingResult);
-        if (ws == kNotReachable || (r >= 2 && r <= 7)) {
-            m.struck_send = m.sends;
+        const bool ours = dist3(point_of(w->targetPosition), p) <= kVillagerPathTarget ||
+                          dist3(point_of(w->originalTargetPosition), p) <= kVillagerPathTarget;
+        if (ours && (ws == kNotReachable || (r >= 2 && r <= 7))) {
+            m.struck_tick = w->lastResultTick;
             if (++m.strikes >= kVillagerNotReachableMax) return EMF_MOVE_STUCK;
         }
     }
     if (dist <= m.best - kMoveProgress) {
         m.best = dist;
         m.since = now;
+        m.strikes = 0;
     } else if (now - m.since >= m.stuck_ms) {
         return EMF_MOVE_STUCK;
     }
@@ -296,10 +342,16 @@ int VillagerMoves::tick_hold(Move& m, uint64_t now) {
     const uint8_t s = static_cast<uint8_t>(a->state), decision = static_cast<uint8_t>(a->decision);
     const auto* c = comp<gen::NpcCommon>(d_, m.world, m.villager);
     const Point& p = m.points.back();
-    const bool there = across(at, p) <= m.arrive && std::abs(at[1] - p[1]) <= m.arrive + kMoveUpDown;
-    if (there || paused(s, decision, c) || s == kWaitPlayer) {
-        m.since = now;  // at its point, or waiting (a player close by, night, a chat): the clock waits
-        if (!there) return -1;
+    const double dist = dist3(at, p);
+    if (paused(s, decision, c) || s == kWaitPlayer || busy(s) || (s == kGoToTarget && decision == kWantsToSocialize)) {
+        m.since = now;  // waiting (night, a player close by or talking, a chat): nothing sent, the clock waits
+        m.best = dist;
+        return -1;
+    }
+    const bool there = across(at, p) <= m.hold_radius && std::abs(at[1] - p[1]) <= m.arrive + kMoveUpDown;
+    if (there || dist <= m.best - kMoveProgress) {  // at its point, or coming back
+        m.since = now;
+        m.best = dist;
     } else if (now - m.since >= m.stuck_ms) {
         return 1;  // no way back
     }
@@ -321,7 +373,7 @@ bool VillagerMoves::cancel(uint32_t id, bool now) {
         }
         Move m = std::move(*it);
         moves_.erase(it);
-        stop(m);
+        stop(m, d_.now_ms ? d_.now_ms() : 0);
         if (!m.holding) {
             x = {m.cb, m.world, m.id, EMF_MOVE_CANCELLED};
             call = true;
@@ -352,7 +404,7 @@ void VillagerMoves::step(EmfWorld* world) {
                 if (tick_hold(m, now) < 0) {
                     keep.push_back(std::move(m));
                 } else if (m.cancelled) {
-                    stop(m);
+                    stop(m, now);
                 } else if (d_.drop) {
                     d_.drop(m.npc);  // its time is over (or it went): it goes back to its routine by itself
                 }
@@ -367,12 +419,12 @@ void VillagerMoves::step(EmfWorld* world) {
                 m.holding = true;
                 m.hold_until = now + m.hold_ms;
                 m.since = now;
-                done.push_back({m.cb, world, m.id, EMF_MOVE_ARRIVED});
+                done.push_back({m.cb, world, m.id, EMF_MOVE_ARRIVED, true});
                 keep.push_back(std::move(m));
                 continue;
             }
             if (status == EMF_MOVE_CANCELLED || status == EMF_MOVE_STUCK || status == EMF_MOVE_TIMEOUT) {
-                stop(m);
+                stop(m, now);
             } else if (d_.drop) {
                 d_.drop(m.npc);
             }
@@ -380,8 +432,16 @@ void VillagerMoves::step(EmfWorld* world) {
         }
         moves_ = std::move(keep);
     }
-    for (Done& x : done)
-        if (x.cb) x.cb(x.world, x.id, x.status);
+    for (Done& x : done) {
+        if (!x.cb) continue;
+        if (x.hold_arrival) {  // an earlier callback of this step may have ended the hold: then nothing is said
+            std::lock_guard<std::mutex> l(m_);
+            const bool there = std::any_of(moves_.begin(), moves_.end(),
+                                           [&](const Move& m) { return m.id == x.id && !m.cancelled; });
+            if (!there) continue;
+        }
+        x.cb(x.world, x.id, x.status);
+    }
 }
 
 void VillagerMoves::world_reset() {

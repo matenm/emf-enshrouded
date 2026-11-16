@@ -1,5 +1,5 @@
 #pragma once
-// Villager moves (API v45): a villager walked to points by re-sending the game's own NpcCommandEvent GoToPosition (the
+// Villager moves (API v46): a villager walked to points by re-sending the game's own NpcCommandEvent GoToPosition (the
 // command the game uses itself), queued per villager and sent from the emf_moves program. The game takes one command
 // per villager per step and drops it when the villager arrives, is interrupted (a player close by, night, a chat,
 // water) or its path fails, so EMF sends the point again whenever the villager is in a state that takes it and the order
@@ -45,6 +45,8 @@ constexpr double kVillagerPauseM = 150.0;         // no player this close: the g
 constexpr uint32_t kVillagerNotReachableMax = 2;
 constexpr double kVillagerHomeMovedM = 1.0;       // a hold ends when its home moves this far
 constexpr double kVillagerTargetedReach = 3.0;    // Roam ended at TargetReached within arrive + this: arrived
+constexpr uint64_t kVillagerStopFreshMs = 500;    // a send this recent may not be taken yet: a stop still goes out
+constexpr double kVillagerPathTarget = 1.0;       // m: the walker's target is our point (a path result is ours)
 
 // The GoToPosition commands waiting for the emf_moves program: at most one per villager (the game reads only the first
 // per villager and step), the latest point wins; at most kNpcQueueMax villagers. Any thread.
@@ -67,6 +69,10 @@ private:
     mutable std::mutex m_;
     std::vector<Send> q_;
 };
+
+// The game's GoToPosition for one send, into a 72-byte NpcCommandEvent (type 1, the npcId, the point in 32.32 fixed
+// point, rotation w 1, scale 1).
+void fill_npc_command(void* event, const NpcSendQueue::Send& s);
 
 class VillagerMoves {
 public:
@@ -125,8 +131,11 @@ private:
         uint64_t since = 0;          // when it last made progress (or was paused, or stood at its hold point)
         double best = 0;             // its closest distance to the point since then
         uint32_t sends = 0;          // sends for this point
-        uint32_t struck_send = 0;    // the send a "path not found" was last counted for
-        uint32_t strikes = 0;        // "path not found" for this point
+        uint32_t send_tick = 0;      // the walker's lastResultTick at the last send (a newer result answers it)
+        uint32_t struck_tick = 0;    // the result a "path not found" was last counted for
+        uint32_t strikes = 0;        // "path not found" for this point (forgiven on progress)
+        double hold_radius = 2.0;    // holding: "at its point" within this across (the walker may stop short)
+        bool no_stop = false;        // ends without "stop where you stand" (the player set stay)
         bool cancelled = false;      // ends at the next step
         Callback cb;
     };
@@ -134,12 +143,15 @@ private:
         Callback cb;
         EmfWorld* world;
         uint32_t id, status;
+        bool hold_arrival = false;  // said only while the hold is still there (an earlier callback may end it)
     };
     // Walking: its status when it ends now (or arrives), else -1. Holding: 1 when the hold ends now, else -1.
     int tick(Move& m, uint64_t now);
     int tick_hold(Move& m, uint64_t now);
     void send(Move& m, uint64_t now);           // its current point
-    void stop(const Move& m);                   // drop its queued sends, then "go to where you stand"
+    // drop its queued sends; then "go to where you stand", only while our order runs (never to a villager asleep,
+    // sitting or talking: the game's GoToPosition would pull it out of that)
+    void stop(const Move& m, uint64_t now);
     bool place(const Move& m, Point& out) const;
     uint32_t moving_locked(EmfWorld* world, uint32_t villager) const;
     std::string check(EmfWorld* world, const Order& o, uint32_t* npc, Point* home) const;  // "" when it may go

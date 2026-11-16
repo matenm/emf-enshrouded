@@ -85,6 +85,7 @@ struct Script {
     std::set<uint32_t> enemy_orders;                   // its emf.enemy_order ids (lua 1.32): cancelled on unload and pause
     std::set<uint32_t> enemy_moves;                    // its emf.enemy_move ids (lua 1.33): cancelled on unload and pause
     std::set<uint32_t> villager_moves;                 // its emf.villager_move ids (lua 1.39, a hold too): the same
+    std::set<uint32_t> villager_holds;                 // ...of them, the ones that arrived and hold (no callback left)
     std::set<std::string> markers;                     // its emf.marker ids ("<id>:<name>", lua 1.25): removed with it
     std::set<std::pair<uint32_t, std::string>> sent_markers;  // emf.send_marker: (player or 0, id), unsent with it
     std::map<std::string, int> map_actions;            // emf.map_action (lua 1.26): "<id>:<name>" -> function; removed with it

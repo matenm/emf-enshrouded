@@ -651,14 +651,7 @@ void moves_program(void* ctx, void*) {
         auto* ev = static_cast<gen::NpcCommandEvent*>(
             emf::core::api_table()->emit_event(ctx, "NpcCommandEvent", gen::NpcCommandEvent::kSize));
         if (!ev) break;  // logged once by emit_event; the rest waits for the next step
-        const auto& s = sends[done];
-        ev->type = gen::NpcCommandType::GoToPosition;
-        ev->npcId.value = s.npc;  // the villager's template ActiveNpcState.npcId
-        ev->targetTransform.position.x = std::llround(s.x * 4294967296.0);
-        ev->targetTransform.position.y = std::llround(s.y * 4294967296.0);
-        ev->targetTransform.position.z = std::llround(s.z * 4294967296.0);
-        ev->targetTransform.orientation.w = 1.0f;
-        ev->targetTransform.scale = {1.0f, 1.0f, 1.0f};
+        emf::core::fill_npc_command(ev, sends[done]);
     }
     if (done < sends.size())
         g_npc_queue.put_back(std::vector<emf::core::NpcSendQueue::Send>(sends.begin() + static_cast<std::ptrdiff_t>(done), sends.end()));

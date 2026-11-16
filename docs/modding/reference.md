@@ -1439,8 +1439,9 @@ terrain, another material) is a player's. Seen live on a ruin and on a player's 
   `EMF_MOVE_CANCELLED` (cancel, a new move on it, the world closing: world NULL). Cancelled, stuck and timeout send it
   "go to where you stand", so it stops and goes back to its routine.
 - **Hold.** The callback still comes once, at `EMF_MOVE_ARRIVED`; the hold runs on the same id, sending the point again
-  every 2 s while the villager is not walking there (seen in game: that kept it in place), and waits while a player is
-  close by. It ends quietly (no second callback): its time over, `villager_move_cancel`, a new move on it, the world
+  every 2 s while the villager is not walking there, also while it stands on it (seen in game: that kept it in place).
+  It waits, sending nothing, while the villager is paused (as above), a player is close by, or it sits or chats; "at
+  its point" is as near as it got when it arrived. It ends quietly (no second callback): its time over, `villager_move_cancel`, a new move on it, the world
   closing, the player telling it to stay, its home moving more than 1 m, a teleport, or no way back for
   `stuck_seconds`.
 - `enemy_move` refuses `EMF_MOVE_HOLD`. Villager Jobs 1.5.1 sends no job command to a villager with a villager move.
