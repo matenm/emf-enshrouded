@@ -350,6 +350,7 @@ TEST_CASE("hud.colour: says when a colour does not show now") {
     CHECK(run(e, {"hud.colour", "health", "#ff0000"}) ==
           Lines{"hud: health fill #ff0000 (layout \"Default\")", "hud: not shown now: Bar colours are not available on this game build."});
     HudRig r2;
+    r2.build_panel = false;
     HudEditorDeps d = r2.deps();
     d.panel_status = [] { return PanelStatus::Unavailable; };
     r2.editor = std::make_unique<HudEditor>(d);

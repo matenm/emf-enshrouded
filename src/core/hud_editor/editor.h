@@ -35,6 +35,10 @@ struct HudEditorDeps {
     std::function<bool()> bars_ready;                     // the bar detour is installed; empty = not available
     std::function<std::optional<StyleBlock>(int bar)> game_colours;  // the game's colour block for a bar, once drawn
     std::function<PanelStatus()> panel_status;            // whether the panel colour can be drawn; empty = unknown
+    // What this game build's signatures allow (hud_scale_ready, hud_bars_ready, hud_panel_ready), known before the hooks
+    // go in: until they do (the editor not on yet this session) the view goes by these, and once they are in, a part
+    // the build has that still does not work had its hook fail.
+    bool build_scale = true, build_bars = true, build_panel = true;
     std::function<ColourStats()> colour_stats;            // the bar detour's colour counters; empty = none
     std::function<bool(uint32_t vk)> key_down;            // a key held now with the game in front
     std::function<void()> toggle_page;                    // opens (or closes) the console on the HUD page
@@ -49,6 +53,7 @@ struct HudView {
     std::vector<std::string> layouts;  // display names, sorted ignoring case, the active one always in it
     std::array<ElementLayout, kHudElementCount> elements{};
     std::array<LiveInfo, kHudElementCount> live{};
+    // The *_works below: the part works, or will once the editor is on (before its hooks go in: what the build allows)
     ScaleState scale;           // from scale_state()
     bool scale_works = false;   // scale.available && !scale.off
     std::string scale_note;     // "" when it works, else the reason

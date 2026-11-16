@@ -734,6 +734,7 @@ TEST_CASE("editor: a part's reset keeps its colours and the panel; reset all cle
 
 TEST_CASE("editor: colours work without scale; the panel follows its status") {
     HudRig r;
+    r.build_panel = false;  // the panel's signature is not usable on this build
     PanelStatus status = PanelStatus::Unknown;
     HudEditorDeps d = r.deps();
     d.panel_status = [&status] { return status; };
@@ -750,10 +751,78 @@ TEST_CASE("editor: colours work without scale; the panel follows its status") {
     status = PanelStatus::Unavailable;
     CHECK_FALSE(e.view().panel_works);
     CHECK(e.view().panel_note == "The panel colour is not available on this game build.");
+    HudRig off;
+    off.bars = false;  // no bar signature on this build
+    HudEditor& f = off.make();
+    CHECK_FALSE(f.view().colours_work);
+    CHECK(f.view().colours_note == "Bar colours are not available on this game build.");
+    CHECK_FALSE(f.view().panel_works);
+}
+
+TEST_CASE("editor: before its hooks go in (off at start, another HUD mod) nothing is called not available that the build has") {
+    for (int why = 0; why < 2; ++why) {
+        HudRig r;
+        if (why == 0) r.set("enabled", "0");
+        else r.other_mod = "ShroudHud";
+        HudEditorDeps d = r.deps();  // this build has every signature
+        // what the real hooks say before they go in: no transform functions, no bar detour, the panel not known
+        r.scale = ScaleState{false, false};
+        r.bars = false;
+        d.panel_status = [] { return PanelStatus::Unknown; };
+        r.editor = std::make_unique<HudEditor>(d);
+        r.editor->start();
+        const HudView v = r.editor->view();
+        CHECK(v.gate.state == (why == 0 ? GateState::Disabled : GateState::OtherHudMod));
+        CHECK(r.installs == 0);
+        CHECK(v.scale_works);  // they work once the editor is on: the page keeps them usable, as move and hide
+        CHECK(v.bars_work);
+        CHECK(v.colours_work);
+        CHECK(v.panel_works);
+        CHECK(v.grow_works);
+        for (const std::string& note : {v.scale_note, v.bars_note, v.colours_note, v.panel_note, v.grow_note})
+            CHECK(note.empty());  // the gate's message says why the editor is off
+    }
+    // a build without them says so before the hooks go in too
+    HudRig r;
+    r.set("enabled", "0");
+    r.scale = ScaleState{false, false};
     r.bars = false;
-    CHECK_FALSE(e.view().colours_work);
-    CHECK(e.view().colours_note == "Bar colours are not available on this game build.");
+    HudEditor& e = r.make();
+    const HudView v = e.view();
+    CHECK(r.installs == 0);
+    CHECK_FALSE(v.scale_works);
+    CHECK(v.scale_note == "Scale is not available on this game build; move and hide work.");
+    CHECK(v.bars_note == "Moving health, mana and stamina on their own is not available on this game build.");
+    CHECK(v.colours_note == "Bar colours are not available on this game build.");
+    CHECK(v.grow_note == "Status effects growing upward is not available on this game build.");
+    HudRig p;
+    p.set("enabled", "0");
+    p.build_panel = false;
+    HudEditor& pe = p.make();
+    CHECK_FALSE(pe.view().panel_works);
+    CHECK(pe.view().panel_note == "The panel colour is not available on this game build.");
+    CHECK(pe.view().colours_work);
+}
+
+TEST_CASE("editor: a bar or panel hook that failed where the build has its signature says it could not be hooked") {
+    HudRig r;
+    PanelStatus status = PanelStatus::Unavailable;
+    HudEditorDeps d = r.deps();  // every signature usable
+    d.panel_status = [&status] { return status; };
+    r.editor = std::make_unique<HudEditor>(d);
+    r.editor->start();
+    HudEditor& e = *r.editor;
     CHECK_FALSE(e.view().panel_works);
+    CHECK(e.view().panel_note == "The panel colour is off: the game's panel call could not be hooked (see emf_core.log).");
+    r.bars = false;  // the bar detour did not go in
+    const HudView v = e.view();
+    CHECK_FALSE(v.bars_work);
+    CHECK(v.bars_note ==
+          "Moving health, mana and stamina on their own is off: the game's bar code could not be hooked (see "
+          "emf_core.log).");
+    CHECK_FALSE(v.colours_work);
+    CHECK(v.colours_note == "Bar colours are off: the game's bar code could not be hooked (see emf_core.log).");
+    CHECK(v.panel_note == v.colours_note);
 }
 
 TEST_CASE("editor: the game's colours are logged once per bar") {
@@ -784,6 +853,7 @@ TEST_CASE("editor: the game's colours are logged once per bar") {
 
 TEST_CASE("editor: a panel colour that is not available on this game build is logged once") {
     HudRig r;
+    r.build_panel = false;
     PanelStatus status = PanelStatus::Unknown;
     HudEditorDeps d = r.deps();
     d.panel_status = [&status] { return status; };
@@ -798,4 +868,37 @@ TEST_CASE("editor: a panel colour that is not available on this game build is lo
     r.editor->tick();
     CHECK(r.count_logged("HUD editor: the panel colour is not available on this game build (its signature is not "
                          "usable); the panel keeps the game's colour") == 1);
+}
+
+TEST_CASE("editor: the panel's 'not available' log line names its cause: a signature, the bars' hook or its own hook") {
+    struct Case {
+        bool bars_sig, panel_sig, bars_hooked;
+        const char* line;
+    };
+    const Case cases[] = {
+        {false, true, false,
+         "HUD editor: the panel colour is not available on this game build (the bars' signatures are not usable); the "
+         "panel keeps the game's colour"},
+        {true, false, true,
+         "HUD editor: the panel colour is not available on this game build (its signature is not usable); the panel "
+         "keeps the game's colour"},
+        {true, true, false,
+         "HUD editor: the panel colour is off (the bars' hook could not be installed); the panel keeps the game's colour"},
+        {true, true, true,
+         "HUD editor: the panel colour is off (its hook could not be installed); the panel keeps the game's colour"},
+    };
+    for (const Case& c : cases) {
+        HudRig r;
+        r.bars = c.bars_sig;
+        r.build_panel = c.panel_sig;
+        HudEditorDeps d = r.deps();
+        r.bars = c.bars_hooked;
+        d.panel_status = [] { return PanelStatus::Unavailable; };
+        r.editor = std::make_unique<HudEditor>(d);
+        r.editor->start();
+        r.editor->tick();
+        r.editor->tick();
+        CHECK(r.count_logged(c.line) == 1);
+        CHECK(r.count_logged("the panel colour") == 1);
+    }
 }

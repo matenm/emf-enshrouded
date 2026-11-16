@@ -249,8 +249,13 @@ void HudEditor::tick() {
     }
     if (deps_.panel_status && !panel_refusal_logged_ && deps_.panel_status() == PanelStatus::Unavailable) {
         panel_refusal_logged_ = true;
-        log_locked("HUD editor: the panel colour is not available on this game build (its signature is not usable); the "
-                   "panel keeps the game's colour");
+        // the panel's hook goes in only with the bars' (install_hud_hooks): either one's signature or hook can be why
+        const bool bars_hooked = deps_.bars_ready && deps_.bars_ready();
+        const char* why = !deps_.build_bars    ? "is not available on this game build (the bars' signatures are not usable)"
+                          : !deps_.build_panel ? "is not available on this game build (its signature is not usable)"
+                          : !bars_hooked       ? "is off (the bars' hook could not be installed)"
+                                               : "is off (its hook could not be installed)";
+        log_locked(std::string("HUD editor: the panel colour ") + why + "; the panel keeps the game's colour");
     }
     if (deps_.scale_state && !scale_off_logged_ && deps_.scale_state().off) {
         scale_off_logged_ = true;
@@ -282,8 +287,13 @@ HudView HudEditor::view() const {
     for (size_t i = 0; i < kHudElementCount; ++i)
         if (deps_.live) v.live[i] = deps_.live(i);
     if (deps_.scale_state) v.scale = deps_.scale_state();
-    v.scale_works = v.scale.available && !v.scale.off;
-    if (!v.scale.available)
+    // Until the hooks go in (the editor's first turn on: it is off, or another HUD mod keeps it off) the states the hooks
+    // set say nothing yet: what the build's signatures allow decides (those parts work once the editor is on, and the
+    // gate's message says why it is off). Once they are in, a part the build has that does not work had its hook fail.
+    const bool waiting = !hooked_;
+    const bool scale_here = waiting ? deps_.build_scale : v.scale.available;
+    v.scale_works = scale_here && !v.scale.off;
+    if (!scale_here)
         v.scale_note = "Scale is not available on this game build; move and hide work.";
     else if (v.scale.off)
         v.scale_note =
@@ -292,9 +302,14 @@ HudView HudEditor::view() const {
     v.order = active_locked().order;
     v.buffs_up = active_locked().buffs_up;
     // the bars and grow-upward move through the transform stack, as scale does: they stop with it
-    const bool bars_hooked = deps_.bars_ready && deps_.bars_ready();
+    const bool bars_hooked = waiting ? deps_.build_bars : deps_.bars_ready && deps_.bars_ready();
+    const bool bars_hook_failed = !bars_hooked && deps_.build_bars;
     v.bars_work = bars_hooked && v.scale_works;
-    if (!bars_hooked || !v.scale.available)
+    if (bars_hook_failed)
+        v.bars_note =
+            "Moving health, mana and stamina on their own is off: the game's bar code could not be hooked (see "
+            "emf_core.log).";
+    else if (!bars_hooked || !scale_here)
         v.bars_note = "Moving health, mana and stamina on their own is not available on this game build.";
     else if (v.scale.off)
         v.bars_note = "Moving health, mana and stamina on their own stopped with scale for this session (see emf_core.log).";
@@ -303,16 +318,23 @@ HudView HudEditor::view() const {
     for (int b = 0; b < static_cast<int>(kBarCount); ++b)
         if (deps_.game_colours) v.game_colours[static_cast<size_t>(b)] = deps_.game_colours(b);
     v.colours_work = bars_hooked;
-    if (!v.colours_work) v.colours_note = "Bar colours are not available on this game build.";
-    const PanelStatus panel = deps_.panel_status ? deps_.panel_status() : PanelStatus::Unknown;
+    if (bars_hook_failed)
+        v.colours_note = "Bar colours are off: the game's bar code could not be hooked (see emf_core.log).";
+    else if (!v.colours_work)
+        v.colours_note = "Bar colours are not available on this game build.";
+    const PanelStatus panel =
+        waiting ? (deps_.build_panel ? PanelStatus::Available : PanelStatus::Unavailable)
+                : (deps_.panel_status ? deps_.panel_status() : PanelStatus::Unknown);
     v.panel_works = v.colours_work && panel != PanelStatus::Unavailable;
     if (!v.colours_work)
         v.panel_note = v.colours_note;
     else if (panel == PanelStatus::Unavailable)
-        v.panel_note = "The panel colour is not available on this game build.";
+        v.panel_note = deps_.build_panel
+                           ? "The panel colour is off: the game's panel call could not be hooked (see emf_core.log)."
+                           : "The panel colour is not available on this game build.";
     if (deps_.colour_stats) v.colour_stats = deps_.colour_stats();
     v.grow_works = v.scale_works;
-    if (!v.scale.available)
+    if (!scale_here)
         v.grow_note = "Status effects growing upward is not available on this game build.";
     else if (v.scale.off)
         v.grow_note = "Status effects growing upward stopped with scale for this session (see emf_core.log).";
