@@ -376,11 +376,14 @@ TEST_CASE("sweep glue: a pickup's item id and category; a plant's loot reference
     Rig r;
     at(10, 1, 0, 0);
     comp<gen::InteractionOfferRuntime>(10);
-    comp<gen::PickupItem>(10).itemId.value = 0x33;
+    auto& pick = comp<gen::PickupItem>(10);
+    pick.itemId.value = 0x33;
+    pick.pickupAmount = 4;
     const auto cats = [](uint32_t item) { return item == 0x33 ? 9 : -1; };
     sweep::Thing t = sweep::read_thing(r.w(), 10, names, {}, cats);
     CHECK(t.item_id == 0x33);
     CHECK(t.item_category == 9);
+    CHECK(t.pickup_amount == 4);
     CHECK(sweep::read_thing(r.w(), 10, names).item_category == -1);  // no category lookup given
     // a plant: its DefaultInventory on its template only, then its own component too (that one counts)
     at(11, 2, 0, 0);
@@ -417,14 +420,18 @@ TEST_CASE("sweep glue: an item's category is the game's ItemInfo byte at +0xCC; 
     CHECK(sweep::item_category(r.w(), 0x12) == -1);
 }
 
-TEST_CASE("sweep glue: what a player carries, per item: backpack, action bar and equipment, never other inventories") {
+TEST_CASE("sweep glue: what a player carries, per item: backpack, action bar, equipment and currency, never customization") {
     Rig r;
     auto& setup = comp<gen::InventorySetup>(1);
     const std::pair<uint32_t, emf::gen::InventoryCategory> links[] = {{100, emf::gen::InventoryCategory::Generic},
                                                                       {101, emf::gen::InventoryCategory::Equipment},
                                                                       {102, emf::gen::InventoryCategory::Generic},
-                                                                      {103, emf::gen::InventoryCategory::Customization}};
-    for (int i = 0; i < 4; ++i) {
+                                                                      {103, emf::gen::InventoryCategory::Customization},
+                                                                      {104, emf::gen::InventoryCategory::Currency}};
+    auto& coins = comp<gen::Inventory>(104);
+    coins.slots[0].id.value = 0x66;  // runes
+    coins.slots[0].data.count = 12;
+    for (int i = 0; i < 5; ++i) {
         setup.linksEntities[i].id = links[i].first;
         setup.linksCategories[i] = links[i].second;
     }
@@ -449,6 +456,7 @@ TEST_CASE("sweep glue: what a player carries, per item: backpack, action bar and
     CHECK(m.at(0x33) == 27);
     CHECK(m.at(0x11) == 1);
     CHECK(m.at(0x55) == 30);
+    CHECK(m.at(0x66) == 12);
     CHECK(m.count(0x44) == 0);
     CHECK(sweep::carried(r.w(), 2).empty());  // no inventory setup
 }

@@ -68,6 +68,7 @@ inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::stri
         t.pickup = true;
         t.item = p->itemId.value ? name_of(p->itemId.value) : std::string();
         t.item_id = p->itemId.value;
+        t.pickup_amount = p->pickupAmount;
         if (t.item_id && category_of) t.item_category = category_of(t.item_id);
     }
     const gen::DefaultInventory* def = w.get<gen::DefaultInventory>(id);
@@ -201,16 +202,17 @@ inline bool has_room(emf::World w, uint32_t player) {
 }
 
 // How many of each item the player carries: their backpack and action bar (the generic inventories their InventorySetup
-// links) and their equipment (arrows in the quiver count); never other inventories (customization).
+// links), their equipment (arrows in the quiver count) and their currency; never customization.
 inline std::map<uint32_t, uint32_t> carried(emf::World w, uint32_t player) {
     namespace gen = emf::gen::ecs;
+    using Cat = emf::gen::InventoryCategory;
     std::map<uint32_t, uint32_t> out;
     auto* setup = w.get<gen::InventorySetup>(player);
     if (!setup) return out;
     for (int i = 0; i < 16; ++i) {
         const uint32_t id = setup->linksEntities[i].id;
         const auto cat = setup->linksCategories[i];
-        if (!id || (cat != emf::gen::InventoryCategory::Generic && cat != emf::gen::InventoryCategory::Equipment)) continue;
+        if (!id || (cat != Cat::Generic && cat != Cat::Equipment && cat != Cat::Currency)) continue;
         auto* inv = w.get<gen::Inventory>(id);
         if (!inv) continue;
         for (const auto& st : inv->slots)

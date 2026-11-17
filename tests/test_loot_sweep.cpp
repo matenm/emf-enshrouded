@@ -775,6 +775,40 @@ TEST_CASE("sweep limits: the never-pick-up list covers a plant once its items ar
     CHECK(s.tick(4000, 1, p, {item(10, "Material_T1_Wood", 0x10, -1)}, {}, r).size() == 1);
 }
 
+TEST_CASE("sweep limits: one sweep counts what it already sent, so several piles of an item stop at the limit") {
+    SweepRules r = all_on();
+    r.limits.materials = 50;
+    std::vector<Player> p = {{1, {0, 0, 0}, true, true}};
+    p[0].carried[0x10] = 45;
+    std::vector<Thing> wood;
+    for (uint32_t i = 0; i < 4; ++i) {
+        Thing t = item(10 + i, "Material_T1_Wood", 0x10, 9, 1 + 0.5 * i);
+        t.pickup_amount = 4;
+        wood.push_back(t);
+    }
+    Sweeper s;
+    CHECK(s.tick(1000, 1, p, wood, {}, r).size() == 2);  // 45 + 4 = 49, + 4 = 53: then at the limit
+    // a second player in reach, below the limit, takes the rest
+    std::vector<Player> two = {p[0], {2, {6, 0, 0}, true, true}};
+    Sweeper t;
+    const auto acts = t.tick(1000, 1, two, wood, {}, r);
+    REQUIRE(acts.size() == 4);
+    CHECK(acts[0].player == 1);
+    CHECK(acts[1].player == 1);
+    CHECK(acts[2].player == 2);
+    CHECK(acts[3].player == 2);
+    // a known kind of plant books what one of it gave (at least 1 of each item)
+    SweepRules c = all_on();
+    c.limits.consumables = 10;
+    std::vector<Player> q = {{1, {0, 0, 0}, true, true}};
+    Sweeper u;
+    REQUIRE(u.tick(1000, 1, q, {plant_of(1, 5)}, {}, c).size() == 1);
+    u.picked(1, {0x20, "", -1, 1}, 1100);                       // named and sorted a moment later
+    u.picked(1, {0x20, "Food_T1_raw_berries", 7, 2}, 1100);
+    q[0].carried[0x20] = 7;
+    CHECK(u.tick(2000, 1, q, {plant_of(2, 5, 2), plant_of(3, 5, 3), plant_of(4, 5, 4)}, {}, c).size() == 2);  // 7+2+2
+}
+
 // Seen in game: a field of 8 plants of kinds not known yet was taken whole in one sweep, before the game's first
 // PickupEvent could tell what they give.
 TEST_CASE("sweep limits: of a kind not known yet, one plant at a time is picked until the game's pickup teaches it") {

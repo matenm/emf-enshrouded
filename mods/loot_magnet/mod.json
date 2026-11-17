@@ -51,7 +51,7 @@
      "help": "Item names as `items <words>` in the console shows them, comma separated; end one with * for every name that begins so (Food_T1_raw_*). Wild plants that give only such items are left too, once the magnet has picked one of their kind."},
     {"key": "limit_materials", "type": "int", "min": 0, "max": 1000000, "default": 0, "label": "Materials: keep up to",
      "live": true, "group": "Limits",
-     "help": "How many of each material you carry before the magnet leaves more of it where it lies. Each item counts on its own: with 50 you get 50 wood and 50 stone. 0 = no limit. Counts your backpack, action bar and equipment. For what lies around (items on the ground, collectibles, mushrooms, fireflies, wild plants); chests and corpses are always emptied."},
+     "help": "How many of each material you carry before the magnet leaves more of it where it lies. Each item counts on its own: with 50 you get 50 wood and 50 stone. 0 = no limit. Counts your backpack, action bar, equipment and currency. For what lies around (items on the ground, collectibles, mushrooms, fireflies, wild plants); chests and the loot of kills are always emptied."},
     {"key": "limit_consumables", "type": "int", "min": 0, "max": 1000000, "default": 0,
      "label": "Food and potions: keep up to", "live": true, "group": "Limits",
      "help": "The same for food, drinks and potions. 0 = no limit."},

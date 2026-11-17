@@ -51,6 +51,7 @@ struct Item {
     uint32_t id = 0;
     std::string name;
     int category = -1;
+    uint32_t amount = 0;  // a plant's item: the most one pickup of it brought (what a sweep books for it)
 };
 
 // A DefaultInventory's loot resource GUID: every plant of a kind shares it (all zero = none).
@@ -70,6 +71,7 @@ struct Thing {
     std::string item;       // PickupItem's item, by debug name ("" = not named by the game yet)
     uint32_t item_id = 0;   // PickupItem's item id
     int item_category = -1;  // its ItemCategory (-1 = not read)
+    uint16_t pickup_amount = 0;  // PickupItem's pickupAmount: how many it gives
     LootRef loot_ref{};     // DefaultInventory's loot resource (own or template): what a plant without a pickup gives
     bool default_inv = false, inventory = false, setup = false, destroy_on_loot = false;
     int exclude = -1;  // AreaLootOverride.exclude: -1 none, 0, 1 (the game keeps 1 out of its own area loot)
@@ -290,7 +292,7 @@ private:
 // its kind.
 class Yields {
 public:
-    static constexpr uint64_t kWaitMs = 5000;  // pickups from the entity this soon after the magnet's loot are its loot
+    static constexpr uint64_t kWaitMs = 3000;  // pickups from the entity this soon after the magnet's loot are its loot
 
     void expect(uint32_t entity, const LootRef& ref, uint64_t now) {
         for (auto it = waits_.begin(); it != waits_.end();)
@@ -305,6 +307,7 @@ public:
             if (i.id == item.id) {
                 if (i.name.empty()) i.name = item.name;
                 if (i.category < 0) i.category = item.category;
+                i.amount = (std::max)(i.amount, item.amount);
                 return;
             }
         items.push_back(item);
@@ -400,6 +403,8 @@ public:
             double d;
         };
         std::vector<Cand> cands;
+        const bool limits_on = r.limits.any();
+        Booked booked;  // what this sweep's actions bring each player, by item (limits)
         for (const Thing& t : things) {
             const Kind k = classify(t);
             if (k == Kind::None || !r.group(k).on) continue;
@@ -410,10 +415,10 @@ public:
             if (in_base) continue;
             double d = 0;
             // the nearest player whose magnet is on and who has not got enough of what it gives
-            const bool limits = limited(k) && r.limits.any();
+            const bool limits = limits_on && limited(k);
             const Player* who = nearest_if(
-                players, t.pos, r.reach_of(k), [&](const Player& pl) { return pl.on && !(limits && at_limit(t, pl, r.limits)); },
-                &d);
+                players, t.pos, r.reach_of(k),
+                [&](const Player& pl) { return pl.on && !(limits && at_limit(t, pl, r.limits, booked)); }, &d);
             if (!who) continue;
             // a chest, a barrel or a hive nearer to a player whose magnet is off is theirs to open
             if (k == Kind::Chest || smashes) {
@@ -438,16 +443,26 @@ public:
                 auto it = learning_.find(t.loot_ref);
                 if (it != learning_.end() && now <= it->second.until && it->second.entity != t.id) continue;
             }
+            // what this sweep already sent may have brought the player to the limit: then the next player in reach
+            const bool limits = limits_on && limited(c.k);
+            const Player* who = c.who;
+            if (limits && at_limit(t, *who, r.limits, booked)) {
+                who = nearest_if(
+                    players, t.pos, r.reach_of(c.k),
+                    [&](const Player& pl) { return pl.on && !at_limit(t, pl, r.limits, booked); }, nullptr);
+                if (!who) continue;
+            }
             State& s = st_[t.id];
             if (s.fingerprint != t.fingerprint) s = State{};  // another entity under a reused id
             s.fingerprint = t.fingerprint;
             s.seen_ms = now;
-            if (s.done || now < s.next_ms || per_player[c.who->id] >= kPerPlayer) continue;
+            if (s.done || now < s.next_ms || per_player[who->id] >= kPerPlayer) continue;
             Action a;
-            if (!decide(t, c.k, *c.who, now, s, r, &a)) continue;
+            if (!decide(t, c.k, *who, now, s, r, &a)) continue;
             if (unknown) learning_[t.loot_ref] = {t.id, now + Yields::kWaitMs};
+            if (limits) book(t, who->id, booked);
             out.push_back(a);
-            ++per_player[c.who->id];
+            ++per_player[who->id];
         }
         for (const Thing& t : things)  // seen this sweep, also those not decided: they stay known
             if (auto it = st_.find(t.id); it != st_.end()) it->second.seen_ms = now;
@@ -587,22 +602,37 @@ private:
         return true;
     }
 
-    // What the thing gives, as far as known: a pickup's item; a plant's, once its kind was learned.
-    std::vector<Item> items_of(const Thing& t) const {
-        if (t.pickup) return t.item_id ? std::vector<Item>{{t.item_id, t.item, t.item_category}} : std::vector<Item>{};
-        return t.loot_ref == LootRef{} ? std::vector<Item>{} : yields_.of(t.loot_ref);
+    using Booked = std::map<std::pair<uint32_t, uint32_t>, uint32_t>;  // (player, item) -> brought by this sweep
+
+    // The player carries (with what this sweep already sent them) enough of `i`.
+    static bool item_at_limit(const Item& i, const Player& pl, const Limits& l, const Booked& booked) {
+        const uint32_t limit = l.of(i);
+        if (!limit) return false;
+        uint64_t have = 0;
+        if (auto it = pl.carried.find(i.id); it != pl.carried.end()) have += it->second;
+        if (auto it = booked.find({pl.id, i.id}); it != booked.end()) have += it->second;
+        return have >= limit;
     }
-    // The player carries enough of everything it gives (what is not known yet comes, so the magnet learns it).
-    bool at_limit(const Thing& t, const Player& pl, const Limits& l) const {
-        const auto items = items_of(t);
+    // The player has enough of everything it gives: a pickup's item; a plant's items once its kind was learned (what
+    // is not known yet comes, so the magnet learns it).
+    bool at_limit(const Thing& t, const Player& pl, const Limits& l, const Booked& booked) const {
+        if (t.pickup) return t.item_id && item_at_limit({t.item_id, t.item, t.item_category}, pl, l, booked);
+        if (t.loot_ref == LootRef{}) return false;
+        const auto& items = yields_.of(t.loot_ref);
         if (items.empty()) return false;
-        for (const auto& i : items) {
-            const uint32_t limit = l.of(i);
-            if (!limit) return false;
-            const auto it = pl.carried.find(i.id);
-            if (it == pl.carried.end() || it->second < limit) return false;
-        }
+        for (const auto& i : items)
+            if (!item_at_limit(i, pl, l, booked)) return false;
         return true;
+    }
+    // What an action for `t` brings the player: a pickup's amount; for a plant, the most one pickup of each of its
+    // items brought (at least 1).
+    void book(const Thing& t, uint32_t player, Booked& booked) const {
+        if (t.pickup) {
+            if (t.item_id) booked[{player, t.item_id}] += (std::max)(1u, static_cast<uint32_t>(t.pickup_amount));
+            return;
+        }
+        if (t.loot_ref == LootRef{}) return;
+        for (const auto& i : yields_.of(t.loot_ref)) booked[{player, i.id}] += (std::max)(1u, i.amount);
     }
 
     // The nearest player within `reach` for whom `ok` holds.

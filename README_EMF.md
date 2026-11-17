@@ -766,9 +766,9 @@ reach:
   never a player's chest or one that needs a lockpick or key), barrels, crates and urns to smash, and (experimental)
   bee hives to smash: their honey and wax drop, and a wasp swarm may come out.
 Never inside a base (smashing 10 m more), never a quest item, never what is on its ignore list.
-From 2.2, limits (off until set): how many of each item a player carries (backpack, action bar, equipment) before the
+From 2.2, limits (off until set): how many of each item a player carries (backpack, action bar, equipment, currency) before the
 magnet leaves more of it where it lies, one number each for materials, food and potions, arrows and everything else,
-plus own numbers for single items; chests and corpses are always emptied.
+plus own numbers for single items; chests and the loot of kills are always emptied.
 Settings: reach, delay after the kill, how long it looks for loot (the loot appears 1-3 s after the death), what comes, arrows,
 the groups and their reaches, the ignore list, the limits, default for new players, the host's key, base radius. Details:
 `mods/loot_magnet/README.md`.

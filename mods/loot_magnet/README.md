@@ -124,9 +124,13 @@ How many of an item you carry before the magnet leaves more of it where it lies.
   - 0 = no limit. The kind is the game's own item category, as the inventory sorts it.
 - **Each item counts on its own:** with Materials at 50 and 50 wood carried, stone and metal still come until you have 50
   of each.
-- **What is counted:** your backpack, action bar and equipment (arrows in the quiver count), never your chests at home.
+- **What is counted:** your backpack, action bar, equipment (arrows in the quiver count) and currency, never your
+  chests at home. Within one sweep the magnet also counts what it has just sent you, so a pile of drops stops at the
+  limit too.
 - **What they cover:** what lies around: items on the ground, collectibles, mushrooms, fireflies and wild plants.
-  - **Chests and corpses are always emptied**, whatever you carry.
+  - **Chests and the loot of kills** (the bodies and loot spots) **are always emptied**, whatever you carry.
+  - Creature drops that lie on the ground (a bat's fur patch, a skeleton's bones) follow the limits like any ground
+    item.
   - Barrels and bee hives are still smashed. What they drop lies on the ground, where the limits apply.
 - **Own limits for single items** (`limits`): `Material_T1_Wood=200, Food_T1_raw_*=20`, comma separated (the names as
   `items <words>` shows them).
@@ -137,7 +141,10 @@ How many of an item you carry before the magnet leaves more of it where it lies.
 - **Wild plants without a pickup** (herbs, flowers, bushes) do not show what they give until they are picked.
   - The magnet learns it from the first plant of each kind it picks after the game starts: the game reports each item
     and where it came from.
-  - From then on, a plant of that kind comes while you are below the limit of at least one thing it gives.
+  - Until a kind is known, its plants come one at a time (a few seconds apart if the game reports nothing), so a
+    field is not taken whole before the magnet knows what it gives.
+  - From then on, a plant of that kind comes while at least one thing it has given so far is below its limit (or has
+    no limit). A rare extra item it has not given yet does not count until it does.
 - **With friends:** an item that is at the limit for the nearest player goes to the next player in reach who has less.
 - `/loot.status` shows the limits and how many plant items the magnet has learned.
 

@@ -516,7 +516,7 @@ void cmd_status(emf::World w, const std::vector<std::string>&) {
         for (const auto& [name, n] : parts)
             if (n) text += (text.empty() ? "" : ", ") + std::string(name) + " " + std::to_string(n);
         if (l.own_lines()) text += (text.empty() ? "" : ", ") + std::to_string(l.own_lines()) + " item line(s) of their own";
-        EMF_REPLY("Limits for what lies around (chests and corpses are always emptied): %s; %zu plant item(s) learned",
+        EMF_REPLY("Limits for what lies around (chests and the loot of kills are always emptied): %s; %zu plant item(s) learned",
                   text.c_str(), g_sweeper.items_learned());
     }
     std::string swept;
@@ -573,7 +573,9 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         g_magnet.on_pickup(e.pickedUpByEntityId.id, e.pickedUpFromEntityId.id);
         // what a plant without a pickup gave the magnet's loot: its kind's items (limits, the never-pick-up list)
         const uint32_t item = e.itemId.value;
-        if (item) g_sweeper.picked(e.pickedUpFromEntityId.id, {item, item_name(w, item), item_category(w, item)}, GetTickCount64());
+        if (item)
+            g_sweeper.picked(e.pickedUpFromEntityId.id, {item, item_name(w, item), item_category(w, item), e.itemCount},
+                             GetTickCount64());
     });
     g_file.attach();
     g_chests.attach();
