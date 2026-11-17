@@ -356,6 +356,7 @@ TEST_CASE("screen: the console says which game screen is open and whether mods' 
     REQUIRE(add_marker_commands(center));
     std::vector<std::string> replies;
     game_screen().set_offset(0x1cd8);
+    game_screen().seen(kScreenInGame, GetTickCount64());  // armed
     game_screen().seen(kScreenTextChat, GetTickCount64());
     center.run_without_world("screen", [&](const std::string& l) { replies.push_back(l); }, "this is someone else's game");
     game_screen().seen(kScreenInGame, GetTickCount64());

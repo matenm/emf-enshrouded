@@ -28,11 +28,14 @@ public:
     void read(const uint8_t* uipd, uint64_t now_ms);
     // The screen read within the last 500 ms, else nothing.
     std::optional<uint8_t> screen(uint64_t now_ms) const;
+    // A text screen read within the last 500 ms, once a reading said InGame (a build whose byte means something
+    // else never pauses every key).
     bool typing(uint64_t now_ms) const;
 
 private:
     std::atomic<uint32_t> offset_{0};
     std::atomic<uint32_t> screen_{0};
+    std::atomic<bool> armed_{false};  // a reading said InGame once: only then do text screens pause keys
     std::atomic<uint64_t> seen_ms_{0};
 };
 

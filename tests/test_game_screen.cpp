@@ -28,6 +28,7 @@ TEST_CASE("game screen: a reading counts for 500 ms; nothing before the first") 
     GameScreen g;
     CHECK_FALSE(g.screen(1000).has_value());
     CHECK_FALSE(g.typing(1000));
+    g.seen(kScreenInGame, 900);  // armed (below)
     g.seen(kScreenTextChat, 1000);
     REQUIRE(g.screen(1000).has_value());
     CHECK(*g.screen(1000) == kScreenTextChat);
@@ -49,6 +50,7 @@ TEST_CASE("game screen: read takes the byte at the signature's offset, and nothi
     CHECK(g.offset() == 0x1cd8);
     g.read(nullptr, 100);  // no UiPlayData (the main menu)
     CHECK_FALSE(g.screen(100).has_value());
+    g.seen(kScreenInGame, 90);  // armed: a reading said InGame once
     g.read(uipd.data(), 100);
     REQUIRE(g.screen(100).has_value());
     CHECK(*g.screen(100) == kScreenRename);
@@ -138,6 +140,7 @@ TEST_CASE("game_screen_line: the screen by the game's own name, and whether mods
 // The hook read the clock before the reading: a reading a moment newer than the caller's clock said "not known".
 TEST_CASE("game screen: a reading newer than the caller's clock counts") {
     GameScreen g;
+    g.seen(kScreenInGame, 900);
     g.seen(kScreenTextChat, 1000);
     REQUIRE(g.screen(999).has_value());
     CHECK(g.typing(999));
@@ -180,4 +183,17 @@ TEST_CASE("typing gates: GetAsyncKeyState's and GetKeyState's marks are kept apa
     typing_key_released('J');
     CHECK_FALSE(typing_gate(true).any());
     CHECK_FALSE(typing_gate(false).any());
+}
+
+// A fail-safe: if a game build's byte at the signature's offset meant something else and read a steady 43 (TextChat),
+// every mod key and the console key would pause for good. The gate arms only after a reading said InGame once.
+TEST_CASE("game screen: keys pause only after a reading said InGame once") {
+    GameScreen g;
+    g.seen(kScreenTextChat, 1000);
+    CHECK_FALSE(g.typing(1000));  // never in game yet: not armed
+    g.seen(kScreenInGame, 1100);
+    g.seen(kScreenTextChat, 1200);
+    CHECK(g.typing(1200));
+    g.seen(kScreenSocial, 5000);  // armed for good after that
+    CHECK(g.typing(5000));
 }

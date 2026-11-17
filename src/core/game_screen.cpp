@@ -15,6 +15,7 @@ bool screen_takes_text(uint8_t screen) {
 }
 
 void GameScreen::seen(uint8_t screen, uint64_t now_ms) {
+    if (screen == kScreenInGame) armed_.store(true, std::memory_order_relaxed);
     screen_.store(screen, std::memory_order_relaxed);
     seen_ms_.store(now_ms ? now_ms : 1, std::memory_order_release);
 }
@@ -34,6 +35,7 @@ std::optional<uint8_t> GameScreen::screen(uint64_t now_ms) const {
 }
 
 bool GameScreen::typing(uint64_t now_ms) const {
+    if (!armed_.load(std::memory_order_relaxed)) return false;
     const auto s = screen(now_ms);
     return s && screen_takes_text(*s);
 }
