@@ -1,4 +1,4 @@
-/* EMF (Enshrouded Modding Framework) C API, version 46 (see EMF_API_VERSION).
+/* EMF (Enshrouded Modding Framework) C API, version 47 (see EMF_API_VERSION).
  *
  * A mod is a DLL in <game>/emf/mods/ that exports:
  *     extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api);
@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define EMF_API_VERSION 46
+#define EMF_API_VERSION 47
 
 /* World kinds (the byte at the entity storage + 8: world+0xE15DC8 on build 1273043, world+0xE179C8 on 1283531). */
 #define EMF_WORLD_SERVER 0
@@ -865,13 +865,15 @@ typedef struct EmfBlockInfo {
     uint32_t material; /* building 0..127, terrain 1..127 */
     uint32_t fill;     /* the cell's high byte, 0..255: terrain's fill; for a building block its paint (bit 7
                           weathered, bits 4-6 overgrowth; 0 unpainted), not a sign of who placed it (see world) */
-    uint32_t hardness; /* building: 0 Soft .. 4 VeryHard, 5 Unbreakable; terrain: 0 */
-    int32_t health;    /* building: the material's health points; 0 unknown */
+    uint32_t hardness; /* 0 Soft .. 4 VeryHard, 5 Unbreakable; terrain: its terrain material's from v47 (0 before) */
+    int32_t health;    /* the material's health points (terrain: from v47); 0 unknown */
     int32_t damage;    /* building: the damage so far, 0..255 (it heals 20 s after the last hit); -1 unknown */
     float x, y, z;     /* the block's centre, metres */
     int32_t world;     /* API v45 (written when size covers it): building: 1 = the world's own block (a ruin as the
                           game shipped it), 0 = a player's (placed, or another material than the shipped one), -1 = not
-                          known (its place is not loaded); terrain and empty: 0 */
+                          known (its place is not loaded); terrain from v47: 1 = the world's own ground (the shipped
+                          world had ground there), 0 = a player placed it (it had none), -1 = not known (0 before
+                          v47); empty: 0 */
 } EmfBlockInfo;
 
 typedef struct EmfHitRule {
@@ -1655,7 +1657,7 @@ typedef struct EmfApi {
      * get_component. EMF's own chat admins ([chat] admins) are another list: EmfNetFrom.admin and command senders. */
     bool (*player_permissions)(EmfWorld* world, uint32_t player, uint32_t* perms);
 
-    /* ---- v44: breaking player-built blocks (EmfBreakBlocks, EmfBlockInfo); never terrain ---- */
+    /* ---- v44: breaking player-built blocks (EmfBreakBlocks, EmfBlockInfo); v47: terrain a player placed too ---- */
     /* Queues a break of the building blocks in a sphere (or a column of spheres) for the next server step. Returns its
      * id (from 1), or 0 with req->why: not the server world (a joined game cannot break blocks), not available on this
      * game version (or off after a fault), bad numbers, 64 breaks waiting. cb (may be NULL) gets the result once: after
@@ -1691,6 +1693,12 @@ typedef struct EmfApi {
     bool (*villager_move_cancel)(uint32_t id);
     /* The id of `villager`'s move or hold, 0 = none. */
     uint32_t (*villager_moving)(EmfWorld* world, uint32_t villager);
+
+    /* ---- v47: terrain a player placed (EMF_BREAK_TERRAIN, EMF_FIND_TERRAIN, EmfBlockInfo.world for terrain) ---- */
+    /* find_wall with flags: EMF_FIND_TERRAIN also stops at a terrain cell a player placed (the shipped world had no
+     * ground there; one whose shipped state is not known is passed over); other terrain is passed over as by
+     * find_wall. Flags 0: find_wall. False for unknown flags (logged once) and for find_wall's reasons. */
+    bool (*find_wall_ex)(EmfWorld* world, const float from[3], const float to[3], uint32_t flags, EmfBlockInfo* out);
 } EmfApi;
 
 #define EMF_ITEM_NAME_GAME_TEXT 1u /* v29 item_name: the player's language even where EMF's screens cannot draw it */

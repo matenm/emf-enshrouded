@@ -1044,3 +1044,29 @@ TEST_CASE("block glue: find_wall with EMF_FIND_TERRAIN stops at terrain a player
     REQUIRE(ok);
     CHECK(out.world == -1);
 }
+
+TEST_CASE("api table (v47): find_wall_ex appended; EMF_FIND_TERRAIN reaches the glue; unknown flags refused") {
+    Fixture f;
+    terrain_scene();
+    const EmfApi* api = api_table();
+    CHECK(api->version == 47u);
+    CHECK(api->size == kApiV47Size);
+    CHECK(offsetof(EmfApi, find_wall_ex) == kApiV46Size);
+    REQUIRE(api->find_wall_ex != nullptr);
+    const float from[3] = {8.1f, 20.2f, 29.8f}, to[3] = {12.1f, 20.2f, 29.8f};
+    EmfBlockInfo out{};
+    out.size = sizeof out;
+    bool ok = false;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->find_wall_ex(w, from, to, EMF_FIND_TERRAIN, &out); });
+    REQUIRE(ok);
+    CHECK(out.kind == EMF_BLOCK_TERRAIN);
+    CHECK(out.material == 67);
+    CHECK(out.hardness == 4);  // the terrain material's (Stone: VeryHard)
+    CHECK(out.health == 400);
+    CHECK(out.world == 0);
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->find_wall_ex(w, from, to, 0, &out); });
+    CHECK_FALSE(ok);  // flags 0: building blocks only, as find_wall
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = api_table()->find_wall_ex(w, from, to, 0x80, &out); });
+    CHECK_FALSE(ok);
+    CHECK_FALSE(api->find_wall_ex(f.world(), from, to, EMF_FIND_TERRAIN, &out));  // not inside a world callback
+}

@@ -1409,8 +1409,8 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
             d[0] = static_cast<float>(dir.x / len), d[1] = static_cast<float>(dir.y / len), d[2] = static_cast<float>(dir.z / len);
             return true;
         };
-        bd.find_wall = [](EmfWorld* w, const float f[3], const float t[3], EmfBlockInfo* out) {
-            return emf::core::api_table()->find_wall(w, f, t, out);
+        bd.find_wall = [](EmfWorld* w, const float f[3], const float t[3], uint32_t flags, EmfBlockInfo* out) {
+            return emf::core::api_table()->find_wall_ex(w, f, t, flags, out);
         };
         bd.block_at = [](EmfWorld* w, float x, float y, float z, EmfBlockInfo* out) {
             return emf::core::api_table()->block_at(w, x, y, z, out);

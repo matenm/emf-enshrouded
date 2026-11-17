@@ -28,6 +28,7 @@ struct Fake {
     void* user = nullptr;
     uint32_t next_id = 5;
     float wall_from[3] = {}, wall_to[3] = {};
+    uint32_t wall_flags = 0xFFFFFFFFu;
     BlockCommandDeps deps() {
         BlockCommandDeps d;
         d.camera = [this](EmfWorld*, float o[3], float dir[3]) {
@@ -36,8 +37,9 @@ struct Fake {
             dir[0] = 1, dir[1] = 0, dir[2] = 0;
             return true;
         };
-        d.find_wall = [this](EmfWorld*, const float from[3], const float to[3], EmfBlockInfo* out) {
+        d.find_wall = [this](EmfWorld*, const float from[3], const float to[3], uint32_t flags, EmfBlockInfo* out) {
             for (int i = 0; i < 3; ++i) wall_from[i] = from[i], wall_to[i] = to[i];
+            wall_flags = flags;
             if (!wall) return false;
             *out = EmfBlockInfo{};
             out->size = sizeof *out;
@@ -215,4 +217,38 @@ TEST_CASE("break world: the word asks to break the world's own blocks (ruins) to
     CHECK(f.last.flags == EMF_BREAK_WORLD);
     run(c, "break 1 at 1 2 3");
     CHECK(f.last.flags == 0);
+}
+
+TEST_CASE("blocks and break (v47): blocks also finds terrain a player placed; break terrain asks for it; terrain lines say whose") {
+    g_out.clear();
+    CommandCenter c;
+    Fake f;
+    REQUIRE(add_block_commands(c, f.deps()));
+    run(c, "blocks");
+    CHECK(f.wall_flags == EMF_FIND_TERRAIN);
+    run(c, "break 1");
+    CHECK(f.wall_flags == 0u);  // without terrain: building blocks only
+    CHECK((f.last.flags & EMF_BREAK_TERRAIN) == 0);
+    g_out.clear();
+    run(c, "break 1 terrain instant");
+    CHECK(f.wall_flags == EMF_FIND_TERRAIN);
+    CHECK((f.last.flags & EMF_BREAK_TERRAIN) != 0);
+    CHECK(said("terrain"));  // the queued line names it
+    run(c, "break 1 terrain at 1 2 3");
+    CHECK(f.last.x == 1.0f);
+    EmfBlockInfo t{};
+    t.size = sizeof t;
+    t.kind = EMF_BLOCK_TERRAIN;
+    t.material = 67;
+    t.hardness = 4;
+    t.health = 400;
+    t.world = 0;
+    CHECK(block_info_line(t).find("terrain 67 (VeryHard, 400 health), placed by a player") != std::string::npos);
+    t.world = 1;
+    CHECK(block_info_line(t).find("the world's own ground") != std::string::npos);
+    t.world = -1;
+    CHECK(block_info_line(t).find("not known") != std::string::npos);
+    t.health = 0;
+    t.world = 1;
+    CHECK(block_info_line(t).find("terrain 67, the world's own ground") != std::string::npos);
 }

@@ -70,6 +70,7 @@ constexpr uint32_t kApiV44Size = EMF_FIELD_END(EmfApi, find_wall);
 constexpr uint32_t kApiV45Size = kApiV44Size;  // v45: the version only (EmfBlockInfo.world, EMF_BREAK_WORLD)
 constexpr uint32_t kBlockInfoV45Size = EMF_FIELD_END(EmfBlockInfo, world);
 constexpr uint32_t kApiV46Size = EMF_FIELD_END(EmfApi, villager_moving);
+constexpr uint32_t kApiV47Size = EMF_FIELD_END(EmfApi, find_wall_ex);
 constexpr uint32_t kUiWidgetV24Size = EMF_FIELD_END(EmfUiWidget, pad);  // 56: a v24/v25 mod's widget_size
 
 // The x64 layouts mods are built with. A field that moves breaks every built mod; appending one changes sizeof only:
@@ -165,8 +166,10 @@ static_assert(offsetof(EmfApi, player_permissions) == kApiV40Size && kApiV43Size
               "EmfApi layout (v43 appends player_permissions)");
 static_assert(offsetof(EmfApi, break_blocks) == kApiV43Size && kApiV44Size == 1120,
               "EmfApi layout (v44 appends break_blocks, block_at, find_wall)");
-static_assert(offsetof(EmfApi, villager_move) == kApiV45Size && kApiV46Size == 1144 && sizeof(EmfApi) == kApiV46Size,
+static_assert(offsetof(EmfApi, villager_move) == kApiV45Size && kApiV46Size == 1144,
               "EmfApi layout (v46 appends villager_move, villager_move_cancel, villager_moving)");
+static_assert(offsetof(EmfApi, find_wall_ex) == kApiV46Size && kApiV47Size == 1152 && sizeof(EmfApi) == kApiV47Size,
+              "EmfApi layout (v47 appends find_wall_ex)");
 static_assert(offsetof(EmfMoveOrder, hold_seconds) == 132, "EmfMoveOrder layout (v46: hold_seconds where pad2 was)");
 static_assert(kBreakResultV44Size == 20 && sizeof(EmfBreakResult) == 20, "EmfBreakResult layout (v44)");
 static_assert(kBlockInfoV44Size == 40 && offsetof(EmfBlockInfo, damage) == 24 && offsetof(EmfBlockInfo, x) == 28,

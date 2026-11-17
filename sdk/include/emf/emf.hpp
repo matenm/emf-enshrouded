@@ -1115,6 +1115,17 @@ inline std::optional<EmfBlockInfo> find_wall(World w, const float from[3], const
     if (!has_v44() || !api()->find_wall || !api()->find_wall(w.raw(), from, to, &b)) return std::nullopt;
     return b;
 }
+// v47: terrain a player placed (EMF_BREAK_TERRAIN, find_wall_ex, EmfBlockInfo.world for terrain)
+inline bool has_v47() { return api() && api()->size >= offsetof(EmfApi, find_wall_ex) + sizeof(api()->find_wall_ex); }
+// find_wall with flags: EMF_FIND_TERRAIN also stops at terrain a player placed. Flags 0 work on every core; with a
+// flag an older core gives nothing.
+inline std::optional<EmfBlockInfo> find_wall(World w, const float from[3], const float to[3], uint32_t flags) {
+    if (!flags) return find_wall(w, from, to);
+    EmfBlockInfo b{};
+    b.size = sizeof b;
+    if (!has_v47() || !api()->find_wall_ex || !api()->find_wall_ex(w.raw(), from, to, flags, &b)) return std::nullopt;
+    return b;
+}
 // v25: E prompts (offer_add, offer_remove); v26: pictures in windows (offer_active ends it); v27: mod messages
 inline bool has_v25() { return api() && api()->size >= offsetof(EmfApi, offer_remove) + sizeof(api()->offer_remove); }
 inline bool has_v26() { return api() && api()->size >= offsetof(EmfApi, offer_active) + sizeof(api()->offer_active); }

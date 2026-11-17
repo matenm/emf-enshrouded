@@ -104,6 +104,7 @@ version the additions need (empty: the v20 the `lua` mod needs is enough). Range
 | 1.37 | `emf.break_blocks`, `emf.block_at`, `emf.find_wall` | v44 |
 | 1.38 | the world's own blocks (ruins) spared: a block's `world`, the break option `world` | v45 |
 | 1.39 | villager moves (`emf.villager_move`, `emf.villager_move_cancel`, `emf.villager_moving`) | v46 |
+| 1.40 | terrain a player placed: the break option `terrain`, `emf.find_wall`'s `{terrain = true}`, a terrain block's `world` | v47 |
 
 ## What happens when a script fails
 
@@ -170,7 +171,7 @@ right away.
 | `emf.villager_move(world, villager, points [, opts] [, fn])` | 1.39: a villager walks to a point or through points inside its own area, and may hold there; the move's id, or nil and why (see "Walking villagers" below) |
 | `emf.villager_move_cancel(id)` / `emf.villager_moving(world, villager)` | 1.39: end a villager move or its hold / its move's id now (or nil) |
 | `emf.break_blocks(world, x, y, z [, opts], fn)` | 1.37: damages or breaks the player-built blocks around a point, never the ground and (1.38) never the world's own ruins; `fn(world, result)` after the step; id or nil (see "Breaking blocks" below) |
-| `emf.block_at(world, x, y, z)` / `emf.find_wall(world, from, to)` | 1.37: what is at a point / the first building block on a line, as a table, or nil |
+| `emf.block_at(world, x, y, z)` / `emf.find_wall(world, from, to [, {terrain = true}])` | 1.37: what is at a point / the first building block on a line (1.40: or terrain a player placed), as a table, or nil |
 | `emf.kill(world, id)` | (1.4) kills a creature without a hit: its current health becomes 0 (1.5: through the game's attribute code) and the game's death program sends `EntityDiedEvent` the next step; the corpse keeps its loot. No attacker, no kill credit (`emf.damage` gives one); never a player; host only. true / false |
 | `emf.health(world, id)` | (1.5) the current and maximum health: `local cur, max = emf.health(w, id)`; the game's attributes in a world you host, else the replicated `NetworkHealth`; nil when neither is there |
 | `emf.attribute(world, id, attr)` | (1.5) an attribute as the game reads it: `attr` is `"health"`, `"max_health"`, `"stamina"`, `"max_stamina"`, `"mana"`, `"max_mana"`, a player's `"xp_pending"`, `"xp"`, `"xp_required"` and `"level"` (1.11, EMF API v22), or an attribute id; nil when the entity has none. Give XP with `emf.attribute_add(w, player, "xp_pending", n)`: the game levels the player up itself (the other three are read-only). Host only |
@@ -821,8 +822,8 @@ end)
 ## Breaking blocks (1.37)
 
 `emf.break_blocks(world, x, y, z [, opts], fn)` damages (like a pickaxe hit: cracks, the game's per-block health) or
-breaks at once the building blocks in a sphere, or a column of spheres, around a point in metres. Never terrain: the
-ground stays. A hole is a normal building change, sent to every player and saved like mining: the game keeps it inside
+breaks at once the building blocks in a sphere, or a column of spheres, around a point in metres. Never the world's
+ground: terrain stays, unless `terrain = true` (1.40) asks for the terrain blocks a player placed. A hole is a normal building change, sent to every player and saved like mining: the game keeps it inside
 a flame altar's area and resets the world outside bases (after about 30 minutes or at a server restart), as it does for
 a pickaxe. Host only (the server world). It returns an id, or nil (the reason is in the log). On a core older than
 API v44 it is nil.
@@ -834,6 +835,15 @@ loaded): each sphere stops just short of the nearest one, and a sphere with less
 next to a ruin is smaller. A ruin block a player broke and put back in the same material counts as the world's again.
 `world = true` breaks them too. On a 1.37 core (API v44) ruins break like any block.
 
+**Terrain a player placed (1.40, API v47).** Stone, Granite, Field Stones, dirt, sand and road blocks are terrain to
+the game, the same kind of thing as the ground. With `terrain = true` a break also takes the terrain cells a player
+placed: a cell where the world as the game shipped it had no ground. The world's own ground (hills, cliffs, the ground
+under a base, ground a player dug into), the ruins, and a cell whose shipped state is not known are never touched. Each
+cell takes its terrain material's hits (its health and hardness, the same damage table); EMF keeps that damage, since
+the game keeps none for terrain, and it heals 20 s after the last hit. `mode = "break"` and `drops` work for it too
+(each terrain material's own item). `materials` lists building ids only and does not limit terrain. On an older core
+the option is dropped: building blocks break, terrain stays.
+
 | `opts` field | What |
 |---|---|
 | `radius` | metres, 0.25 to 3.5 (default 1) |
@@ -843,6 +853,7 @@ next to a ruin is smaller. A ruin block a player broke and put back in the same 
 | `drops` | `true`: removed blocks drop what a pickaxe gives (each material's item, so many blocks per item) at the hole |
 | `materials` | a list of at least one building material id 0 to 127 (`emf.block_at`'s `material`); leave it out for every one that can break (an empty list is an error). Numbers given as text are errors in every option |
 | `world` | 1.38: `true` breaks the world's own blocks too (its ruins); default `false`: they are spared |
+| `terrain` | 1.40: `true` breaks the terrain blocks a player placed too (never the world's own ground); default `false` |
 
 Any other key, or a value of the wrong type, is a Lua error. `fn(world, result)` comes once, after the server step that
 ran it: `result.status` is `"done"`, `"cancelled"` (the world ended first) or `"failed"` (breaking is off after a
@@ -851,14 +862,16 @@ nothing. With the default damage straw falls in 1 hit, wood logs in 2-3, planks 
 finished heals 20 s after the last hit; the game's Unbreakable materials never break. At most 8 spheres run per step for
 all mods; the rest wait.
 
-`emf.block_at(world, x, y, z)` and `emf.find_wall(world, from, to)` (positions `{x, y, z}` or `{x = , y = , z = }`; the
-line at most 64 m) give `{kind = "empty" | "terrain" | "building", material, fill, hardness, health, damage, x, y, z,
-world}` (1.38: `world` is `true` for the world's own block, a ruin as shipped, `false` for a player's, nil when not known
-or not a building block)
+`emf.block_at(world, x, y, z)` and `emf.find_wall(world, from, to [, {terrain = true}])` (positions `{x, y, z}` or
+`{x = , y = , z = }`; the line at most 64 m; 1.40: `terrain = true` also stops at a terrain cell a player placed, other
+terrain is passed over) give `{kind = "empty" | "terrain" | "building", material, fill, hardness, health, damage, x, y,
+z, world}` (1.38: `world` is `true` for the world's own block, a ruin as shipped, `false` for a player's, nil when not
+known or empty; 1.40: for terrain `true` is the world's own ground, `false` terrain a player placed, and `hardness` and
+`health` are its terrain material's)
 (`hardness` 0 Soft .. 4 VeryHard, 5 Unbreakable; `damage` 0..255 so far, nil when unknown; `fill` the cell's high
 byte: terrain's fill; for a building block its paint, bit 7 weathered and bits 4-6 overgrowth, 0 unpainted, not a sign
-of who placed it (see `world`); `x, y, z` the block's centre), or nil (the line is clear, the place is not loaded, not the server world, an older core). Inside a world
-callback on the server world, like `world:get`.
+of who placed it (see `world`); `x, y, z` the block's centre), or nil (the line is clear, the place is not loaded, not
+the server world, an older core). Inside a world callback on the server world, like `world:get`.
 
 ```lua
 -- a bomb that cracks soft walls around it, never the ground

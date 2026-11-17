@@ -243,3 +243,63 @@ TEST_CASE("lua: break_blocks refuses an empty or non-list materials table and nu
     REQUIRE(r.fake.breaks.size() == 1u);
     CHECK(r.fake.breaks[0].materials == std::vector<uint8_t>{7});
 }
+
+TEST_CASE("lua 1.40: break_blocks' terrain option, find_wall's {terrain = true}, and a terrain block's world; older cores") {
+    Rig r(L"lua_block_terrain");
+    add_script(r.dir, "bt",
+               "emf.command('brk', '', function(w)\n"
+               "  emf.break_blocks(w, 1, 2, 3, {terrain = true}, function() end)\n"
+               "  emf.break_blocks(w, 1, 2, 3, {terrain = false}, function() end)\n"
+               "end)\n"
+               "emf.command('find', '', function(w)\n"
+               "  local f = emf.find_wall(w, {1, 2, 3}, {4, 5, 6}, {terrain = true})\n"
+               "  emf.log('found ' .. tostring(f and f.kind) .. ' ' .. tostring(f and f.world))\n"
+               "end)\n"
+               "emf.command('plain', '', function(w)\n"
+               "  emf.find_wall(w, {1, 2, 3}, {4, 5, 6})\n"
+               "  emf.find_wall(w, {1, 2, 3}, {4, 5, 6}, {})\n"
+               "end)\n"
+               "emf.command('bad', '', function(w)\n"
+               "  local ok, err = pcall(emf.find_wall, w, {1, 2, 3}, {4, 5, 6}, {terrain = 1})\n"
+               "  emf.log('bad ' .. tostring(ok) .. ' ' .. tostring(err))\n"
+               "  ok, err = pcall(emf.find_wall, w, {1, 2, 3}, {4, 5, 6}, {soil = true})\n"
+               "  emf.log('bad2 ' .. tostring(ok) .. ' ' .. tostring(err))\n"
+               "  ok, err = pcall(emf.break_blocks, w, 1, 2, 3, {terrain = 'yes'}, function() end)\n"
+               "  emf.log('bad3 ' .. tostring(ok) .. ' ' .. tostring(err))\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("bt.brk");
+    REQUIRE(r.fake.breaks.size() == 2u);
+    CHECK((r.fake.breaks[0].r.flags & EMF_BREAK_TERRAIN) != 0);
+    CHECK((r.fake.breaks[1].r.flags & EMF_BREAK_TERRAIN) == 0);
+    r.fake.block.kind = EMF_BLOCK_TERRAIN;
+    r.fake.block.material = 67;
+    r.fake.block.world = 0;
+    r.run_command("bt.find");
+    CHECK(r.fake.wall_flags == EMF_FIND_TERRAIN);
+    CHECK(logged("found terrain false"));  // a player placed it
+    r.fake.block.world = 1;
+    r.run_command("bt.find");
+    CHECK(logged("found terrain true"));
+    r.fake.wall_flags = 0xFFFFFFFFu;
+    r.run_command("bt.plain");
+    CHECK(r.fake.wall_flags == 0xFFFFFFFFu);  // no terrain option: plain find_wall
+    r.run_command("bt.bad");
+    CHECK(logged("bad false"));
+    CHECK(logged("terrain must be true or false"));
+    CHECK(logged("bad2 false"));
+    CHECK(logged("unknown option 'soil'"));
+    CHECK(logged("bad3 false"));
+    // a v46 core: the terrain option is dropped (building blocks still break), find_wall without it, no terrain world
+    r.api.version = 46;
+    r.api.size = static_cast<uint32_t>(offsetof(EmfApi, find_wall_ex));
+    r.fake.breaks.clear();
+    r.run_command("bt.brk");
+    REQUIRE(r.fake.breaks.size() == 2u);
+    CHECK((r.fake.breaks[0].r.flags & EMF_BREAK_TERRAIN) == 0);
+    r.fake.wall_flags = 0xFFFFFFFFu;
+    r.run_command("bt.find");
+    CHECK(r.fake.wall_flags == 0xFFFFFFFFu);
+    CHECK(logged("found terrain nil"));
+}

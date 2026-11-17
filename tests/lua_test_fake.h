@@ -79,6 +79,7 @@ struct Fake {
     bool block_ok = true;       // block_at / find_wall answer
     EmfBlockInfo block{};       // what block_at and find_wall give
     float wall_from[3] = {}, wall_to[3] = {};
+    uint32_t wall_flags = 0xFFFFFFFFu;  // v47 find_wall_ex's flags (untouched: find_wall was asked)
     std::vector<uint32_t> order_cancels;
     std::map<uint32_t, uint32_t> enemy_targets;
     struct Move {  // v40
@@ -836,6 +837,11 @@ bool f_find_wall(EmfWorld*, const float from[3], const float to[3], EmfBlockInfo
     out->size = sizeof *out;
     return true;
 }
+bool f_find_wall_ex(EmfWorld* w, const float from[3], const float to[3], uint32_t flags, EmfBlockInfo* out) {
+    const bool ok = f_find_wall(w, from, to, out);
+    g->wall_flags = flags;
+    return ok;
+}
 bool f_player_permissions(EmfWorld*, uint32_t player, uint32_t* perms) {
     if (perms) *perms = 0;
     auto it = g->permissions.find(player);
@@ -1101,6 +1107,7 @@ EmfApi fake_api() {
     a.break_blocks = f_break_blocks;                    // v44
     a.block_at = f_block_at;
     a.find_wall = f_find_wall;
+    a.find_wall_ex = f_find_wall_ex;  // v47
     a.chat_tell_ex = f_chat_tell_ex;
     a.chat_broadcast_ex = f_chat_broadcast_ex;
     a.on_hit = f_on_hit;  // v31

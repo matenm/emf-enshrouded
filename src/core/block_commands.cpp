@@ -31,8 +31,9 @@ bool parse_float(const char* s, float* out) {
     return true;
 }
 
-// The first building block where the player looks, within kBlockLookRange; else why not (empty text: none there).
-bool looked_at(EmfWorld* w, EmfBlockInfo* out, float ray_end[3], std::string* why) {
+// The first building block where the player looks, within kBlockLookRange (flags EMF_FIND_TERRAIN: or terrain a player
+// placed); else why not (empty text: none there).
+bool looked_at(EmfWorld* w, EmfBlockInfo* out, float ray_end[3], std::string* why, uint32_t flags = 0) {
     float o[3], d[3];
     if (!g_deps.camera || !g_deps.camera(w, o, d)) {
         *why = "no camera: look from a player (from the chat: yours; on a dedicated server's console there is none)";
@@ -42,7 +43,7 @@ bool looked_at(EmfWorld* w, EmfBlockInfo* out, float ray_end[3], std::string* wh
     *out = EmfBlockInfo{};
     out->size = sizeof *out;
     why->clear();
-    return g_deps.find_wall && g_deps.find_wall(w, o, ray_end, out);
+    return g_deps.find_wall && g_deps.find_wall(w, o, ray_end, flags, out);
 }
 
 // blocks origin [at x y z]: whether the block where you look (or at a point) is the world's own or a player's
@@ -88,7 +89,7 @@ void cmd_blocks(EmfWorld* w, int argc, const char* const* argv, void*) {
     EmfBlockInfo b{};
     float end[3];
     std::string why;
-    if (looked_at(w, &b, end, &why)) {
+    if (looked_at(w, &b, end, &why, EMF_FIND_TERRAIN)) {  // a player's terrain blocks too (v47)
         command_reply_line(block_info_line(b));
         return;
     }
@@ -134,20 +135,22 @@ void cmd_break(EmfWorld* w, int argc, const char* const* argv, void*) {
             r.flags |= EMF_BREAK_DROPS;
         else if (std::strcmp(argv[i], "world") == 0)
             r.flags |= EMF_BREAK_WORLD;  // the world's own blocks (ruins) too
+        else if (std::strcmp(argv[i], "terrain") == 0)
+            r.flags |= EMF_BREAK_TERRAIN;  // the terrain blocks a player placed too (v47)
         else if (std::strcmp(argv[i], "height") == 0)
             ok = i + 1 < argc && parse_float(argv[++i], &r.height);
         else
             ok = i == 1 && parse_float(argv[i], &r.radius);
     }
     if (!ok) {
-        command_reply_line("usage: break [radius 0.25-3.5] [instant] [drops] [world] [height <m>] [at <x> <y> <z>]");
+        command_reply_line("usage: break [radius 0.25-3.5] [instant] [drops] [world] [terrain] [height <m>] [at <x> <y> <z>]");
         return;
     }
     if (!at) {
         EmfBlockInfo b{};
         float end[3];
         std::string why;
-        if (!looked_at(w, &b, end, &why)) {
+        if (!looked_at(w, &b, end, &why, (r.flags & EMF_BREAK_TERRAIN) ? EMF_FIND_TERRAIN : 0u)) {
             command_reply_line(why.empty() ? "no building block within 12 m where you look" : why);
             return;
         }
@@ -163,10 +166,11 @@ void cmd_break(EmfWorld* w, int argc, const char* const* argv, void*) {
         return;
     }
     char line[200];
-    std::snprintf(line, sizeof line, "break %u queued %s (radius %.2f m%s%s%s); the answer follows after the step", id,
+    std::snprintf(line, sizeof line, "break %u queued %s (radius %.2f m%s%s%s%s); the answer follows after the step", id,
                   at_text(r.x, r.y, r.z).c_str(), r.radius == 0.0f ? 1.0f : r.radius,
                   r.height > 0 ? (", a column " + std::to_string(r.height).substr(0, 4) + " m high").c_str() : "",
-                  (r.flags & EMF_BREAK_INSTANT) ? ", instant" : "", (r.flags & EMF_BREAK_DROPS) ? ", drops" : "");
+                  (r.flags & EMF_BREAK_INSTANT) ? ", instant" : "", (r.flags & EMF_BREAK_DROPS) ? ", drops" : "",
+                  (r.flags & EMF_BREAK_TERRAIN) ? ", terrain a player placed too" : "");
     command_reply_line(line);
 }
 
@@ -184,7 +188,14 @@ std::string block_info_line(const EmfBlockInfo& b) {
         else
             std::snprintf(t, sizeof t, "building %u (no config%s) %s", b.material, dmg, at.c_str());
     } else if (b.kind == EMF_BLOCK_TERRAIN) {
-        std::snprintf(t, sizeof t, "terrain %u %s", b.material, at.c_str());
+        const char* whose = b.world == 0   ? "placed by a player"
+                            : b.world == 1 ? "the world's own ground"
+                                           : "its shipped state not known";
+        if (b.health > 0)
+            std::snprintf(t, sizeof t, "terrain %u (%s, %d health), %s %s", b.material, hardness_name(b.hardness), b.health,
+                          whose, at.c_str());
+        else
+            std::snprintf(t, sizeof t, "terrain %u, %s %s", b.material, whose, at.c_str());
     } else {
         std::snprintf(t, sizeof t, "nothing %s", at.c_str());
     }
@@ -197,9 +208,10 @@ bool add_block_commands(CommandCenter& commands, BlockCommandDeps deps) {
                                      "point (material, hardness, health, damage so far); origin: whether it is the "
                                      "world's own (a ruin as the game shipped it) or a player's (host or dedicated server)",
                            cmd_blocks, nullptr, nullptr);
-    ok &= commands.add("break", "[radius 0.25-3.5] [instant] [drops] [world] [height <m>] [at <x> <y> <z>]: break the "
-                                "player-built blocks where you look, or around a point (never the ground; the hole stays "
-                                "and is saved; host or dedicated server)",
+    ok &= commands.add("break", "[radius 0.25-3.5] [instant] [drops] [world] [terrain] [height <m>] [at <x> <y> <z>]: "
+                                "break the player-built blocks where you look, or around a point; terrain: the terrain "
+                                "blocks a player placed too (never the world's own ground; the hole stays and is saved; "
+                                "host or dedicated server)",
                        cmd_break, nullptr, nullptr);
     return ok;
 }

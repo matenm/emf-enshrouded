@@ -1850,6 +1850,19 @@ bool api_find_wall(EmfWorld* w, const float from[3], const float to[3], EmfBlock
     return true;
 }
 
+// v47: find_wall with flags (EMF_FIND_TERRAIN: terrain a player placed stops the line too).
+bool api_find_wall_ex(EmfWorld* w, const float from[3], const float to[3], uint32_t flags, EmfBlockInfo* out) {
+    if (!out || !from || !to || out->size < kBlockInfoV44Size || !world_call_allowed(w, "find_wall_ex")) return false;
+    EmfBlockInfo info{};
+    std::string why;
+    if (!blocks_find_wall(w, from, to, &info, &why, flags)) {
+        if (!why.empty()) log_once("find_wall_ex refused: " + why);
+        return false;
+    }
+    put_block_info(out, info);
+    return true;
+}
+
 // v43: the PlayerPermissions byte of the player's BasicPlayerInfos entry (server world).
 bool api_player_permissions(EmfWorld* w, uint32_t player, uint32_t* perms) {
     if (perms) *perms = 0;
@@ -2718,6 +2731,7 @@ const EmfApi kApi = {
     api_villager_move,  // v46
     api_villager_move_cancel,
     api_villager_moving,
+    api_find_wall_ex,  // v47
 };
 
 bool guarded_chat_call(EmfChatCallback cb, EmfWorld* w, uint64_t account, uint32_t entity, const char* text, void* user) {

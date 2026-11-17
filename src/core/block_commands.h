@@ -15,7 +15,8 @@ struct BlockCommandDeps {
     // The camera ray of the player the command means ("you": the console's host, a chat command's sender); false when
     // unknown. dir has unit length.
     std::function<bool(EmfWorld* w, float origin[3], float dir[3])> camera;
-    std::function<bool(EmfWorld* w, const float from[3], const float to[3], EmfBlockInfo* out)> find_wall;
+    // find_wall_ex (v47: flags EMF_FIND_TERRAIN also stops at terrain a player placed)
+    std::function<bool(EmfWorld* w, const float from[3], const float to[3], uint32_t flags, EmfBlockInfo* out)> find_wall;
     std::function<bool(EmfWorld* w, float x, float y, float z, EmfBlockInfo* out)> block_at;
     std::function<uint32_t(EmfWorld* w, EmfBreakBlocks* req, EmfBreakCallback cb, void* user)> break_blocks;
     // `blocks origin`: the line for the cell at a point (block_origin_line), "" when nothing was read
@@ -23,7 +24,8 @@ struct BlockCommandDeps {
 };
 
 bool add_block_commands(CommandCenter& commands, BlockCommandDeps deps);
-// "building 7 (VeryHard, 1000 health, damage 34/255) at x y z" / "terrain 5 at ..." / "nothing at ..."
+// "building 7 (VeryHard, 1000 health, damage 34/255) at x y z" / "terrain 67 (VeryHard, 400 health), placed by a
+// player at ..." / "nothing at ..."
 std::string block_info_line(const EmfBlockInfo& b);
 
 }  // namespace emf::core

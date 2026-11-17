@@ -659,8 +659,8 @@ TEST_CASE("api (v46): villager_move from a server world callback only; the enemy
         disp.run(w, EMF_WORLD_SERVER, [](const std::string&) {});
     };
     const EmfApi* api = api_table();
-    CHECK(api->version == 46u);
-    CHECK(api->size == kApiV46Size);
+    CHECK(api->version >= 46u);
+    CHECK(api->size >= kApiV46Size);
     CHECK(offsetof(EmfApi, villager_move) == kApiV44Size);
     EmfPathPoint p{20, 10, 0, 0};
     EmfMoveOrder m{};
