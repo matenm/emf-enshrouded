@@ -763,7 +763,8 @@ reach:
 - on by default: items on the ground (drops, sticks and stones after chopping or mining, loose stones and twig piles)
   and collectibles;
 - off by default: mushrooms, fireflies and bait bugs, wild plants, chests in ruins (opened as you would, then emptied;
-  never a player's chest or one that needs a lockpick or key), and barrels, crates and urns to smash.
+  never a player's chest or one that needs a lockpick or key), barrels, crates and urns to smash, and (experimental)
+  bee hives to smash: their honey and wax drop, and a wasp swarm comes out.
 Never inside a base (smashing 10 m more), never a quest item, never what is on its ignore list.
 Settings: reach, delay after the kill, how long it looks for loot (the loot appears 1-3 s after the death), what comes, arrows,
 the groups and their reaches, the ignore list, default for new players, the host's key, base radius. Details:

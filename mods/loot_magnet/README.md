@@ -85,6 +85,7 @@ general **Reach**):
 | Wild plants (`pick_plants`) | off | herbs, flowers, bushes and wild crops you collect with E, and wild shiitake (it grows like a plant); a plant is gone once collected, as by hand |
 | Chests in ruins (`open_chests`) | off | the chests the game placed in the world: it opens them as you would (the game rolls their loot), then empties them; a chest it emptied is remembered for that world (`emf\config\loot_magnet_chests`), so it is not opened again after a reload |
 | Smash barrels, crates and urns (`smash`) | off | only those that drop loot: one hit with their own health; the drop lies on the ground, and Items on the ground picks it up |
+| Smash bee hives (`smash_hives`) | off | experimental: one hit breaks a wild bee hive open; its honey and wax drop on the ground (Items on the ground picks them up) and **a wasp swarm comes out and attacks** |
 
 Never:
 - **Inside a base:** within **Never within (m) of a flame altar**. Smashing keeps 10 m more away. So your chests and
@@ -100,7 +101,9 @@ Never:
 - **Items on the ignore list:** **Never pick up**, item names as `items <words>` in the console shows them, comma
   separated. End one with * for every name that begins so (`Food_T1_raw_*`). A chest that holds an ignored item is
   left whole. The list cannot apply to wild plants without a pickup: their loot is rolled when they are taken.
-- **Enemy spawners** (bone piles, spider eggs), nests, fog nest resources, bee hives, trees and rocks.
+- **Enemy spawners** (bone piles, spider eggs), nests, fog nest resources, the Flame Power capsules, trees and rocks;
+  bee hives only with **Smash bee hives** on. Trees are never felled: a hit from a mod takes a tree away with only its
+  resin, while the wood comes stroke by stroke from your own axe.
 
 **What the game switched off:** a chest it emptied, or a swarm it switched off or put out, is left alone. Fireflies
 come by day as well: the game offers them by day and by night (seen in game).
@@ -116,7 +119,7 @@ fits and keep the rest. An item is tried 5 times, 2 s apart, then left until you
 | Items on the ground, Collectibles (`pick_ground`, `pick_collectibles`) | on | with their own reach (`pick_ground_reach`, ...: 0-20, 0 = Reach) |
 | Mushrooms, Fireflies and bait bugs, Wild plants (`pick_mushrooms`, `pick_fireflies`, `pick_plants`) | off | each with its own reach |
 | Never pick up (`ignore`) | empty | item names, comma separated; `*` at the end for a beginning |
-| Chests in ruins, Smash barrels, crates and urns (`open_chests`, `smash`) | off | each with its own reach |
+| Chests in ruins, Smash barrels, crates and urns, Smash bee hives (`open_chests`, `smash`, `smash_hives`) | off | each with its own reach |
 | After the kill (`delay`) | 1 s | 0-10: the loot comes no sooner |
 | Looks for loot for (`window`) | 15 s | 8-60 s after the kill; an older corpse is left to you |
 | What comes (`categories`) | materials | materials (and food) only, or everything |
