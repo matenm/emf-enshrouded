@@ -324,6 +324,9 @@ ContentPanel content_panel(const std::wstring& game, bool server_folder, bool di
         b.message = state->message;
         b.errors.assign(state->errors.begin(), state->errors.begin() + (std::min)(state->errors.size(), kMaxErrors));
         b.errors_more = state->errors.size() - b.errors.size();
+        b.warnings.assign(state->warnings.begin(),
+                          state->warnings.begin() + (std::min)(state->warnings.size(), kMaxErrors));
+        b.warnings_more = state->warnings.size() - b.warnings.size();
         b.mods = state->mods;
         b.ms = state->ms;
         b.built_at = state->built_at;

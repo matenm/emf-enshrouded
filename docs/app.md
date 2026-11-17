@@ -797,7 +797,8 @@ times, the mods' `mod.json`, `emf\content\client\emf_content_state.json` and `sh
   another folder took, a broken `mod.json`); `.git` and DLL mod folders without `mod.json` are no EML mods, as on the
   Mods tab. The list says "Built by EMF" only while EMF owns the content, otherwise "EMF would build". The last build's
   errors are cut at 20, with the count of the rest.
-- **The last build**: when, how long, its outcome, message and errors; `emf\content.log` is the log viewer's third
+- **The last build**: when, how long, its outcome, message and errors, and a good build's mod warnings (a part a mod could
+  not add, such as a creature pack's creature after a game update); `emf\content.log` is the log viewer's third
   choice.
 - **When to apply**: `[content] mode=auto|on|off` in `emf\emf_core.ini` (other keys and sections are kept).
 - **Uses about N MB** with **Remove the copy**: the copy's own files (its hard links to the game's files take no space

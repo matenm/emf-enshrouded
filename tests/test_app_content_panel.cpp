@@ -584,3 +584,37 @@ TEST_CASE("app content: without emf\\known_tools.txt the tool is named as the lo
     CHECK(p.other_tool == "dbghelp.dll (EML or ShroudForge)");
     CHECK(p.take_over == TakeOver::None);
 }
+
+// A good build whose mods warned (a creature pack that could not add a creature): the loader keeps the warnings in its
+// state; the card lists them under the last build, cut like the errors.
+TEST_CASE("app content: a good build's mod warnings reach the card, cut with the count of the rest") {
+    ContentGame g(L"cp_warnings");
+    g.built(0, "EML content: 3 mods (built in 28 s); a mod reported a problem");
+    const auto read = loader::read_state(g.shadow() + L"\\emf_content_state.json");
+    REQUIRE(read);
+    auto s = *read;
+    s.warnings = {"emf_beastmaster_beasts: beastmaster_stable: not added: the source model was not found"};
+    REQUIRE(loader::write_state(g.shadow() + L"\\emf_content_state.json", s));
+    ContentPanel p = content_panel(g.dir, false);
+    REQUIRE(p.last_build);
+    REQUIRE(p.last_build->warnings.size() == 1);
+    CHECK(p.last_build->warnings[0].find("beastmaster_stable: not added") != std::string::npos);
+    CHECK(p.last_build->warnings_more == 0);
+    auto r = json::parse(content_panel_json(p));
+    REQUIRE(r.value);
+    const json::Value* lb = r.value->get("last_build");
+    REQUIRE(lb);
+    const json::Value* wv = lb->get("warnings");
+    REQUIRE(wv);
+    CHECK(wv->arr.size() == 1);
+    s.warnings.clear();
+    for (int i = 0; i < 30; ++i) s.warnings.push_back("m" + std::to_string(i) + ": warned");
+    REQUIRE(loader::write_state(g.shadow() + L"\\emf_content_state.json", s));
+    p = content_panel(g.dir, false);
+    REQUIRE(p.last_build);
+    CHECK(p.last_build->warnings.size() == 20);
+    CHECK(p.last_build->warnings_more == 10);
+    r = json::parse(content_panel_json(p));
+    REQUIRE(r.value);
+    CHECK(at(at(*r.value, "last_build"), "warnings_more").n == 10);
+}

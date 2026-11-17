@@ -172,7 +172,8 @@ std::string content_panel_json(const ContentPanel& p) {
     if (p.last_build) {
         const auto& b = *p.last_build;
         last = Obj().num("code", b.code).str("message", b.message).strs("errors", b.errors)
-                   .num("errors_more", static_cast<double>(b.errors_more)).strs("mods", b.mods)
+                   .num("errors_more", static_cast<double>(b.errors_more)).strs("warnings", b.warnings)
+                   .num("warnings_more", static_cast<double>(b.warnings_more)).strs("mods", b.mods)
                    .num("ms", static_cast<double>(b.ms)).str("built_at", b.built_at).text();
     }
     return Obj()

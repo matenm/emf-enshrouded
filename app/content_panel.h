@@ -57,6 +57,8 @@ struct ContentPanel {
         std::string message;
         std::vector<std::string> errors, mods;  // errors: the first kMaxErrors
         size_t errors_more = 0;                 // how many more the state lists
+        std::vector<std::string> warnings;      // a good build's mod warnings ("<id>: <text>"), the first kMaxErrors
+        size_t warnings_more = 0;
         uint64_t ms = 0;
         std::string built_at;  // UTC, "YYYY-MM-DDTHH:MM:SSZ"
     };

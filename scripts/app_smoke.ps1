@@ -832,7 +832,7 @@ try {
         Write-File "enshrouded_001.dat" "dat 1"
         Write-File "mods\beasts\mod.json" '{"id": "beasts", "name": "<img src=x onerror=\"window.__x=1\">Beasts", "version": "1.0.0", "capabilities": ["patch"]}'
         Write-File "mods\npc_explorer\mod.json" '{"id": "npc_explorer", "name": "NPC Explorer", "version": "1.0.0", "capabilities": ["export"]}'
-        Write-File "emf\content\client\emf_content_state.json" '{"fingerprint": "sha256:an earlier set of files", "code": 1, "message": "<img src=x onerror=\"window.__x=1\">a mod failed", "mods": [], "errors": ["mods\\beasts\\main.lua: <script>window.__x=1</script>"], "ms": 4200, "built_at": "2026-11-01T20:00:00Z", "unloaded": true, "truncated": false}'
+        Write-File "emf\content\client\emf_content_state.json" '{"fingerprint": "sha256:an earlier set of files", "code": 1, "message": "<img src=x onerror=\"window.__x=1\">a mod failed", "mods": [], "errors": ["mods\\beasts\\main.lua: <script>window.__x=1</script>"], "warnings": ["emf_beasts: <img src=x onerror=\"window.__x=1\">bear: not added"], "ms": 4200, "built_at": "2026-11-01T20:00:00Z", "unloaded": true, "truncated": false}'
         Write-File "emf\content.log" "[emf] building EML content`r`n[error] <img src=x onerror=`"window.__x=1`">the log's own line`r`n"
         $dllBefore = Get-Content -LiteralPath (Join-Path $game "emf\emf_content.dll") -Raw
         $cW = "var W=function(c,f,n){n=n||0;if(c()){f();}else if(n<250){setTimeout(function(){W(c,f,n+1);},100);}else{f();}}; var pr={}; window.emfProbe=pr; var t=function(id){return (document.getElementById(id)||{}).textContent||'';}; var items=function(id){return [...document.querySelectorAll('#'+id+' li')].map(function(x){return x.textContent;});}; var ctl=function(){return [...document.querySelectorAll('#content-card button, #content-card select')];};"
@@ -851,6 +851,7 @@ try {
         Check ($null -ne $pc -and $null -ne $pc.left -and @($pc.left).Count -eq 1 -and @($pc.left)[0] -like "*npc_explorer*only exports*") "EML content: the mod EMF leaves out is listed with the loader's reason ($(if ($pc) { @($pc.left) -join ' | ' }))"
         Check ($null -ne $pc -and $pc.builtTitle -eq "Built by EMF") "EML content: while EMF owns the content its list is Built by EMF ($(if ($pc) { $pc.builtTitle }))"
         Check ($null -ne $pc -and $pc.last -like "*a mod failed*" -and $pc.last -like "*<script>*" -and $pc.last -like "*4.2 s*") "EML content: the last build shows its message, its errors (as text) and its time ($(if ($pc) { $pc.last }))"
+        Check ($null -ne $pc -and $pc.last -like "*reported a problem*" -and $pc.last -like "*<img src=x*bear: not added*") "EML content: the last build lists its mods' warnings (as text) ($(if ($pc) { $pc.last }))"
         Check ($null -ne $pc -and $pc.mode -eq "auto" -and $pc.disabled -eq 0) "EML content: When to apply shows auto, and nothing is disabled while the game is closed"
         Check ($null -ne $pc -and $pc.log -like "*<img src=x*the log's own line*") "EML content: content.log is the third log choice, shown as text"
         Check ($null -ne $pc -and $pc.after -eq "Off") "EML content: choosing Off in When to apply turns the card to Off ($(if ($pc) { $pc.after }))"

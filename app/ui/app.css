@@ -715,6 +715,7 @@ main { flex: 1; min-height: 0; position: relative; }
 .content-row select:disabled { opacity: 0.45; cursor: not-allowed; }
 .content-list { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 13.5px; overflow-wrap: anywhere; }
 .content-list.errors { color: #ffb3bb; }
+.content-list.warnings { color: var(--amber); }
 .content-name { font-weight: 600; }
 .content-last .d-error { margin: 4px 0; }
 .content-take { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid rgba(106, 165, 255, 0.3); border-radius: 10px; background: rgba(106, 165, 255, 0.06); }
