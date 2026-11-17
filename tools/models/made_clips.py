@@ -1,7 +1,9 @@
 """Clips made from a few key turns on top of a pose: a death, a flinch or a lean for a creature whose own animations
 lack one.
 
-Keys: [{"t": seconds, "turn": {joint name: [axis, degrees]}}, ...], the first at 0 s, times rising. A key's turns
+Keys: [{"t": seconds, "turn": {joint name: [axis, degrees]}, "move": {joint name: [x, y, z]}}, ...], the first at
+0 s, times rising. A move shifts a joint (and what hangs on it) by that much along the creature's axes as the pose
+has them before the turns, in the skeleton's units; it eases as a turn does (a leap, a hop back). A key's turns
 are where those joints stand turned at that time (a joint a key does not name is not turned then); between two keys
 every joint's turn eases (smoothstep, slerp) from the one to the other, and the clip ends on the last key. An axis is
 "x", "y", "z" or a vector in the creature's own frame (game space: x across, y up, z forward), carried along by the
@@ -47,13 +49,21 @@ def _keys(sk, keys):
             if name not in sk["names"]:
                 raise ValueError("no joint %r in the skeleton" % name)
             turns[sk["names"].index(name)] = _turn(axis, degrees)
-        out.append((t, turns))
+        moves = {}
+        for name, by in k.get("move", {}).items():
+            if name not in sk["names"]:
+                raise ValueError("no joint %r in the skeleton" % name)
+            if len(by) != 3:
+                raise ValueError("a move is [x, y, z], not %r" % (by,))
+            moves[sk["names"].index(name)] = tuple(float(c) for c in by)
+        out.append((t, turns, moves))
     return out
 
 
-def turned(sk, base, turns):
+def turned(sk, base, turns, moves=None):
     """The pose base with the turns {joint index: quaternion} added (each about the creature's axes as the joint's
-    parents' turns carried them; children follow)."""
+    parents' turns carried them; children follow) and the moves {joint index: (x, y, z)} (along the creature's
+    axes as base has them)."""
     parents = sk["parents"]
     world = osk.world(base, parents)
     new_q, delta, out = [None] * len(base), [None] * len(base), []
@@ -63,6 +73,9 @@ def turned(sk, base, turns):
         wq = osk.qmul(osk.qmul(dp, turns.get(j, IDENTITY)), world[j][0])
         new_q[j] = wq
         delta[j] = osk.qmul(wq, osk.qconj(world[j][0]))
+        if moves and j in moves:
+            by = moves[j] if p is None else osk.qrot(osk.qconj(world[p][0]), moves[j])
+            t = tuple(a + b for a, b in zip(t, by))
         out.append((wq if p is None else osk.qmul(osk.qconj(new_q[p]), wq), t, s))
     return out
 
@@ -86,23 +99,29 @@ def offset(sk, turns, hierarchy_hash=0):
     return joint_animation.encode([pose] * (OFFSET_FRAMES + 1), sk["rest"], hierarchy_hash=hierarchy_hash)
 
 
-def make(sk, base, keys, fps=60, loop=False, hierarchy_hash=0):
-    """A clip of the keys on top of the pose base (per joint rotation, position, scale), a key every frame."""
+def make(sk, base, keys, fps=60, loop=False, hierarchy_hash=0, bases=None):
+    """A clip of the keys on top of the pose base (per joint rotation, position, scale), a key every frame; or on
+    top of bases, a pose per frame (a moving base: gltf_clips.timeline_poses at the same fps), as long as the keys."""
     ks = _keys(sk, keys)
     length = ks[-1][0]
     if length <= 0:
         raise ValueError("a made clip needs a key after t = 0")
     n = max(1, int(round(length * fps)))
+    if bases is not None and len(bases) != n + 1:
+        raise ValueError("the base lasts %g s, the keys %g s" % ((len(bases) - 1) / fps, length))
     poses = []
     for f in range(n + 1):
         t = length * f / n
         i = max(i for i in range(len(ks)) if ks[i][0] <= t)
         if i == len(ks) - 1:
-            turns = ks[i][1]
+            turns, moves = ks[i][1], ks[i][2]
         else:
-            (t0, a), (t1, b) = ks[i], ks[i + 1]
+            (t0, a, ma), (t1, b, mb) = ks[i], ks[i + 1]
             x = (t - t0) / (t1 - t0)
             s = x * x * (3 - 2 * x)
             turns = {j: gltf_clips._slerp(a.get(j, IDENTITY), b.get(j, IDENTITY), s) for j in set(a) | set(b)}
-        poses.append(turned(sk, base, turns))
+            zero = (0.0, 0.0, 0.0)
+            moves = {j: tuple(u + (v - u) * s for u, v in zip(ma.get(j, zero), mb.get(j, zero)))
+                     for j in set(ma) | set(mb)}
+        poses.append(turned(sk, base if bases is None else bases[f], turns, moves))
     return joint_animation.encode(poses, sk["rest"], fps=fps, loop=loop, hierarchy_hash=hierarchy_hash)

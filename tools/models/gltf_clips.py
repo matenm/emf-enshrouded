@@ -238,8 +238,8 @@ def _blend(a, b, s):
             for (qa, pa, sa), (qb, pb, sb) in zip(a, b)]
 
 
-def timeline(gltf, binc, sk, keys, hierarchy_hash, fps=60):
-    """A clip that times an animation's moments (a swing that must land when the game's attack hits, two swings in
+def timeline_poses(gltf, binc, sk, keys, fps=60):
+    """The poses, one per frame, of a clip that times an animation's moments (a swing that must land when the game's attack hits, two swings in
     one combo): keys [at, animation, time], seconds into the clip, the glb's animation and seconds into it; the
     first at 0, each at or after the one before, the last at the clip's length. Between two keys forward through
     one animation the clip plays that stretch of it, faster or slower; between any other two (back in time, another
@@ -281,4 +281,10 @@ def timeline(gltf, binc, sk, keys, hierarchy_hash, fps=60):
             poses.append(ns.pose(sk, ns.node_worlds(gltf, _frame(ch, _span(ch)[0] + t0 + (t1 - t0) * u)), gltf))
         else:
             poses.append(_blend(pose(n0, t0), pose(n1, t1), u * u * (3 - 2 * u)))
-    return ja.encode(poses, sk["rest"], fps=fps, loop=False, hierarchy_hash=hierarchy_hash)
+    return poses
+
+
+def timeline(gltf, binc, sk, keys, hierarchy_hash, fps=60):
+    """timeline_poses as a clip."""
+    return ja.encode(timeline_poses(gltf, binc, sk, keys, fps), sk["rest"], fps=fps, loop=False,
+                     hierarchy_hash=hierarchy_hash)

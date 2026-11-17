@@ -9,7 +9,8 @@ The pack names, per creature:
   clips          our clips: {name: {"animation": the glb's animation, "loop": true for a looping clip,
                  "speed": faster above 1, "in_place": the joint that carries a walk forward when the animation
                  travels (root motion: its travel along the ground is taken out, gltf_clips.clip)}}, or {name: {"made": {"from": an animation (else the rest pose), "at":
-                 seconds into it, "keys": made_clips.py's key turns, "loop": ...}}} (a death or flinch the file lacks), or
+                 seconds into it, or "base": a timeline (below) whose poses the turns go on top of, as long as the
+                 keys, "keys": made_clips.py's key turns, "loop": ...}}} (a death or flinch the file lacks), or
                  {name: {"additive_zero": true}}: an additive clip that adds nothing (every joint unturned,
                  unmoved, scale 0: an additive layer adds scales, as the game's offset clips show), for the graph's
                  additive layers whose game clips are offsets (the wolf's leaning), or {name: {"offset": {joint:
@@ -150,11 +151,16 @@ def build(cfg, glb_path, creature="creature"):
             if made.get("from") and made["from"] not in have:
                 raise SystemExit("%s: clip %s is made from %r, which the glb does not have" % (creature, name,
                                                                                             made["from"]))
-            base = (gltf_clips.pose_at(gltf, binc, sk, made["from"], float(made.get("at", 0.0)))
-                    if made.get("from") else sk["rest"])
+            missing = [k[1] for k in made.get("base", []) if len(k) > 1 and k[1] not in have]
+            if missing:
+                raise SystemExit("%s: clip %s is made on %r, which the glb does not have" % (creature, name,
+                                                                                            missing[0]))
             try:
+                bases = gltf_clips.timeline_poses(gltf, binc, sk, made["base"]) if made.get("base") else None
+                base = (gltf_clips.pose_at(gltf, binc, sk, made["from"], float(made.get("at", 0.0)))
+                        if made.get("from") else sk["rest"])
                 clip = made_clips.make(sk, base, made.get("keys", []), loop=bool(made.get("loop")),
-                                       hierarchy_hash=new_skeleton.clip_hash(hier))
+                                       hierarchy_hash=new_skeleton.clip_hash(hier), bases=bases)
             except ValueError as e:
                 raise SystemExit("%s: clip %s: %s" % (creature, name, e))
             out.append({"name": name, "guid": clip_guid(cfg["skeleton_guid"], name), "clip": clip})

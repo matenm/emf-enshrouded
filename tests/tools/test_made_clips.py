@@ -73,6 +73,31 @@ class MadeTests(Fixture):
         self.assertTrue(rig.same_rotation(mid[head][0], osk.qmul(about("x", -20), self.rest_world[head][0]), 1e-5))
         self.assertTrue(rig.same_rotation(end[head][0], self.rest_world[head][0], 1e-5))
 
+    def test_a_moving_base(self):
+        """bases: a pose per frame instead of one pose; the turns go on top of each."""
+        moving = gc.timeline_poses(self.gltf, self.binc, self.sk, [[0.0, "Move", 0.0], [0.5, "Move", 1.0]])
+        self.assertEqual(len(moving), 31)
+        clip = mc.make(self.sk, None, [{"t": 0.0}, {"t": 0.5, "turn": {"Head": ["x", -20]}}], bases=moving)
+        plain = gc.timeline(self.gltf, self.binc, self.sk, [[0.0, "Move", 0.0], [0.5, "Move", 1.0]], 0)
+        head = self.sk["names"].index("Head")
+        for frame, deg in ((0, 0), (30, -20)):
+            got, was = self.world(clip, frame), self.world(plain, frame)
+            self.assertTrue(rig.same_rotation(got[head][0], osk.qmul(about("x", deg), was[head][0]), 1e-4), frame)
+        with self.assertRaises(ValueError):
+            mc.make(self.sk, None, [{"t": 0.0}, {"t": 1.0}], bases=moving)
+
+    def test_a_move_shifts_a_joint_and_its_children(self):
+        keys = [{"t": 0.0}, {"t": 0.5, "move": {"Hips": [0.0, 0.2, 0.1]}}, {"t": 1.0}]
+        clip = mc.make(self.sk, self.sk["rest"], keys)
+        for frame, by in ((0, (0, 0, 0)), (30, (0.0, 0.2, 0.1)), (60, (0, 0, 0))):
+            w = self.world(clip, frame)
+            for name in ("Hips", "Head"):
+                j = self.sk["names"].index(name)
+                for a, b, c in zip(w[j][1], self.rest_world[j][1], by):
+                    self.assertAlmostEqual(a, b + c, delta=2e-3, msg=(frame, name))
+        with self.assertRaises(ValueError):
+            mc.make(self.sk, self.sk["rest"], [{"t": 0.0}, {"t": 1.0, "move": {"Hips": [1, 2]}}])
+
     def test_mistakes_are_refused(self):
         for keys in ([{"t": 0.5}], [{"t": 0.0}, {"t": 1.0, "turn": {"Wing": ["z", 9]}}],
                      [{"t": 0.0}, {"t": 1.0, "turn": {"Hips": ["w", 9]}}], [{"t": 0.0}, {"t": 0.0}]):

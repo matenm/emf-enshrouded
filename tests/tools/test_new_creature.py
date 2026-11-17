@@ -126,6 +126,19 @@ class BuildTests(Fixture):
         with self.assertRaises(SystemExit):
             nc.build(bad, self.glb)
 
+    def test_a_made_clip_on_a_moving_base(self):
+        """made's "base": a timeline the key turns go on top of (a death that plays the filmed fall while the
+        body rolls); it ends when the keys do."""
+        def cfg(end):
+            return config(clips={"move": {"animation": "Move"}, "stand": {"animation": "Move"},
+                                 "die": {"made": {"base": [[0.0, "Move", 0.0], [end, "Move", 1.0]],
+                                                  "keys": [{"t": 0.0}, {"t": 0.5, "turn": {"Hips": ["z", 90]}}]}}})
+        clips = {c["name"]: c["clip"] for c in nc.build(cfg(0.5), self.glb)["clips"]}
+        self.assertEqual(clips["die"]["frameCount"], 30)
+        with self.assertRaises(SystemExit) as e:
+            nc.build(cfg(0.7), self.glb, "elk")
+        self.assertIn("elk: clip die", str(e.exception))
+
     def test_a_timeline_clip(self):
         """timeline: [[at, animation, time], ...], a clip that times the animation's moments (gltf_clips.timeline:
         a swing that lands when the game's attack hits); an animation the glb has not, or keys that do not go
