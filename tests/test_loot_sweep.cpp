@@ -774,3 +774,38 @@ TEST_CASE("sweep limits: the never-pick-up list covers a plant once its items ar
     p[0].carried[0x10] = 4;
     CHECK(s.tick(4000, 1, p, {item(10, "Material_T1_Wood", 0x10, -1)}, {}, r).size() == 1);
 }
+
+// Seen in game: a field of 8 plants of kinds not known yet was taken whole in one sweep, before the game's first
+// PickupEvent could tell what they give.
+TEST_CASE("sweep limits: of a kind not known yet, one plant at a time is picked until the game's pickup teaches it") {
+    SweepRules r = all_on();
+    r.limits.consumables = 10;
+    std::vector<Player> p = {{1, {0, 0, 0}, true, true}};
+    p[0].carried[0x20] = 10;
+    const std::vector<Thing> field = {plant_of(1, 5, 2), plant_of(2, 5, 3), plant_of(3, 5, 4), plant_of(4, 6, 5)};
+    Sweeper s;
+    auto acts = s.tick(1000, 1, p, field, {}, r);
+    REQUIRE(acts.size() == 2);  // the nearest of each kind
+    CHECK(acts[0].entity == 1);
+    CHECK(acts[1].entity == 4);
+    CHECK(s.tick(1500, 1, p, {field[1], field[2]}, {}, r).empty());  // kind 5 is being learned
+    s.picked(1, {0x20, "Food_T1_raw_berries", 7}, 1600);
+    CHECK(s.tick(2000, 1, p, {field[1], field[2]}, {}, r).empty());  // learned: enough berries
+    // nothing came from it (the game told nothing): its own retry 2 s later, not the next one; after the wait, the
+    // next one of the kind is tried
+    Sweeper t;
+    REQUIRE(t.tick(1000, 1, p, field, {}, r).size() == 2);
+    CHECK(t.tick(1500, 1, p, {field[1]}, {}, r).empty());
+    acts = t.tick(3100, 1, p, {field[0], field[1]}, {}, r);
+    REQUIRE(acts.size() == 1);
+    CHECK(acts[0].entity == 1);
+    CHECK(t.tick(3100 + Yields::kWaitMs, 1, p, {field[1]}, {}, r).empty());  // the retry waits again
+    CHECK(t.tick(3100 + Yields::kWaitMs + 1, 1, p, {field[1]}, {}, r).size() == 1);
+    // with the never-pick-up list alone the same; with neither, a field comes at once as before
+    SweepRules ig = all_on();
+    ig.ignore = Ignore::parse("Food_T1_raw_*");
+    Sweeper u;
+    CHECK(u.tick(1000, 1, p, field, {}, ig).size() == 2);
+    Sweeper v;
+    CHECK(v.tick(1000, 1, p, field, {}, all_on()).size() == 4);
+}

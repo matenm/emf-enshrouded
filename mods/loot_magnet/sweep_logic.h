@@ -204,6 +204,7 @@ struct Ignore {
         }
         return ig;
     }
+    bool empty() const { return exact.empty() && prefix.empty(); }
     bool match(const std::string& item) const {
         const std::string n = lower(item);
         if (std::find(exact.begin(), exact.end(), n) != exact.end()) return true;
@@ -390,6 +391,7 @@ public:
             session_ = session;
             st_.clear();
             yields_.forget_waits();
+            learning_.clear();
         }
         struct Cand {
             const Thing* t;
@@ -425,9 +427,17 @@ public:
         std::vector<Action> out;
         std::map<uint32_t, size_t> per_player;
         const size_t cap = (std::min)(kBudget, room);
+        // with limits or a never-pick-up list, a kind of plant not known yet is picked one at a time, so the game's
+        // PickupEvent tells what it gives before the rest of a field is decided
+        const bool learn = r.limits.any() || !r.ignore.empty();
         for (const Cand& c : cands) {
             if (out.size() >= cap) break;
             const Thing& t = *c.t;
+            const bool unknown = learn && limited(c.k) && !t.pickup && t.loot_ref != LootRef{} && yields_.of(t.loot_ref).empty();
+            if (unknown) {
+                auto it = learning_.find(t.loot_ref);
+                if (it != learning_.end() && now <= it->second.until && it->second.entity != t.id) continue;
+            }
             State& s = st_[t.id];
             if (s.fingerprint != t.fingerprint) s = State{};  // another entity under a reused id
             s.fingerprint = t.fingerprint;
@@ -435,6 +445,7 @@ public:
             if (s.done || now < s.next_ms || per_player[c.who->id] >= kPerPlayer) continue;
             Action a;
             if (!decide(t, c.k, *c.who, now, s, r, &a)) continue;
+            if (unknown) learning_[t.loot_ref] = {t.id, now + Yields::kWaitMs};
             out.push_back(a);
             ++per_player[c.who->id];
         }
@@ -618,6 +629,11 @@ private:
     }
     std::map<uint32_t, State> st_;
     Yields yields_;
+    struct Learning {
+        uint32_t entity = 0;  // the plant whose loot teaches its kind
+        uint64_t until = 0;   // then another of the kind may be tried (nothing came from this one)
+    };
+    std::map<LootRef, Learning> learning_;
     uint32_t session_ = 0;
     std::set<Place> emptied_;  // the chests the magnet emptied in this world (its file)
     bool dirty_ = false;
