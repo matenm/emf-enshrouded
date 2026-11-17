@@ -118,10 +118,12 @@ function renderContent() {
       b.errors.length ? el('ul', { class: 'content-list errors' }, b.errors.map((e) => el('li', { class: 'mono' }, e)),
         b.errors_more ? el('li', { class: 'muted' }, '… and ' + b.errors_more + ' more (emf\\content.log has them all)') : null) : null,
       // a good build whose mods warned: part of a mod was not added (a creature pack after a game update)
-      (b.warnings || []).length ? el('p', { class: 'content-line' }, 'A mod reported a problem; the rest of its content works:') : null,
+      (b.warnings || []).length ? el('p', { class: 'content-line' }, b.code === 0
+        ? 'A mod reported a problem; the rest of its content works:'
+        : 'Mods also reported:') : null,
       (b.warnings || []).length ? el('ul', { class: 'content-list warnings', id: 'content-warnings' },
         b.warnings.map((w) => el('li', { class: 'mono' }, w)),
-        b.warnings_more ? el('li', { class: 'muted' }, '… and ' + b.warnings_more + ' more (emf\\emf_loader.log has them all)') : null) : null));
+        b.warnings_more ? el('li', { class: 'muted' }, '… and ' + b.warnings_more + ' more (emf\\content.log has them all)') : null) : null));
   }
 
   // the patched game files

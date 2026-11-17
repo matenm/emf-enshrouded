@@ -851,7 +851,7 @@ try {
         Check ($null -ne $pc -and $null -ne $pc.left -and @($pc.left).Count -eq 1 -and @($pc.left)[0] -like "*npc_explorer*only exports*") "EML content: the mod EMF leaves out is listed with the loader's reason ($(if ($pc) { @($pc.left) -join ' | ' }))"
         Check ($null -ne $pc -and $pc.builtTitle -eq "Built by EMF") "EML content: while EMF owns the content its list is Built by EMF ($(if ($pc) { $pc.builtTitle }))"
         Check ($null -ne $pc -and $pc.last -like "*a mod failed*" -and $pc.last -like "*<script>*" -and $pc.last -like "*4.2 s*") "EML content: the last build shows its message, its errors (as text) and its time ($(if ($pc) { $pc.last }))"
-        Check ($null -ne $pc -and $pc.last -like "*reported a problem*" -and $pc.last -like "*<img src=x*bear: not added*") "EML content: the last build lists its mods' warnings (as text) ($(if ($pc) { $pc.last }))"
+        Check ($null -ne $pc -and $pc.last -like "*also reported*" -and $pc.last -notlike "*content works*" -and $pc.last -like "*<img src=x*bear: not added*") "EML content: the last build lists its mods' warnings (as text), and after a failed build never says the content works ($(if ($pc) { $pc.last }))"
         Check ($null -ne $pc -and $pc.mode -eq "auto" -and $pc.disabled -eq 0) "EML content: When to apply shows auto, and nothing is disabled while the game is closed"
         Check ($null -ne $pc -and $pc.log -like "*<img src=x*the log's own line*") "EML content: content.log is the third log choice, shown as text"
         Check ($null -ne $pc -and $pc.after -eq "Off") "EML content: choosing Off in When to apply turns the card to Off ($(if ($pc) { $pc.after }))"
