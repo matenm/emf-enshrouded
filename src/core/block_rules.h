@@ -5,7 +5,9 @@
 // and materials without a config stay 0 too.
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "emf/emf_api.h"
@@ -31,6 +33,7 @@ constexpr uint32_t kBlockMaxMaterials = 128;
 struct BreakSpec {
     bool instant = false;
     bool world = false;              // EMF_BREAK_WORLD: the world's own blocks too (else the spheres stop short of them)
+    bool terrain = false;            // EMF_BREAK_TERRAIN (v47): the terrain a player placed too
     int32_t damage[5] = {};          // per hardness class (damage mode)
     std::vector<uint8_t> materials;  // building ids; empty = every one that can break
 };
@@ -86,5 +89,70 @@ std::string block_origin_line(const BlockOrigin& o);
 // The items the removed blocks give: per building material, (removed + carry) / loot_rate items, the rest kept in
 // carry for the next break (the game keeps such a remainder per player for its pickaxes). removed: per voxel material.
 std::vector<DropStack> break_drops(const float removed[256], const MaterialFacts facts[128], float carry[128]);
+
+// ---- API v47: terrain a player placed (EMF_BREAK_TERRAIN, find_wall's EMF_FIND_TERRAIN) ----
+// The game's terrain dig reduces fill in a sphere and would eat the natural ground around a placed wall, so EMF judges
+// each cell and clears a player's cells itself with the game's box fill (the call its building kernel removes a block
+// with). Terrain facts come from the game's TerrainTerraformingConfig (the building config's offsets), by terrain
+// material 1..127; the game keeps no damage for terrain, so EMF keeps it (TerrainDamage).
+
+// Whose a terrain cell is: the shipped world had ground there (terrain with fill): the world's own, 1. No ground there
+// (empty, a terrain material without fill, a building cell a player replaced): a player placed it, 0. The shipped
+// world not known there: -1, never broken. A cell that is no terrain now (empty, building): 0.
+int terrain_verdict(uint16_t cur, bool base_known, uint16_t base);
+
+// Hits to break per terrain material (index = material 1..127; 0 = untouched), as build_break_table: health /
+// (damage[hardness] x mining_factor), 0 past 255 hits; instant: 1. Unbreakable never. A building materials list does not
+// limit terrain.
+void build_terrain_table(const MaterialFacts facts[128], const BreakSpec& s, float mining_factor, float table[128]);
+
+// EMF's damage for terrain cells (0..255, removed at 255), healing like the game's building damage: a cell is forgotten
+// kHealMs after its last hit.
+class TerrainDamage {
+public:
+    static constexpr uint64_t kHealMs = 20000;
+    uint8_t add(int32_t x, int32_t y, int32_t z, uint32_t bytes, uint64_t now_ms);  // the new value, at most 255
+    void forget(int32_t x, int32_t y, int32_t z);
+    void heal(uint64_t now_ms);
+    void clear() { cells_.clear(); }
+    size_t size() const { return cells_.size(); }
+
+private:
+    struct Entry {
+        uint8_t damage = 0;
+        uint64_t last_ms = 0;
+    };
+    std::map<std::tuple<int32_t, int32_t, int32_t>, Entry> cells_;
+};
+
+struct TerrainCell {
+    int32_t x = 0, y = 0, z = 0;
+    uint8_t material = 0;
+};
+// A column of removed cells, cleared with one box fill: cells (x, y0..y1, z), all of one material.
+struct TerrainRun {
+    int32_t x = 0, z = 0, y0 = 0, y1 = 0;
+    uint8_t material = 0;
+};
+// Cells with the same x and z, consecutive y and one material become one run; ordered by x, z, y.
+std::vector<TerrainRun> column_runs(std::vector<TerrainCell> cells);
+
+// One cell as the glue reads it: ok false = not loaded (left).
+struct TerrainCellRead {
+    bool ok = false;
+    uint16_t cur = 0;
+    bool base_known = false;
+    uint16_t base = 0;
+};
+struct TerrainPassResult {
+    uint32_t damaged = 0, removed = 0;  // cells hit (the removed ones too), cells removed
+    std::vector<TerrainRun> runs;       // what to clear
+    float removed_per_material[128] = {};
+};
+// One sphere: every cell whose centre is within the radius (the building kernel's test) that is terrain a player placed
+// (terrain_verdict 0) and whose table entry is not 0 takes a hit, floor(255 / hits) bytes (instant: removed at once); a
+// cell at 255 is removed (and forgotten by the damage store). Nothing is changed here: the caller clears the runs.
+TerrainPassResult terrain_sphere(const Sphere& s, const float table[128], bool instant, TerrainDamage& damage,
+                                 uint64_t now_ms, const std::function<TerrainCellRead(int32_t, int32_t, int32_t)>& read);
 
 }  // namespace emf::core

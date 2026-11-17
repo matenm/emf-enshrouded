@@ -827,6 +827,12 @@ typedef void (*EmfMoveCallback)(EmfWorld* world, uint32_t id, uint32_t status, v
 #define EMF_BREAK_WORLD 0x4u   /* API v45: break the world's own blocks too (its ruins, as the game shipped them). Without
                                   it every sphere stops just short of the nearest such block (and of any block whose
                                   origin is not known), so a hole next to a ruin is smaller. A v44 core refuses the flag */
+#define EMF_BREAK_TERRAIN 0x8u /* API v47: break the terrain blocks a player placed too (Stone, Granite, dirt ... where
+                                  the shipped world had no ground), never the world's own ground or a ruin. Each cell
+                                  takes hits from its terrain material's health and hardness (EMF keeps that damage; it
+                                  heals 20 s after the last hit); EMF_BREAK_INSTANT and EMF_BREAK_DROPS apply; materials
+                                  lists building ids only. A cell whose shipped state is not known is never broken. An
+                                  older core refuses the flag */
 #define EMF_BREAK_DONE 0u
 #define EMF_BREAK_CANCELLED 1u /* the world ended first */
 #define EMF_BREAK_FAILED 2u    /* a game call faulted: breaking is off until a restart */
@@ -834,7 +840,7 @@ typedef void (*EmfMoveCallback)(EmfWorld* world, uint32_t id, uint32_t status, v
 #define EMF_BREAK_DEFAULT_DAMAGE {100, 100, 95, 60, 50}
 typedef struct EmfBreakBlocks {
     uint32_t size;            /* sizeof(EmfBreakBlocks) */
-    uint32_t flags;           /* EMF_BREAK_INSTANT, EMF_BREAK_DROPS, EMF_BREAK_WORLD (v45) */
+    uint32_t flags;           /* EMF_BREAK_INSTANT, EMF_BREAK_DROPS, EMF_BREAK_WORLD (v45), EMF_BREAK_TERRAIN (v47) */
     float x, y, z;            /* metres: the centre of the (lowest) sphere */
     float radius;             /* metres, 0.25..3.5; 0 = 1 */
     float height;             /* metres, 0..4: more spheres up to this far above the centre (a column; at most 8) */
