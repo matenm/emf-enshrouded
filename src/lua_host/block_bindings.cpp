@@ -29,14 +29,14 @@ void read_pos(lua_State* L, int index, float out[3], const char* fn, const char*
             lua_pop(L, 1);
             lua_getfield(L, index, kKeys[i]);
         }
-        if (!lua_isnumber(L, -1)) luaL_error(L, "%s: %s needs three numbers ({x, y, z})", fn, what);
+        if (lua_type(L, -1) != LUA_TNUMBER) luaL_error(L, "%s: %s needs three numbers ({x, y, z})", fn, what);
         out[i] = static_cast<float>(lua_tonumber(L, -1));
         lua_pop(L, 1);
     }
 }
 
 int32_t whole_damage(lua_State* L, int index) {
-    if (!lua_isnumber(L, index)) luaL_error(L, "emf.break_blocks: damage must be a number or a list of five");
+    if (lua_type(L, index) != LUA_TNUMBER) luaL_error(L, "emf.break_blocks: damage must be a number or a list of five");
     const double v = lua_tonumber(L, index);
     if (!(v >= 0 && v <= 100000) || std::floor(v) != v)
         luaL_error(L, "emf.break_blocks: damage must be whole numbers from 0 to 100000");
@@ -51,7 +51,7 @@ void read_options(lua_State* L, int t, EmfBreakBlocks& r, std::vector<uint8_t>& 
         const std::string key = lua_tostring(L, -2);
         const int v = lua_gettop(L);
         if (key == "radius" || key == "height") {
-            if (!lua_isnumber(L, v)) luaL_error(L, "emf.break_blocks: %s must be a number", key.c_str());
+            if (lua_type(L, v) != LUA_TNUMBER) luaL_error(L, "emf.break_blocks: %s must be a number", key.c_str());
             (key == "radius" ? r.radius : r.height) = static_cast<float>(lua_tonumber(L, v));
         } else if (key == "mode") {
             const char* m = lua_type(L, v) == LUA_TSTRING ? lua_tostring(L, v) : "";
@@ -80,10 +80,12 @@ void read_options(lua_State* L, int t, EmfBreakBlocks& r, std::vector<uint8_t>& 
         } else if (key == "materials") {
             if (!lua_istable(L, v)) luaL_error(L, "emf.break_blocks: materials must be building material ids 0 to 127");
             const size_t n = lua_rawlen(L, v);
+            if (n == 0)  // {} or a table with names: every material would be broken, surely not what was meant
+                luaL_error(L, "emf.break_blocks: materials must list at least one building material id (leave it out for every material)");
             if (n > 128) luaL_error(L, "emf.break_blocks: at most 128 materials");
             for (size_t i = 1; i <= n; ++i) {
                 lua_rawgeti(L, v, static_cast<lua_Integer>(i));
-                const double m = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : -1;
+                const double m = lua_type(L, -1) == LUA_TNUMBER ? lua_tonumber(L, -1) : -1;
                 if (!(m >= 0 && m <= 127) || std::floor(m) != m)
                     luaL_error(L, "emf.break_blocks: materials must be building material ids 0 to 127");
                 mats.push_back(static_cast<uint8_t>(m));

@@ -841,7 +841,7 @@ next to a ruin is smaller. A ruin block a player broke and put back in the same 
 | `mode` | `"damage"` (default) or `"break"` (at once: no health, no cracks) |
 | `damage` | a number for all five hardness classes, or a list of five (Soft, SlightlyHard, ModeratelyHard, Hard, VeryHard), whole, 0 to 100000; default the game's T4 pickaxe (100, 100, 95, 60, 50) |
 | `drops` | `true`: removed blocks drop what a pickaxe gives (each material's item, so many blocks per item) at the hole |
-| `materials` | a list of building material ids 0 to 127 (`emf.block_at`'s `material`); default every one that can break |
+| `materials` | a list of at least one building material id 0 to 127 (`emf.block_at`'s `material`); leave it out for every one that can break (an empty list is an error). Numbers given as text are errors in every option |
 | `world` | 1.38: `true` breaks the world's own blocks too (its ruins); default `false`: they are spared |
 
 Any other key, or a value of the wrong type, is a Lua error. `fn(world, result)` comes once, after the server step that
@@ -864,7 +864,9 @@ callback on the server world, like `world:get`.
 emf.command("bomb", "<x> <y> <z>: crack the walls around a point", function(world, args)
   local x, y, z = tonumber(args[1]), tonumber(args[2]), tonumber(args[3])
   local id = emf.break_blocks(world, x, y, z, {radius = 2, damage = {400, 300, 200, 50, 20}, drops = true},
-    function(w, r) emf.reply(r.status .. ": " .. r.removed .. " blocks gone, " .. r.dropped .. " items") end)
+    function(w, r)  -- after the step: the command's reply is over, so log it (the console shows the log)
+      emf.log(r.status .. ": " .. r.removed .. " blocks gone, " .. r.dropped .. " items")
+    end)
   if not id then emf.reply("refused (see the log)") end
 end)
 ```

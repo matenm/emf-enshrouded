@@ -219,3 +219,27 @@ TEST_CASE("lua 1.38: a block's world (true: the world's own, false: a player's, 
     REQUIRE(r.fake.breaks.size() == 2u);
     CHECK((r.fake.breaks[0].r.flags & EMF_BREAK_WORLD) == 0);
 }
+
+TEST_CASE("lua: break_blocks refuses an empty or non-list materials table and numbers given as text") {
+    Rig r(L"lua_block_strict");
+    add_script(r.dir, "bs",
+               "emf.command('go', '', function(w)\n"
+               "  local function try(tag, o) local ok, e = pcall(emf.break_blocks, w, 1, 2, 3, o, function() end)\n"
+               "    emf.log(tag .. ' ' .. tostring(ok) .. ' ' .. tostring(e)) end\n"
+               "  try('m0', {materials = {}})\n"
+               "  try('m1', {materials = {a = 1}})\n"
+               "  try('m2', {materials = {'7'}})\n"
+               "  try('r0', {radius = '2'})\n"
+               "  try('d0', {damage = '5'})\n"
+               "  try('d1', {damage = {1, 2, '3', 4, 5}})\n"
+               "  try('ok', {materials = {7}, radius = 2})\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("bs.go");
+    for (const char* tag : {"m0 false", "m1 false", "m2 false", "r0 false", "d0 false", "d1 false", "ok true"})
+        CHECK_MESSAGE(logged(tag), tag);
+    CHECK(logged("materials must list at least one building material id"));
+    REQUIRE(r.fake.breaks.size() == 1u);
+    CHECK(r.fake.breaks[0].materials == std::vector<uint8_t>{7});
+}
