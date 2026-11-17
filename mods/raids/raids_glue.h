@@ -186,6 +186,11 @@ inline bool player_near(const Vec3& p, const std::vector<Player>& players, doubl
 // game shipped it) nor one whose origin is not known (EMF's breaks spare those anyway, so the raider would stand there).
 inline bool breakable_wall(const EmfBlockInfo& b, bool v45) { return !v45 || b.world == 0; }
 
+// Whether a refused break means breaking itself is not there (EMF's reasons): then no wall looks for the session.
+inline bool breaking_unavailable(const std::string& why) {
+    return why == "not available on this game version" || why.rfind("off (", 0) == 0;
+}
+
 inline void wall_hit_damage(double scale, int32_t out[5]) {
     const int32_t def[5] = EMF_BREAK_DEFAULT_DAMAGE;
     for (int i = 0; i < 5; ++i)

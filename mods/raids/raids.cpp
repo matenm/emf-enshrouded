@@ -181,6 +181,8 @@ std::set<std::string> g_wall_said;            // refusals logged once per sessio
 bool g_walls_v44_said = false;
 constexpr double kFoeNear = 4.0;  // a worker fights a foe this near instead of the wall
 
+bool g_walls_unavailable = false;  // a hit was refused because breaking is not there: no more wall looks this run
+
 void wall_say_once(const std::string& key, const std::string& line) {
     if (g_wall_said.insert(key).second) EMF_LOG(kMod, "%s", line.c_str());
 }
@@ -347,7 +349,7 @@ void wall_look(emf::World w, uint32_t id, const raids::Vec3& p, const Config& c)
     const float f[3] = {float(line.first.x), float(line.first.y), float(line.first.z)};
     const float t[3] = {float(line.second.x), float(line.second.y), float(line.second.z)};
     std::optional<raids::Vec3> wall;
-    if (const auto b = emf::find_wall(w, f, t)) {
+    if (const auto b = g_walls_unavailable ? std::nullopt : emf::find_wall(w, f, t)) {
         if (raids::breakable_wall(*b, emf::has_v45()))
             wall = raids::Vec3{b->x, b->y, b->z};
         else
@@ -387,6 +389,10 @@ void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, cons
                 if (!emf::break_blocks(w, r, on_wall_hit, ctx)) {
                     delete ctx;
                     wall_say_once("hit", std::string("a wall hit was refused: ") + r.why);
+                    if (raids::breaking_unavailable(r.why) && !g_walls_unavailable) {
+                        g_walls_unavailable = true;
+                        EMF_LOG(kMod, "wall breaking is not available (%s): raiders go for closed doors only", r.why);
+                    }
                 }
                 break;
             }

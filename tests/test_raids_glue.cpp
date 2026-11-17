@@ -301,3 +301,13 @@ TEST_CASE("raids glue: a wall raiders may work on: any building block before API
     CHECK_FALSE(raids::breakable_wall(b, true));
     CHECK(raids::breakable_wall(b, false));  // a v44 core never wrote world
 }
+
+// A v44 core whose breaking is not there (a block signature lost on a game update) or went off after a fault still finds
+// walls: raiders assigned to them would wait 60 s on hits that are all refused. Such a refusal stops wall looks.
+TEST_CASE("raids glue: a break refused because breaking is not available or off stops wall looks; other refusals do not") {
+    CHECK(raids::breaking_unavailable("not available on this game version"));
+    CHECK(raids::breaking_unavailable("off (the game's building kernel faulted); breaks are refused until a restart"));
+    CHECK_FALSE(raids::breaking_unavailable("radius must be 0.5 to 8"));
+    CHECK_FALSE(raids::breaking_unavailable("64 breaks wait already"));
+    CHECK_FALSE(raids::breaking_unavailable(""));
+}
