@@ -75,12 +75,12 @@ general **Reach**):
 
 | Group (setting) | Default | What it takes |
 |---|---|---|
-| Items on the ground (`pick_ground`) | on | drops, sticks and stones after chopping or mining, what a smashed barrel drops, loose stones and twig piles; never keys, weapons or lore the game placed in the world |
+| Items on the ground (`pick_ground`) | on | drops, sticks and stones after chopping or mining, what a smashed barrel drops, loose stones and twig piles, a bat's fur patch or a skeleton's bones, and the stones, ore, wood, meat and drinks that lie in ruins and camps; never keys, weapons or lore the game placed in the world |
 | Collectibles (`pick_collectibles`) | on | the collection items lying in the world |
 | Mushrooms (`pick_mushrooms`) | off | wild mushrooms |
 | Fireflies and bait bugs (`pick_fireflies`) | off | fireflies and the other critters that are fishing bait |
-| Wild plants (`pick_plants`) | off | herbs, flowers, bushes and wild crops you collect with E; a plant is gone once collected, as by hand |
-| Chests in ruins (`open_chests`) | off | the chests the game placed in the world: it opens them as you would (the game rolls their loot), then empties them |
+| Wild plants (`pick_plants`) | off | herbs, flowers, bushes and wild crops you collect with E, and wild shiitake (it grows like a plant); a plant is gone once collected, as by hand |
+| Chests in ruins (`open_chests`) | off | the chests the game placed in the world: it opens them as you would (the game rolls their loot), then empties them; a chest it emptied is remembered for that world (`emf\config\loot_magnet_chests`), so it is not opened again after a reload |
 | Smash barrels, crates and urns (`smash`) | off | only those that drop loot: one hit with their own health; the drop lies on the ground, and Items on the ground picks it up |
 
 Never:
@@ -98,6 +98,9 @@ Never:
   separated. End one with * for every name that begins so (`Food_T1_raw_*`). A chest that holds an ignored item is
   left whole. The list cannot apply to wild plants without a pickup: their loot is rolled when they are taken.
 - **Enemy spawners** (bone piles, spider eggs), nests, fog nest resources, bee hives, trees and rocks.
+
+**What the game switched off:** a chest it emptied, or a swarm it switched off or put out, is left alone. Fireflies
+come by day as well: the game offers them by day and by night (seen in game).
 
 **A full bag:** a pickup comes only while you have an empty slot, so it always fits whole; plants and chests give what
 fits and keep the rest. An item is tried 5 times, 2 s apart, then left until you come back.

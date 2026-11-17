@@ -33,7 +33,7 @@ game and EMF work, a cookbook of tested recipes, the full API reference, and wha
 | `mods/villager_jobs/` | K: villagers farm, tend animals, haul between chests, craft (or trade) at a chest and gather wild pickables around it, assigned with a radial wheel; saved per world (see below) |
 | `mods/big_stacks/` | bigger item stacks (x4, at most 9999) by changing the game's item definitions in memory |
 | `mods/raids/` | Night Raids: at nightfall, by chance, waves of Vukah march on a base where players are; off in each world until `raids.world on` (see below) |
-| `mods/loot_magnet/` | Loot Magnet: corpses of kills near a player are looted into them, for every player on the host or a dedicated server; `/loot.toggle` (see below) |
+| `mods/loot_magnet/` | Loot Magnet: the loot of kills and what lies near a player (items on the ground, collectibles; by choice mushrooms, fireflies, wild plants, chests in ruins, barrels to smash) comes to them, for every player on the host or a dedicated server; `/loot.toggle` (see below) |
 | `mods/champion/` | Wandering Champion (Lua): a roaming mini-boss appears 80-150 m away at night; the screen shows where; a bonus for the slayer (see below) |
 | `mods/bounty/` | Bounty Board (Lua): a Notice Board in a base posts kill, gather and champion bounties; take them there (E for the host, the chat for everyone else) and claim the rewards there (see below) |
 | `mods/grave/` | Grave Keeper (Lua): `/grave.where` finds your tombstone, `/grave.claim` brings its items back from a distance (see below) |
