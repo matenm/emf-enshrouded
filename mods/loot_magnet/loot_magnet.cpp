@@ -91,6 +91,7 @@ void read_settings() {
     gr[static_cast<size_t>(sweep::Kind::Plant)] = group("pick_plants", false);
     gr[static_cast<size_t>(sweep::Kind::Chest)] = group("open_chests", false);
     gr[static_cast<size_t>(sweep::Kind::Smash)] = group("smash", false);
+    gr[static_cast<size_t>(sweep::Kind::Hive)] = group("smash_hives", false);
     c.sweep.reach = c.rules.radius;
     c.sweep.base_radius = c.rules.base_radius;
     c.sweep.ignore = sweep::Ignore::parse(emf::setting_text(kMod, "ignore", ""));
@@ -244,11 +245,12 @@ void sweep_tick(emf::World w, const Config& c, const std::vector<magnet::Looter>
     sweep::Want want;
     want.smash = c.sweep.group(sweep::Kind::Smash).on;
     want.chests = c.sweep.group(sweep::Kind::Chest).on;
-    if (want.smash && !emf::has_v18()) {
-        want.smash = false;
+    want.hives = c.sweep.group(sweep::Kind::Hive).on;
+    if ((want.smash || want.hives) && !emf::has_v18()) {
+        want.smash = want.hives = false;
         if (!g_told_no_smash) {
             g_told_no_smash = true;
-            EMF_LOG(kMod, "sweep: smashing needs EMF API v18 (hits); this core is older, so barrels are left alone");
+            EMF_LOG(kMod, "sweep: smashing needs EMF API v18 (hits); this core is older, so barrels and hives are left alone");
         }
     }
     LARGE_INTEGER f, t0, t1;
@@ -268,12 +270,12 @@ void sweep_tick(emf::World w, const Config& c, const std::vector<magnet::Looter>
     }
     const auto acts = g_sweeper.tick(now, session, players, things, g_bases, c.sweep, room);
     std::map<sweep::Kind, int> looted;
-    int accepted = 0, smashed = 0;
+    int accepted = 0, smashed = 0, hives = 0;
     for (const auto& a : acts) {
         if (a.act == sweep::Act::Smash) {
             if (emf::damage(w, a.player, a.entity, a.amount)) {
-                ++smashed;
-                if (a.first) ++g_swept[sweep::Kind::Smash];
+                ++(a.kind == sweep::Kind::Hive ? hives : smashed);
+                if (a.first) ++g_swept[a.kind];
             }
             continue;
         }
@@ -288,11 +290,12 @@ void sweep_tick(emf::World w, const Config& c, const std::vector<magnet::Looter>
             ++looted[a.kind];
         if (!r.accept && a.first) ++g_swept[a.kind];  // what loot.status counts: one per thing, not per try
     }
-    if (c.debug_log && (accepted || smashed || !looted.empty())) {
+    if (c.debug_log && (accepted || smashed || hives || !looted.empty())) {
         std::string what;
         for (const auto& [k, n] : looted) what += (what.empty() ? "" : ", ") + std::to_string(n) + " " + sweep::kind_name(k);
         if (accepted) what += (what.empty() ? "" : ", ") + std::to_string(accepted) + " chest(s) opened";
         if (smashed) what += (what.empty() ? "" : ", ") + std::to_string(smashed) + " smashed";
+        if (hives) what += (what.empty() ? "" : ", ") + std::to_string(hives) + " bee hive(s) smashed";
         EMF_LOG(kMod, "sweep: %s", what.c_str());
     }
 }

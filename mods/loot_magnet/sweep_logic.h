@@ -28,8 +28,8 @@
 
 namespace sweep {
 
-enum class Kind { None, Ground, Collectible, Mushroom, Firefly, Plant, Chest, Smash };
-constexpr size_t kKinds = 8;
+enum class Kind { None, Ground, Collectible, Mushroom, Firefly, Plant, Chest, Smash, Hive };
+constexpr size_t kKinds = 9;
 
 inline const char* kind_name(Kind k) {
     switch (k) {
@@ -40,6 +40,7 @@ inline const char* kind_name(Kind k) {
         case Kind::Plant: return "plant";
         case Kind::Chest: return "chest";
         case Kind::Smash: return "smash";
+        case Kind::Hive: return "bee hive";
         default: return "none";
     }
 }
@@ -62,6 +63,8 @@ struct Thing {
     bool random_loot = false, random_container = false, loot_on_destroy = false, destructible = false;
     uint16_t max_health = 0;  // Destructible.maxHealth (0 = not read)
     bool spawn_on_destroy = false, mining_node = false;
+    bool bee_hive = false;        // what SpawnEntityOnDestroy spawns is the game's hive loot dropper (honey, wax, wasps)
+    bool hive_triggered = false;  // its SpawnEntityOnDestroy.triggered: broken open already
     bool enemy_spawner = false;  // EnemySettings, RandomSpawner, TriggerSpawner or EnemySpawnerClient
     bool disable_loot_on_destroy = false;  // DisableRandomLootOnDestroy
     bool used_item = false;      // UsedItem: a player placed it
@@ -132,6 +135,12 @@ inline Kind pickup_kind(const std::string& item, int exclude) {
 
 inline Kind classify(const Thing& t) {
     if (t.disabled) return Kind::None;  // the game takes no interaction now (an emptied chest, a hidden swarm)
+    // a bee hive (one hit: honey and wax on the ground, and a wasp swarm): known by what it spawns when destroyed, since
+    // fog nest resources and the Flame Power capsules carry the same parts
+    if (t.bee_hive)
+        return t.destructible && !t.hive_triggered && !t.faction && !t.actor && !t.used_item && !t.enemy_spawner
+                   ? Kind::Hive
+                   : Kind::None;
     if (t.random_loot && t.random_container && t.loot_on_destroy && t.destructible && !t.offer && !t.inventory &&
         !t.setup && !t.faction && !t.actor && !t.enemy_spawner && !t.spawn_on_destroy && !t.mining_node && !t.used_item &&
         !t.disable_loot_on_destroy)
@@ -195,7 +204,7 @@ struct Group {
 };
 struct SweepRules {
     // ground items and collectibles on, the rest off, as the owner chose
-    std::array<Group, kKinds> groups = {Group{}, Group{true, 0}, Group{true, 0}, Group{}, Group{}, Group{}, Group{}, Group{}};
+    std::array<Group, kKinds> groups = {Group{}, Group{true, 0}, Group{true, 0}, Group{}, Group{}, Group{}, Group{}, Group{}, Group{}};
     double reach = 8;          // the general reach (Loot Magnet's "Reach (m)")
     double base_radius = 30;   // nothing within this of a flame altar
     double smash_margin = 10;  // smashing keeps this much more away from a base
@@ -252,15 +261,16 @@ public:
         for (const Thing& t : things) {
             const Kind k = classify(t);
             if (k == Kind::None || !r.group(k).on) continue;
-            const double base = r.base_radius + (k == Kind::Smash ? r.smash_margin : 0);
+            const bool smashes = k == Kind::Smash || k == Kind::Hive;
+            const double base = r.base_radius + (smashes ? r.smash_margin : 0);
             bool in_base = false;
             for (const auto& b : bases) in_base = in_base || magnet::horizontal_distance(t.pos, b) <= base;
             if (in_base) continue;
             double d = 0;
             const Player* who = nearest(players, t.pos, r.reach_of(k), true, &d);
             if (!who) continue;
-            // a chest or a barrel nearer to a player whose magnet is off is theirs to open
-            if (k == Kind::Chest || k == Kind::Smash) {
+            // a chest, a barrel or a hive nearer to a player whose magnet is off is theirs to open
+            if (k == Kind::Chest || smashes) {
                 double d_any = 0;
                 const Player* any = nearest(players, t.pos, r.reach_of(k), false, &d_any);
                 if (any && !any->on) continue;
@@ -338,7 +348,7 @@ private:
         a->kind = k;
         a->player = who.id;
         a->entity = t.id;
-        if (k == Kind::Smash) {
+        if (k == Kind::Smash || k == Kind::Hive) {
             if (s.tries >= kMaxSmashes) {
                 s.done = true;
                 return false;

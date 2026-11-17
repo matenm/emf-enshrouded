@@ -4,6 +4,7 @@
 // the accept event that rolls a chest's loot. The rules are sweep_logic.h.
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <vector>
@@ -31,10 +32,18 @@ bool has(emf::World w, uint32_t id) {
     return w.get<T>(id) != nullptr || template_of<T>(w, id) != nullptr;
 }
 
+// The template a bee hive spawns when destroyed (Base_Helper_Bee_Hive_LootDropper): the honey and wax drop, and the
+// wasps come out. A game update that renames it makes the rule match nothing.
+inline bool is_hive_dropper(const uint8_t guid[16]) {
+    static uint8_t dropper[16];
+    static const bool ok = emf::parse_guid("8abfb80f-14b1-47c3-a51d-fe83d956c9fe", dropper);
+    return ok && std::memcmp(guid, dropper, 16) == 0;
+}
+
 // Which groups' parts to read: a chest's (its lock, what excludes it, what it holds) and a barrel's are read only when
 // that group is on and the entity has random loot, so a pickup or a plant costs about a dozen lookups.
 struct Want {
-    bool smash = true, chests = true;
+    bool smash = true, chests = true, hives = true;
 };
 
 inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::string(uint32_t)>& name_of, Want want = {}) {
@@ -72,6 +81,12 @@ inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::stri
     t.actor = has<gen::Actor>(w, id);
     t.faction = has<gen::Faction>(w, id);
     t.spawn_on_destroy = has<gen::SpawnEntityOnDestroy>(w, id);
+    if (want.hives) {
+        if (auto* sp = w.get<gen::SpawnEntityOnDestroy>(id)) {
+            t.bee_hive = is_hive_dropper(sp->spawnEntity.bytes);
+            t.hive_triggered = sp->triggered;
+        }
+    }
     t.enemy_spawner = has<gen::EnemySettings>(w, id) || has<gen::RandomSpawner>(w, id) || has<gen::TriggerSpawner>(w, id) ||
                       has<gen::EnemySpawnerClient>(w, id);
     t.used_item = has<gen::UsedItem>(w, id);
@@ -82,6 +97,12 @@ inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::stri
             if (s.id.value) t.stacks.push_back(name_of(s.id.value));
     }
     if (t.default_inv && !t.pickup) t.destructible = has<gen::Destructible>(w, id);  // a plant (a creature's drop is not)
+    if (t.bee_hive) {  // its health: the hit that breaks it
+        const gen::Destructible* d = template_of<gen::Destructible>(w, id);
+        if (!d) d = w.get<gen::Destructible>(id);
+        t.destructible = d != nullptr;
+        t.max_health = d ? d->maxHealth : 0;
+    }
     t.random_loot = has<gen::RandomLoot>(w, id);
     t.random_container = t.random_loot && has<gen::RandomLootContainer>(w, id);
     if (!t.random_container || !(want.smash || want.chests)) return t;

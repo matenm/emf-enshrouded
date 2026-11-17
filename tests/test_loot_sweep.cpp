@@ -53,6 +53,18 @@ Thing barrel(uint32_t id, double x = 2) {
     t.max_health = 8;
     return t;
 }
+Thing hive(uint32_t id, double x = 2) {  // a bee hive: what it spawns when destroyed is the game's hive loot dropper
+    Thing t;
+    t.id = id;
+    t.pos = {x, 0, 0};
+    t.offer = true;
+    t.offered = true;
+    t.destructible = true;
+    t.max_health = 1;
+    t.spawn_on_destroy = true;
+    t.bee_hive = true;
+    return t;
+}
 SweepRules all_on() {
     SweepRules r;
     for (auto& g : r.groups) g.on = true;
@@ -559,4 +571,44 @@ TEST_CASE("sweep: the remembered chests can be counted and forgotten") {
     CHECK(s.emptied_count() == 0);
     CHECK(s.emptied_dirty());  // the empty list is saved
     CHECK(s.emptied_text().empty());
+}
+
+// Bee hives (seen in game): one hit of their health destroys them, honey and wax drop on the ground, and a wasp swarm
+// comes out. Their parts also fit fog nest resources and the Flame Power capsules; what they spawn tells them apart.
+TEST_CASE("sweep: a bee hive is smashed with its own group (off by default), nothing else that spawns on destroy") {
+    CHECK(classify(hive(1)) == Kind::Hive);
+    CHECK(std::string(kind_name(Kind::Hive)) == "bee hive");
+    Thing other = hive(1);
+    other.bee_hive = false;  // a fog nest's resource, a Flame Power capsule, a campfire
+    CHECK(classify(other) == Kind::None);
+    for (int i = 0; i < 4; ++i) {
+        Thing h = hive(1);
+        if (i == 0) h.faction = true;
+        if (i == 1) h.used_item = true;
+        if (i == 2) h.hive_triggered = true;  // already broken open
+        if (i == 3) h.disabled = true;
+        CHECK(classify(h) == Kind::None);
+    }
+    CHECK_FALSE(SweepRules{}.group(Kind::Hive).on);
+    Sweeper s;
+    const auto acts = s.tick(1000, 1, me(), {hive(5)}, {}, all_on());
+    REQUIRE(acts.size() == 1);
+    CHECK(acts[0].act == Act::Smash);
+    CHECK(acts[0].kind == Kind::Hive);
+    CHECK(acts[0].amount == 1);
+    CHECK(acts[0].first);
+    auto off = all_on();
+    off.groups[static_cast<size_t>(Kind::Hive)].on = false;
+    Sweeper s2;
+    CHECK(s2.tick(1000, 1, me(), {hive(5)}, {}, off).empty());
+}
+
+TEST_CASE("sweep: a bee hive keeps the smashing distance from a base and is left to a nearer player without the magnet") {
+    const auto r = all_on();  // base 30 m, smashing 10 m more
+    Sweeper s;
+    CHECK(s.tick(1000, 1, me(), {hive(5)}, {{-36, 0, 0}}, r).empty());  // 38 m from the altar: inside 40
+    CHECK(s.tick(1000, 1, me(), {hive(6)}, {{-45, 0, 0}}, r).size() == 1);  // 47 m: smashed
+    std::vector<Player> two = {{1, {0, 0, 0}, true}, {2, {2, 0, 0.5}, false}};
+    Sweeper s3;
+    CHECK(s3.tick(1000, 1, two, {hive(7)}, {}, r).empty());
 }

@@ -349,3 +349,23 @@ TEST_CASE("sweep glue: an accept becomes the game's AcceptOfferedInteractionEven
     sweep::send(reinterpret_cast<void*>(0x1), sweep::request_of(a, 3));
     CHECK(g_emitted == "LootInteractionEvent");
 }
+
+TEST_CASE("sweep glue: a bee hive is told by the template it spawns when destroyed (the game's hive loot dropper)") {
+    Rig r;
+    comp<gen::InteractionOfferRuntime>(70);
+    tpl<gen::Destructible>(70).maxHealth = 1;
+    auto& spawn = comp<gen::SpawnEntityOnDestroy>(70);
+    REQUIRE(emf::parse_guid("8abfb80f-14b1-47c3-a51d-fe83d956c9fe", spawn.spawnEntity.bytes));
+    sweep::Thing t = sweep::read_thing(r.w(), 70, names);
+    CHECK(t.bee_hive);
+    CHECK_FALSE(t.hive_triggered);
+    CHECK(t.destructible);
+    CHECK(t.max_health == 1);
+    sweep::Want no_hives;
+    no_hives.hives = false;
+    CHECK_FALSE(sweep::read_thing(r.w(), 70, names, no_hives).bee_hive);
+    spawn.triggered = true;
+    CHECK(sweep::read_thing(r.w(), 70, names).hive_triggered);
+    REQUIRE(emf::parse_guid("a81ccc89-4a06-4b45-8d4c-f5dc24676440", comp<gen::SpawnEntityOnDestroy>(70).spawnEntity.bytes));
+    CHECK_FALSE(sweep::read_thing(r.w(), 70, names).bee_hive);  // a campfire's pickup
+}
