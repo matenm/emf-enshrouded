@@ -369,3 +369,86 @@ TEST_CASE("sweep glue: a bee hive is told by the template it spawns when destroy
     REQUIRE(emf::parse_guid("a81ccc89-4a06-4b45-8d4c-f5dc24676440", comp<gen::SpawnEntityOnDestroy>(70).spawnEntity.bytes));
     CHECK_FALSE(sweep::read_thing(r.w(), 70, names).bee_hive);  // a campfire's pickup
 }
+
+// ---- 2.2: limits ----
+
+TEST_CASE("sweep glue: a pickup's item id and category; a plant's loot reference from its DefaultInventory") {
+    Rig r;
+    at(10, 1, 0, 0);
+    comp<gen::InteractionOfferRuntime>(10);
+    comp<gen::PickupItem>(10).itemId.value = 0x33;
+    const auto cats = [](uint32_t item) { return item == 0x33 ? 9 : -1; };
+    sweep::Thing t = sweep::read_thing(r.w(), 10, names, {}, cats);
+    CHECK(t.item_id == 0x33);
+    CHECK(t.item_category == 9);
+    CHECK(sweep::read_thing(r.w(), 10, names).item_category == -1);  // no category lookup given
+    // a plant: its DefaultInventory on its template only, then its own component too (that one counts)
+    at(11, 2, 0, 0);
+    comp<gen::InteractionOfferRuntime>(11);
+    tpl<gen::DefaultInventory>(11).defaultInventory.bytes[0] = 0xab;
+    t = sweep::read_thing(r.w(), 11, names);
+    CHECK(t.default_inv);
+    CHECK(t.loot_ref[0] == 0xab);
+    comp<gen::DefaultInventory>(11).defaultInventory.bytes[0] = 0xcd;
+    CHECK(sweep::read_thing(r.w(), 11, names).loot_ref[0] == 0xcd);
+    CHECK(sweep::read_thing(r.w(), 10, names).loot_ref == sweep::LootRef{});  // none
+}
+
+namespace {
+std::map<uint32_t, std::vector<uint8_t>> g_items;
+void* f_item_data(EmfWorld*, uint32_t item, uint64_t* size) {
+    auto it = g_items.find(item);
+    if (it == g_items.end()) return nullptr;
+    if (size) *size = it->second.size();
+    return it->second.data();
+}
+}  // namespace
+
+TEST_CASE("sweep glue: an item's category is the game's ItemInfo byte at +0xCC; unknown or short: -1") {
+    Rig r;
+    g_items.clear();
+    g_items[0x10].assign(2088, 0);
+    g_items[0x10][0xcc] = 9;
+    g_items[0x11].assign(0xcc, 0);  // too short to hold it
+    CHECK(sweep::item_category(r.w(), 0x10) == -1);  // no item_data in the API
+    r.api.item_data = f_item_data;
+    CHECK(sweep::item_category(r.w(), 0x10) == 9);
+    CHECK(sweep::item_category(r.w(), 0x11) == -1);
+    CHECK(sweep::item_category(r.w(), 0x12) == -1);
+}
+
+TEST_CASE("sweep glue: what a player carries, per item: backpack, action bar and equipment, never other inventories") {
+    Rig r;
+    auto& setup = comp<gen::InventorySetup>(1);
+    const std::pair<uint32_t, emf::gen::InventoryCategory> links[] = {{100, emf::gen::InventoryCategory::Generic},
+                                                                      {101, emf::gen::InventoryCategory::Equipment},
+                                                                      {102, emf::gen::InventoryCategory::Generic},
+                                                                      {103, emf::gen::InventoryCategory::Customization}};
+    for (int i = 0; i < 4; ++i) {
+        setup.linksEntities[i].id = links[i].first;
+        setup.linksCategories[i] = links[i].second;
+    }
+    auto& bag = comp<gen::Inventory>(100);
+    bag.slots[0].id.value = 0x33;
+    bag.slots[0].data.count = 20;
+    bag.slots[1].id.value = 0x33;
+    bag.slots[1].data.count = 5;
+    bag.slots[2].id.value = 0x11;
+    bag.slots[2].data.count = 1;
+    bag.slots[3].id.value = 0x44;  // no count: an empty slot
+    auto& gear = comp<gen::Inventory>(101);
+    gear.slots[0].id.value = 0x55;  // arrows in the quiver
+    gear.slots[0].data.count = 30;
+    auto& bar = comp<gen::Inventory>(102);
+    bar.slots[7].id.value = 0x33;
+    bar.slots[7].data.count = 2;
+    auto& looks = comp<gen::Inventory>(103);
+    looks.slots[0].id.value = 0x33;
+    looks.slots[0].data.count = 99;
+    const auto m = sweep::carried(r.w(), 1);
+    CHECK(m.at(0x33) == 27);
+    CHECK(m.at(0x11) == 1);
+    CHECK(m.at(0x55) == 30);
+    CHECK(m.count(0x44) == 0);
+    CHECK(sweep::carried(r.w(), 2).empty());  // no inventory setup
+}

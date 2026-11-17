@@ -614,3 +614,163 @@ TEST_CASE("sweep: a bee hive keeps the smashing distance from a base and is left
     Sweeper s3;
     CHECK(s3.tick(1000, 1, two, {hive(7)}, {}, r).empty());
 }
+
+// ---- 2.2: limits (Gotik0's request): how many of an item a player carries before the magnet leaves more of it ----
+
+namespace {
+Thing item(uint32_t id, const std::string& name, uint32_t item_id, int category, double x = 2) {
+    Thing t = pickup(id, name, -1, x);
+    t.item_id = item_id;
+    t.item_category = category;
+    return t;
+}
+LootRef ref(uint8_t b) {
+    LootRef r{};
+    r[0] = b;
+    return r;
+}
+Thing plant_of(uint32_t id, uint8_t kind, double x = 2) {
+    Thing t = plant(id, x);
+    t.loot_ref = ref(kind);
+    return t;
+}
+}  // namespace
+
+TEST_CASE("sweep limits: a category's limit, an item's own line first (exact, then the longest prefix), 0 = no limit") {
+    CHECK_FALSE(Limits{}.any());
+    CHECK_FALSE(Limits::parse("Material_T1_Stone=0").any());  // a 0 line limits nothing
+    Limits l = Limits::parse(" Material_T1_Wood = 200, Food_T1_raw_*=20, food_t1_raw_meat*=5 ,Material_T1_Stone=0, "
+                             "bad, x=, =3, y=abc, z=-4, w=12x");
+    CHECK(l.any());  // own lines alone
+    CHECK(l.own_lines() == 4);  // the bad entries are left out
+    l.materials = 50;
+    l.consumables = 10;
+    l.other = 3;
+    CHECK(l.of({1, "Material_T1_Wood", 9}) == 200);
+    CHECK(l.of({2, "Material_T1_Metal_Scraps", 9}) == 50);
+    CHECK(l.of({3, "Material_T1_Stone", 9}) == 0);  // its own 0: no limit, though materials have one
+    CHECK(l.of({4, "Food_T1_raw_berries", 7}) == 20);
+    CHECK(l.of({5, "Food_T1_raw_meat_LeanMeat", 7}) == 5);  // the longer prefix
+    CHECK(l.of({6, "Potion_T1_Health", 7}) == 10);
+    CHECK(l.of({7, "Ammo_T1_Arrow", 8}) == 0);  // arrows: no limit set
+    CHECK(l.of({8, "Collection_T1_Coin_01", 12}) == 3);  // everything else
+    CHECK(l.of({9, "Unknown", -1}) == 0);  // its category not read: only an own line limits it
+}
+
+TEST_CASE("sweep limits: a ground item at its limit stays (no try spent); below it, it comes") {
+    Sweeper s;
+    SweepRules r = all_on();
+    r.limits.materials = 50;
+    std::vector<Player> p = {{1, {0, 0, 0}, true, true}};
+    p[0].carried[0x10] = 50;
+    const std::vector<Thing> wood = {item(10, "Material_T1_Wood", 0x10, 9)};
+    for (uint64_t t = 1000; t <= 10000; t += 1000) CHECK(s.tick(t, 1, p, wood, {}, r).empty());
+    p[0].carried[0x10] = 49;  // used some: the next one comes (a stack comes whole, so 49 + 5 makes 54)
+    auto acts = s.tick(11000, 1, p, wood, {}, r);
+    REQUIRE(acts.size() == 1);
+    CHECK(acts[0].act == Act::Loot);
+    CHECK(acts[0].first);
+    // stone has its own count: it comes while wood is at the limit
+    p[0].carried[0x10] = 80;
+    CHECK(s.tick(12000, 1, p, {item(11, "Material_T1_Stone", 0x11, 9)}, {}, r).size() == 1);
+    // no limit for its category: it comes whatever the player carries
+    p[0].carried[0x12] = 9999;
+    CHECK(s.tick(13000, 1, p, {item(12, "Food_T1_raw_berries", 0x12, 7)}, {}, r).size() == 1);
+}
+
+TEST_CASE("sweep limits: chests are emptied and barrels smashed whatever the limits") {
+    Sweeper s;
+    SweepRules r = all_on();
+    r.limits = Limits::parse("Material_T1_Metal_Scraps=1");
+    r.limits.materials = r.limits.consumables = r.limits.ammo = r.limits.other = 1;
+    std::vector<Player> p = {{1, {0, 0, 0}, true, true}};
+    p[0].carried[0x33] = 500;
+    Thing c = chest(20);
+    c.stacks = {"Material_T1_Metal_Scraps"};
+    c.last_accept_guest = 1;  // this player opened it
+    auto acts = s.tick(1000, 1, p, {c, barrel(21, 3)}, {}, r);
+    REQUIRE(acts.size() == 2);
+    CHECK(acts[0].act == Act::Loot);
+    CHECK(acts[1].act == Act::Smash);
+}
+
+TEST_CASE("sweep limits: an item at the nearest player's limit goes to the next player in reach below it") {
+    Sweeper s;
+    SweepRules r = all_on();
+    r.limits.materials = 50;
+    std::vector<Player> two = {{1, {0, 0, 0}, true, true}, {2, {6, 0, 0}, true, true}};
+    two[0].carried[0x10] = 50;
+    two[1].carried[0x10] = 10;
+    auto acts = s.tick(1000, 1, two, {item(10, "Material_T1_Wood", 0x10, 9, 2)}, {}, r);
+    REQUIRE(acts.size() == 1);
+    CHECK(acts[0].player == 2);
+    two[1].carried[0x10] = 60;  // both have enough: it stays
+    Sweeper t;
+    CHECK(t.tick(1000, 1, two, {item(10, "Material_T1_Wood", 0x10, 9, 2)}, {}, r).empty());
+}
+
+TEST_CASE("sweep limits: what a plant gives is learned from the game's pickups; then one of its kind at the limit stays") {
+    Sweeper s;
+    SweepRules r = all_on();
+    r.limits.consumables = 10;
+    std::vector<Player> p = {{1, {0, 0, 0}, true, true}};
+    p[0].carried[0x20] = 10;
+    // not known yet: picked, so the magnet learns what this kind gives
+    REQUIRE(s.tick(1000, 1, p, {plant_of(1, 5)}, {}, r).size() == 1);
+    s.picked(1, {0x20, "Food_T1_raw_berries", 7}, 1100);
+    CHECK(s.items_learned() == 1);
+    CHECK(s.tick(2000, 1, p, {plant_of(2, 5)}, {}, r).empty());      // another plant of the kind: enough berries
+    CHECK(s.tick(2000, 1, p, {plant_of(3, 6)}, {}, r).size() == 1);  // another kind: not known, picked
+    p[0].carried[0x20] = 3;
+    CHECK(s.tick(3000, 1, p, {plant_of(2, 5)}, {}, r).size() == 1);  // below the limit again
+}
+
+TEST_CASE("sweep limits: a plant that gives two items comes while one of them is below its limit") {
+    Sweeper s;
+    SweepRules r = all_on();
+    r.limits.materials = 50;
+    r.limits.consumables = 10;
+    std::vector<Player> p = {{1, {0, 0, 0}, true, true}};
+    REQUIRE(s.tick(1000, 1, p, {plant_of(1, 7)}, {}, r).size() == 1);
+    s.picked(1, {0x20, "Food_T1_raw_berries", 7}, 1100);
+    s.picked(1, {0x21, "Material_T1_Plant_Fiber", 9}, 1100);
+    s.picked(1, {0x21, "Material_T1_Plant_Fiber", 9}, 1150);  // the same item twice: one entry
+    CHECK(s.items_learned() == 2);
+    p[0].carried[0x20] = 10;
+    CHECK(s.tick(2000, 1, p, {plant_of(2, 7)}, {}, r).size() == 1);  // fiber below its limit
+    p[0].carried[0x21] = 50;
+    CHECK(s.tick(3000, 1, p, {plant_of(3, 7)}, {}, r).empty());  // both at their limits
+}
+
+TEST_CASE("sweep limits: only the magnet's own loot teaches (soon after it was sent); a new session forgets the waits") {
+    Sweeper s;
+    SweepRules r = all_on();
+    r.limits.consumables = 10;
+    std::vector<Player> p = {{1, {0, 0, 0}, true, true}};
+    s.picked(9, {0x20, "Food_T1_raw_berries", 7}, 500);  // from something the magnet did not loot
+    CHECK(s.items_learned() == 0);
+    REQUIRE(s.tick(1000, 1, p, {plant_of(1, 5)}, {}, r).size() == 1);
+    s.picked(1, {0x20, "Food_T1_raw_berries", 7}, 1000 + Yields::kWaitMs + 1);  // too late: not this loot's
+    CHECK(s.items_learned() == 0);
+    REQUIRE(s.tick(20000, 1, p, {plant_of(2, 5)}, {}, r).size() == 1);
+    s.tick(21000, 2, p, {}, {}, r);  // a new session: the ids mean other entities now
+    s.picked(2, {0x20, "Food_T1_raw_berries", 7}, 21100);
+    CHECK(s.items_learned() == 0);
+}
+
+TEST_CASE("sweep limits: the never-pick-up list covers a plant once its items are known; a pickup's item id counts") {
+    Sweeper s;
+    SweepRules r = all_on();
+    r.ignore = Ignore::parse("Food_T1_raw_*");
+    std::vector<Player> p = {{1, {0, 0, 0}, true, true}};
+    REQUIRE(s.tick(1000, 1, p, {plant_of(1, 5)}, {}, r).size() == 1);
+    s.picked(1, {0x20, "Food_T1_raw_berries", 7}, 1100);
+    CHECK(s.tick(2000, 1, p, {plant_of(2, 5)}, {}, r).empty());
+    // an own line for an item and no category limits: the pickup's item id is what is counted
+    r.ignore = Ignore{};
+    r.limits = Limits::parse("Material_T1_Wood=5");
+    p[0].carried[0x10] = 5;
+    CHECK(s.tick(3000, 1, p, {item(10, "Material_T1_Wood", 0x10, -1)}, {}, r).empty());
+    p[0].carried[0x10] = 4;
+    CHECK(s.tick(4000, 1, p, {item(10, "Material_T1_Wood", 0x10, -1)}, {}, r).size() == 1);
+}

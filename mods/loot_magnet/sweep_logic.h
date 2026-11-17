@@ -45,6 +45,17 @@ inline const char* kind_name(Kind k) {
     }
 }
 
+// An item as the limits see it: the game's id, its debug name ("" = not named yet) and its ItemCategory (ItemInfo +0xCC:
+// 7 Consumables, 8 Ammunition, 9 Materials ...; -1 = not read).
+struct Item {
+    uint32_t id = 0;
+    std::string name;
+    int category = -1;
+};
+
+// A DefaultInventory's loot resource GUID: every plant of a kind shares it (all zero = none).
+using LootRef = std::array<uint8_t, 16>;
+
 // What the mod read from an entity (instance or template components).
 struct Thing {
     uint32_t id = 0;
@@ -57,6 +68,9 @@ struct Thing {
     uint32_t last_accept_guest = 0;  // lastAcceptData.guestId: who opened it last (0 = nobody)
     bool pickup = false;    // PickupItem
     std::string item;       // PickupItem's item, by debug name ("" = not named by the game yet)
+    uint32_t item_id = 0;   // PickupItem's item id
+    int item_category = -1;  // its ItemCategory (-1 = not read)
+    LootRef loot_ref{};     // DefaultInventory's loot resource (own or template): what a plant without a pickup gives
     bool default_inv = false, inventory = false, setup = false, destroy_on_loot = false;
     int exclude = -1;  // AreaLootOverride.exclude: -1 none, 0, 1 (the game keeps 1 out of its own area loot)
     bool actor = false, faction = false;
@@ -199,6 +213,128 @@ struct Ignore {
     }
 };
 
+// How many of an item a player may carry before the magnet leaves more of it where it lies (0 = no limit): one number
+// per category, and the player's own lines for single items ("Material_T1_Wood=200, Food_T1_raw_*=20"), which come
+// first: an exact name, then the longest prefix (a trailing *); "=0" frees an item from its category's limit.
+struct Limits {
+    uint32_t materials = 0, consumables = 0, ammo = 0, other = 0;
+
+    static Limits parse(const std::string& text) {
+        Limits l;
+        size_t start = 0;
+        while (start <= text.size()) {
+            size_t end = text.find(',', start);
+            if (end == std::string::npos) end = text.size();
+            const std::string entry = text.substr(start, end - start);
+            start = end + 1;
+            const size_t eq = entry.find('=');
+            if (eq == std::string::npos) continue;
+            std::string name = lower(trim(entry.substr(0, eq)));
+            const std::string num = trim(entry.substr(eq + 1));
+            if (name.empty() || num.empty() || num.size() > 9 ||
+                !std::all_of(num.begin(), num.end(), [](char c) { return c >= '0' && c <= '9'; }))
+                continue;
+            const auto value = static_cast<uint32_t>(std::stoul(num));
+            if (name.back() == '*') {
+                name.pop_back();
+                if (!name.empty()) l.prefix_[name] = value;
+            } else {
+                l.exact_[name] = value;
+            }
+        }
+        return l;
+    }
+    // The item's limit, 0 = none.
+    uint32_t of(const Item& i) const {
+        const std::string n = lower(i.name);
+        if (!n.empty()) {
+            if (auto it = exact_.find(n); it != exact_.end()) return it->second;
+            size_t best = 0;
+            const uint32_t* found = nullptr;
+            for (const auto& [p, v] : prefix_)
+                if (p.size() > best && n.rfind(p, 0) == 0) {
+                    best = p.size();
+                    found = &v;
+                }
+            if (found) return *found;
+        }
+        switch (i.category) {
+            case -1: return 0;
+            case 7: return consumables;
+            case 8: return ammo;
+            case 9: return materials;
+            default: return other;
+        }
+    }
+    bool any() const {
+        if (materials || consumables || ammo || other) return true;
+        for (const auto* m : {&exact_, &prefix_})
+            for (const auto& [n, v] : *m)
+                if (v) return true;
+        return false;
+    }
+    size_t own_lines() const { return exact_.size() + prefix_.size(); }
+
+private:
+    static std::string trim(const std::string& s) {
+        const size_t a = s.find_first_not_of(" \t");
+        if (a == std::string::npos) return {};
+        return s.substr(a, s.find_last_not_of(" \t") - a + 1);
+    }
+    std::map<std::string, uint32_t> exact_, prefix_;  // lower-case names
+};
+
+// What a kind of plant (or creature drop) without a pickup gives, learned from the game's PickupEvents after the
+// magnet's own loot event: the event names the item and the entity it came from, the entity's DefaultInventory names
+// its kind.
+class Yields {
+public:
+    static constexpr uint64_t kWaitMs = 5000;  // pickups from the entity this soon after the magnet's loot are its loot
+
+    void expect(uint32_t entity, const LootRef& ref, uint64_t now) {
+        for (auto it = waits_.begin(); it != waits_.end();)
+            it = now - it->second.at > kWaitMs ? waits_.erase(it) : std::next(it);
+        waits_[entity] = {ref, now};
+    }
+    void picked(uint32_t from, const Item& item, uint64_t now) {
+        auto it = waits_.find(from);
+        if (it == waits_.end() || now - it->second.at > kWaitMs || !item.id) return;
+        auto& items = learned_[it->second.ref];
+        for (auto& i : items)
+            if (i.id == item.id) {
+                if (i.name.empty()) i.name = item.name;
+                if (i.category < 0) i.category = item.category;
+                return;
+            }
+        items.push_back(item);
+    }
+    const std::vector<Item>& of(const LootRef& ref) const {
+        static const std::vector<Item> none;
+        auto it = learned_.find(ref);
+        return it == learned_.end() ? none : it->second;
+    }
+    void forget_waits() { waits_.clear(); }  // a new session: the ids mean other entities
+    size_t items() const {
+        size_t n = 0;
+        for (const auto& [ref, items] : learned_) n += items.size();
+        return n;
+    }
+
+private:
+    struct Wait {
+        LootRef ref{};
+        uint64_t at = 0;
+    };
+    std::map<uint32_t, Wait> waits_;
+    std::map<LootRef, std::vector<Item>> learned_;  // kept for the game run: the kinds are game data
+};
+
+// The groups whose things the limits cover: what lies in the world. Chests are emptied and barrels smashed whatever
+// the limits (what a barrel drops then lies on the ground).
+inline bool limited(Kind k) {
+    return k == Kind::Ground || k == Kind::Collectible || k == Kind::Mushroom || k == Kind::Firefly || k == Kind::Plant;
+}
+
 struct Group {
     bool on = false;
     double reach = 0;  // metres; 0 = the general reach
@@ -210,6 +346,7 @@ struct SweepRules {
     double base_radius = 30;   // nothing within this of a flame altar
     double smash_margin = 10;  // smashing keeps this much more away from a base
     Ignore ignore;
+    Limits limits;
     const Group& group(Kind k) const { return groups[static_cast<size_t>(k)]; }
     double reach_of(Kind k) const { return group(k).reach > 0 ? group(k).reach : reach; }
 };
@@ -228,6 +365,7 @@ struct Player {
     magnet::Vec3 pos;
     bool on = false;  // their magnet
     bool room = true;  // an empty slot in their bag (a pickup comes only then)
+    std::map<uint32_t, uint32_t> carried;  // item id -> how many in their backpack, action bar and equipment (limits)
 };
 
 class Sweeper {
@@ -251,6 +389,7 @@ public:
         if (session != session_) {
             session_ = session;
             st_.clear();
+            yields_.forget_waits();
         }
         struct Cand {
             const Thing* t;
@@ -268,7 +407,11 @@ public:
             for (const auto& b : bases) in_base = in_base || magnet::horizontal_distance(t.pos, b) <= base;
             if (in_base) continue;
             double d = 0;
-            const Player* who = nearest(players, t.pos, r.reach_of(k), true, &d);
+            // the nearest player whose magnet is on and who has not got enough of what it gives
+            const bool limits = limited(k) && r.limits.any();
+            const Player* who = nearest_if(
+                players, t.pos, r.reach_of(k), [&](const Player& pl) { return pl.on && !(limits && at_limit(t, pl, r.limits)); },
+                &d);
             if (!who) continue;
             // a chest, a barrel or a hive nearer to a player whose magnet is off is theirs to open
             if (k == Kind::Chest || smashes) {
@@ -303,6 +446,11 @@ public:
     }
 
     size_t watched() const { return st_.size(); }
+
+    // The game's PickupEvent: a player got `item` from entity `from` (what a plant without a pickup gives is learned
+    // from the magnet's own loot of it).
+    void picked(uint32_t from, const Item& item, uint64_t now) { yields_.picked(from, item, now); }
+    size_t items_learned() const { return yields_.items(); }
 
     // The chests the magnet emptied in this world, as the mod's world file keeps them (one "x y z" in decimetres a line).
     void load_emptied(const std::string& text) {
@@ -407,6 +555,14 @@ private:
                 s.done = true;
                 return false;
             }
+        } else {
+            // a plant without a pickup: once the magnet knows what its kind gives, a kind that gives only ignored
+            // items stays
+            const auto& gives = yields_.of(t.loot_ref);
+            if (!gives.empty() && std::all_of(gives.begin(), gives.end(), [&](const Item& i) {
+                    return !i.name.empty() && (quest_like(i.name) || r.ignore.match(i.name));
+                }))
+                return false;
         }
         if (s.tries >= kMaxTries) {  // it stays: no room for it (or the game refused)
             s.done = true;
@@ -416,16 +572,36 @@ private:
         ++s.tries;
         s.next_ms = now + kRetryMs;
         a->act = Act::Loot;
+        if (!t.pickup && t.loot_ref != LootRef{} && k != Kind::Chest) yields_.expect(t.id, t.loot_ref, now);
         return true;
     }
 
-    // The nearest player within `reach`: with `on_only`, only those whose magnet is on.
-    static const Player* nearest(const std::vector<Player>& players, const magnet::Vec3& p, double reach, bool on_only,
-                                 double* dist) {
+    // What the thing gives, as far as known: a pickup's item; a plant's, once its kind was learned.
+    std::vector<Item> items_of(const Thing& t) const {
+        if (t.pickup) return t.item_id ? std::vector<Item>{{t.item_id, t.item, t.item_category}} : std::vector<Item>{};
+        return t.loot_ref == LootRef{} ? std::vector<Item>{} : yields_.of(t.loot_ref);
+    }
+    // The player carries enough of everything it gives (what is not known yet comes, so the magnet learns it).
+    bool at_limit(const Thing& t, const Player& pl, const Limits& l) const {
+        const auto items = items_of(t);
+        if (items.empty()) return false;
+        for (const auto& i : items) {
+            const uint32_t limit = l.of(i);
+            if (!limit) return false;
+            const auto it = pl.carried.find(i.id);
+            if (it == pl.carried.end() || it->second < limit) return false;
+        }
+        return true;
+    }
+
+    // The nearest player within `reach` for whom `ok` holds.
+    template <class Ok>
+    static const Player* nearest_if(const std::vector<Player>& players, const magnet::Vec3& p, double reach, Ok ok,
+                                    double* dist) {
         const Player* best = nullptr;
         double best_d = reach;
         for (const auto& pl : players) {
-            if (on_only && !pl.on) continue;
+            if (!ok(pl)) continue;
             const double d = magnet::distance(pl.pos, p);
             if (d <= best_d) {
                 best_d = d;
@@ -435,7 +611,13 @@ private:
         if (dist) *dist = best_d;
         return best;
     }
+    // The nearest player within `reach`: with `on_only`, only those whose magnet is on.
+    static const Player* nearest(const std::vector<Player>& players, const magnet::Vec3& p, double reach, bool on_only,
+                                 double* dist) {
+        return nearest_if(players, p, reach, [on_only](const Player& pl) { return !on_only || pl.on; }, dist);
+    }
     std::map<uint32_t, State> st_;
+    Yields yields_;
     uint32_t session_ = 0;
     std::set<Place> emptied_;  // the chests the magnet emptied in this world (its file)
     bool dirty_ = false;

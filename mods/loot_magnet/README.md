@@ -100,7 +100,8 @@ Never:
   Key_ or Prop_Component_ at the start) stay where they are. A chest that holds one is left to you.
 - **Items on the ignore list:** **Never pick up**, item names as `items <words>` in the console shows them, comma
   separated. End one with * for every name that begins so (`Food_T1_raw_*`). A chest that holds an ignored item is
-  left whole. The list cannot apply to wild plants without a pickup: their loot is rolled when they are taken.
+  left whole. A wild plant without a pickup is left once the magnet knows that its kind gives only ignored items (see
+  Limits: it learns that from the first one it picks).
 - **Enemy spawners** (bone piles, spider eggs), nests, fog nest resources, the Flame Power capsules, trees and rocks;
   bee hives only with **Smash bee hives** on. Trees are never felled: a hit from a mod takes a tree away with only its
   resin, while the wood comes stroke by stroke from your own axe.
@@ -111,6 +112,35 @@ come by day as well: the game offers them by day and by night (seen in game).
 **A full bag:** a pickup comes only while you have an empty slot, so it always fits whole; plants and chests give what
 fits and keep the rest. An item is tried 5 times, 2 s apart, then left until you come back.
 
+### Limits (2.2)
+
+How many of an item you carry before the magnet leaves more of it where it lies. They are off until you set one.
+
+- **One number per kind of item:**
+  - **Materials: keep up to** (`limit_materials`);
+  - **Food and potions** (`limit_consumables`);
+  - **Arrows** (`limit_ammo`);
+  - **Everything else** (`limit_other`: collectibles, animal feed, gems ...).
+  - 0 = no limit. The kind is the game's own item category, as the inventory sorts it.
+- **Each item counts on its own:** with Materials at 50 and 50 wood carried, stone and metal still come until you have 50
+  of each.
+- **What is counted:** your backpack, action bar and equipment (arrows in the quiver count), never your chests at home.
+- **What they cover:** what lies around: items on the ground, collectibles, mushrooms, fireflies and wild plants.
+  - **Chests and corpses are always emptied**, whatever you carry.
+  - Barrels and bee hives are still smashed. What they drop lies on the ground, where the limits apply.
+- **Own limits for single items** (`limits`): `Material_T1_Wood=200, Food_T1_raw_*=20`, comma separated (the names as
+  `items <words>` shows them).
+  - End a name with * for every name that begins so.
+  - An item's own number comes before its kind's: an exact name first, then the longest beginning.
+  - `=0` means no limit for that item, even when its kind has one.
+- **A pickup comes whole,** so you may end a little above a limit (49 wood, then a stack of 5: 54).
+- **Wild plants without a pickup** (herbs, flowers, bushes) do not show what they give until they are picked.
+  - The magnet learns it from the first plant of each kind it picks after the game starts: the game reports each item
+    and where it came from.
+  - From then on, a plant of that kind comes while you are below the limit of at least one thing it gives.
+- **With friends:** an item that is at the limit for the nearest player goes to the next player in reach who has less.
+- `/loot.status` shows the limits and how many plant items the magnet has learned.
+
 ## Settings (Mods tab, EMF.exe, or `set loot_magnet <key> <value>`)
 
 | Setting | Default | What it does |
@@ -119,6 +149,8 @@ fits and keep the rest. An item is tried 5 times, 2 s apart, then left until you
 | Items on the ground, Collectibles (`pick_ground`, `pick_collectibles`) | on | with their own reach (`pick_ground_reach`, ...: 0-20, 0 = Reach) |
 | Mushrooms, Fireflies and bait bugs, Wild plants (`pick_mushrooms`, `pick_fireflies`, `pick_plants`) | off | each with its own reach |
 | Never pick up (`ignore`) | empty | item names, comma separated; `*` at the end for a beginning |
+| Materials, Food and potions, Arrows, Everything else: keep up to (`limit_materials`, `limit_consumables`, `limit_ammo`, `limit_other`) | 0 | how many of each item you carry before more is left on the ground; 0 = no limit (see Limits) |
+| Own limits for single items (`limits`) | empty | `Material_T1_Wood=200, Food_T1_raw_*=20`; `=0` frees an item from its kind's limit |
 | Chests in ruins, Smash barrels, crates and urns, Smash bee hives (`open_chests`, `smash`, `smash_hives`) | off | each with its own reach |
 | After the kill (`delay`) | 1 s | 0-10: the loot comes no sooner |
 | Looks for loot for (`window`) | 15 s | 8-60 s after the kill; an older corpse is left to you |

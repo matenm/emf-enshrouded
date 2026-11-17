@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -46,7 +47,9 @@ struct Want {
     bool smash = true, chests = true, hives = true;
 };
 
-inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::string(uint32_t)>& name_of, Want want = {}) {
+// `category_of`: an item's ItemCategory (item_category below, cached by the mod); empty = not read (-1).
+inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::string(uint32_t)>& name_of, Want want = {},
+                        const std::function<int(uint32_t)>& category_of = {}) {
     namespace gen = emf::gen::ecs;
     Thing t;
     t.id = id;
@@ -64,8 +67,13 @@ inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::stri
     if (auto* p = w.get<gen::PickupItem>(id)) {
         t.pickup = true;
         t.item = p->itemId.value ? name_of(p->itemId.value) : std::string();
+        t.item_id = p->itemId.value;
+        if (t.item_id && category_of) t.item_category = category_of(t.item_id);
     }
-    t.default_inv = has<gen::DefaultInventory>(w, id);
+    const gen::DefaultInventory* def = w.get<gen::DefaultInventory>(id);
+    if (!def) def = template_of<gen::DefaultInventory>(w, id);
+    t.default_inv = def != nullptr;
+    if (def) std::memcpy(t.loot_ref.data(), def->defaultInventory.bytes, t.loot_ref.size());
     t.setup = has<gen::InventorySetup>(w, id);
     if (auto* d = w.get<gen::DestroyOnLoot>(id)) {
         t.destroy_on_loot = true;
@@ -138,7 +146,8 @@ inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::stri
 // crates, urns). One walk of the world: an entity's position first (out of reach: one lookup), then whether it is a
 // crop's root (its stage is never taken: harvesting it would end the plant), then its offer.
 inline std::vector<Thing> things_near(emf::World w, const std::vector<magnet::Vec3>& places, double reach,
-                                      const std::function<std::string(uint32_t)>& name_of, Want want = {}) {
+                                      const std::function<std::string(uint32_t)>& name_of, Want want = {},
+                                      const std::function<int(uint32_t)>& category_of = {}) {
     namespace gen = emf::gen::ecs;
     std::vector<Thing> out;
     std::vector<uint32_t> stages;
@@ -160,7 +169,7 @@ inline std::vector<Thing> things_near(emf::World w, const std::vector<magnet::Ve
         if (d > reach) return;
         // a barrel's RandomLootOnDestroy is its own component on some, its template's on others (both seen)
         if (!w.get<gen::InteractionOfferRuntime>(id) && !(want.smash && has<gen::RandomLootOnDestroy>(w, id))) return;
-        out.push_back(read_thing(w, id, name_of, want));
+        out.push_back(read_thing(w, id, name_of, want, category_of));
     });
     std::sort(stages.begin(), stages.end());
     for (auto& t : out) t.crop_stage = std::binary_search(stages.begin(), stages.end(), t.id);
@@ -189,6 +198,36 @@ inline bool has_room(emf::World w, uint32_t player) {
         empty = (std::min)(empty, usable);
     }
     return empty > 0;
+}
+
+// How many of each item the player carries: their backpack and action bar (the generic inventories their InventorySetup
+// links) and their equipment (arrows in the quiver count); never other inventories (customization).
+inline std::map<uint32_t, uint32_t> carried(emf::World w, uint32_t player) {
+    namespace gen = emf::gen::ecs;
+    std::map<uint32_t, uint32_t> out;
+    auto* setup = w.get<gen::InventorySetup>(player);
+    if (!setup) return out;
+    for (int i = 0; i < 16; ++i) {
+        const uint32_t id = setup->linksEntities[i].id;
+        const auto cat = setup->linksCategories[i];
+        if (!id || (cat != emf::gen::InventoryCategory::Generic && cat != emf::gen::InventoryCategory::Equipment)) continue;
+        auto* inv = w.get<gen::Inventory>(id);
+        if (!inv) continue;
+        for (const auto& st : inv->slots)
+            if (st.id.value && st.data.count) out[st.id.value] += st.data.count;
+    }
+    return out;
+}
+
+// An item's ItemCategory: the game's ItemInfo byte at +0xCC (docs/engine_parts/re_take_items.md); -1 when the item or
+// its data is not there.
+inline int item_category(emf::World w, uint32_t item) {
+    const EmfApi* a = emf::api();
+    if (!a || !a->item_data) return -1;
+    uint64_t size = 0;
+    const auto* p = static_cast<const uint8_t*>(a->item_data(w.raw(), item, &size));
+    if (!p || size <= 0xcc) return -1;
+    return p[0xcc];
 }
 
 // The game's accept of an offered interaction, as a player's E sends it: on a chest it rolls the loot.

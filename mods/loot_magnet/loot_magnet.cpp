@@ -9,6 +9,7 @@
 #define NOMINMAX
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <map>
 #include <mutex>
@@ -95,6 +96,15 @@ void read_settings() {
     c.sweep.reach = c.rules.radius;
     c.sweep.base_radius = c.rules.base_radius;
     c.sweep.ignore = sweep::Ignore::parse(emf::setting_text(kMod, "ignore", ""));
+    // 2.2: how many of an item a player carries before more of it is left where it lies (0 = no limit)
+    c.sweep.limits = sweep::Limits::parse(emf::setting_text(kMod, "limits", ""));
+    const auto limit = [](const char* key) {
+        return static_cast<uint32_t>((std::clamp<int64_t>)(emf::setting_int(kMod, key, 0), 0, 1000000));
+    };
+    c.sweep.limits.materials = limit("limit_materials");
+    c.sweep.limits.consumables = limit("limit_consumables");
+    c.sweep.limits.ammo = limit("limit_ammo");
+    c.sweep.limits.other = limit("limit_other");
     std::lock_guard<std::mutex> l(g_config_lock);
     g_config = c;
 }
@@ -154,6 +164,16 @@ const std::string& item_name(emf::World w, uint32_t item) {
         return unknown;
     }
     return g_item_names.emplace(item, name).first->second;
+}
+
+// An item's ItemCategory (limits), cached: the game's item data does not change. -1 (not cached) while not readable.
+std::map<uint32_t, int> g_item_categories;
+int item_category(emf::World w, uint32_t item) {
+    auto it = g_item_categories.find(item);
+    if (it != g_item_categories.end()) return it->second;
+    const int c = sweep::item_category(w, item);
+    if (c >= 0) g_item_categories.emplace(item, c);
+    return c;
 }
 
 magnet::Body body_of(emf::World w, uint32_t id) {
@@ -235,8 +255,10 @@ void sweep_tick(emf::World w, const Config& c, const std::vector<magnet::Looter>
         if (c.sweep.groups[k].on) reach = (std::max)(reach, c.sweep.reach_of(static_cast<sweep::Kind>(k)));
     std::vector<sweep::Player> players;
     std::vector<magnet::Vec3> places;
+    const bool limits = c.sweep.limits.any();
     for (const auto& l : looters) {
         players.push_back({l.id, l.pos, l.on, l.on && sweep::has_room(w, l.id)});
+        if (l.on && limits) players.back().carried = sweep::carried(w, l.id);
         if (l.on) places.push_back(l.pos);
     }
     if (reach <= 0 || places.empty()) return;
@@ -256,7 +278,9 @@ void sweep_tick(emf::World w, const Config& c, const std::vector<magnet::Looter>
     LARGE_INTEGER f, t0, t1;
     QueryPerformanceFrequency(&f);
     QueryPerformanceCounter(&t0);
-    const auto things = sweep::things_near(w, places, reach, [w](uint32_t item) { return item_name(w, item); }, want);
+    const auto things = sweep::things_near(
+        w, places, reach, [w](uint32_t item) { return item_name(w, item); }, want,
+        [w](uint32_t item) { return item_category(w, item); });
     QueryPerformanceCounter(&t1);
     const double walk_ms = static_cast<double>(t1.QuadPart - t0.QuadPart) * 1000.0 / static_cast<double>(f.QuadPart);
     if (c.debug_log && now - g_walk_said_ms >= 60000) {
@@ -484,6 +508,17 @@ void cmd_status(emf::World w, const std::vector<std::string>&) {
         groups += part;
     }
     EMF_REPLY("Also: %s", groups.empty() ? "nothing else (every group is off)" : groups.c_str());
+    if (c.sweep.limits.any()) {
+        const auto& l = c.sweep.limits;
+        const std::pair<const char*, uint32_t> parts[] = {
+            {"materials", l.materials}, {"food and potions", l.consumables}, {"arrows", l.ammo}, {"everything else", l.other}};
+        std::string text;
+        for (const auto& [name, n] : parts)
+            if (n) text += (text.empty() ? "" : ", ") + std::string(name) + " " + std::to_string(n);
+        if (l.own_lines()) text += (text.empty() ? "" : ", ") + std::to_string(l.own_lines()) + " item line(s) of their own";
+        EMF_REPLY("Limits for what lies around (chests and corpses are always emptied): %s; %zu plant item(s) learned",
+                  text.c_str(), g_sweeper.items_learned());
+    }
     std::string swept;
     for (const auto& [k, n] : g_swept) swept += (swept.empty() ? "" : ", ") + std::to_string(n) + " " + sweep::kind_name(k);
     EMF_REPLY("%d corpse(s) looted this session%s%s (sent; what did not fit stays); /loot.toggle switches yours", g_looted,
@@ -534,8 +569,11 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
                     p->z, nearest_base(*p), d.guarded ? " (a player's, an ally's, owned or tame: nothing is taken)" : "");
         g_magnet.on_death(std::move(d));
     });
-    emf::on_event<gen::PickupEvent>(EMF_WORLD_SERVER, [](emf::World, const gen::PickupEvent& e) {
+    emf::on_event<gen::PickupEvent>(EMF_WORLD_SERVER, [](emf::World w, const gen::PickupEvent& e) {
         g_magnet.on_pickup(e.pickedUpByEntityId.id, e.pickedUpFromEntityId.id);
+        // what a plant without a pickup gave the magnet's loot: its kind's items (limits, the never-pick-up list)
+        const uint32_t item = e.itemId.value;
+        if (item) g_sweeper.picked(e.pickedUpFromEntityId.id, {item, item_name(w, item), item_category(w, item)}, GetTickCount64());
     });
     g_file.attach();
     g_chests.attach();
