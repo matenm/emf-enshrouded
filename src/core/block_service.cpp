@@ -66,19 +66,33 @@ std::vector<BlockDone> BlockService::step(const BlockEngine& e) {
         return done;
     }
     const float factor = e.mining_factor ? e.mining_factor() : 1.0f;
+    // the terrain facts once a step, when a request asks for terrain (v47)
+    MaterialFacts terrain_facts[128] = {};
+    bool terrain_known = false, terrain_asked = false;
+    for (const Request& r : run) terrain_asked = terrain_asked || r.spec.terrain;
+    if (terrain_asked && e.terrain && e.terrain_facts) terrain_known = e.terrain_facts(terrain_facts);
     for (size_t i = 0; i < run.size(); ++i) {
         const Request& r = run[i];
         float table[256];
         build_break_table(facts, r.spec, factor, table);
+        const bool terrain = r.spec.terrain && terrain_known;
+        float terrain_table[128] = {};
+        if (terrain) build_terrain_table(terrain_facts, r.spec, factor, terrain_table);
         KernelCount k;
         bool ok = true;
         for (const Sphere& whole : r.spheres) {
             Sphere s = whole;
+            bool building = true;
             if (!r.spec.world && e.shrink) {
                 s.r = e.shrink(whole, table);
-                if (!(s.r > 0)) continue;  // right next to the world's own blocks: skipped
+                building = s.r > 0;  // right next to the world's own blocks: the kernel skips this sphere
             }
-            if (!e.kernel || !e.kernel(s, table, r.spec.instant, &k)) {
+            if (building && (!e.kernel || !e.kernel(s, table, r.spec.instant, &k))) {
+                ok = false;
+                break;
+            }
+            // the terrain pass judges each cell itself: the full sphere, even one the ruin protection skipped
+            if (terrain && !e.terrain(whole, terrain_table, r.spec.instant, &k)) {
                 ok = false;
                 break;
             }
@@ -91,9 +105,13 @@ std::vector<BlockDone> BlockService::step(const BlockEngine& e) {
             return done;
         }
         uint32_t dropped = 0;
-        if (r.drops && e.drop)
+        if (r.drops && e.drop) {
             for (const DropStack& d : break_drops(k.removed_per_material, facts, carry_))
                 dropped += e.drop(facts[d.building_id].item_guid, d.count, r.mid);
+            if (terrain)
+                for (const DropStack& d : terrain_drops(k.removed_per_material, terrain_facts, terrain_carry_))
+                    dropped += e.drop(terrain_facts[d.building_id].item_guid, d.count, r.mid);
+        }
         done.push_back(answer(r, EMF_BREAK_DONE, &k, dropped));
     }
     return done;
@@ -112,6 +130,7 @@ std::vector<BlockDone> BlockService::cancel_all() {
 std::vector<BlockDone> BlockService::world_reset() {
     std::vector<BlockDone> done = cancel_all();
     std::memset(carry_, 0, sizeof carry_);
+    std::memset(terrain_carry_, 0, sizeof terrain_carry_);
     return done;
 }
 

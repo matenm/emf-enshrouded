@@ -89,6 +89,9 @@ std::string block_origin_line(const BlockOrigin& o);
 // The items the removed blocks give: per building material, (removed + carry) / loot_rate items, the rest kept in
 // carry for the next break (the game keeps such a remainder per player for its pickaxes). removed: per voxel material.
 std::vector<DropStack> break_drops(const float removed[256], const MaterialFacts facts[128], float carry[128]);
+// The same for terrain materials (removed[1..127], their own facts and remainder); DropStack.building_id is the
+// terrain material there.
+std::vector<DropStack> terrain_drops(const float removed[256], const MaterialFacts terrain_facts[128], float carry[128]);
 
 // ---- API v47: terrain a player placed (EMF_BREAK_TERRAIN, find_wall's EMF_FIND_TERRAIN) ----
 // The game's terrain dig reduces fill in a sphere and would eat the natural ground around a placed wall, so EMF judges

@@ -271,3 +271,135 @@ TEST_CASE("block service: each sphere asks how far it may reach (ruin protection
     REQUIRE(f.spheres.size() == 2);
     CHECK(f.spheres[1].r == 1);
 }
+
+// ---- API v47: EMF_BREAK_TERRAIN ----
+
+namespace {
+// The fake's terrain side: Stone (67, item 0x43, 5 cells an item) and dirt (5, item 0x05, 10 cells an item).
+struct TerrainFake {
+    MaterialFacts facts[128] = {};
+    bool facts_ok = true, pass_ok = true;
+    std::vector<Sphere> spheres;
+    std::vector<bool> instants;
+    std::vector<float> stone_entries;  // table[67] as each pass saw it
+    uint32_t damaged_each = 4, removed_each = 3;
+    float removed_stone_each = 3;
+    TerrainFake() {
+        facts[67] = {true, 4, 400, 5, {}};
+        facts[67].item_guid[0] = 0x43;
+        facts[5] = {true, 0, 50, 10, {}};
+        facts[5].item_guid[0] = 0x05;
+    }
+    void add_to(BlockEngine& e) {
+        e.terrain_facts = [this](MaterialFacts out[128]) {
+            std::memcpy(out, facts, sizeof facts);
+            return facts_ok;
+        };
+        e.terrain = [this](const Sphere& s, const float table[128], bool instant, KernelCount* out) {
+            spheres.push_back(s);
+            instants.push_back(instant);
+            stone_entries.push_back(table[67]);
+            if (!pass_ok) return false;
+            out->damaged += damaged_each;
+            out->removed += removed_each;
+            out->removed_per_material[67] += removed_stone_each;
+            return true;
+        };
+    }
+};
+}  // namespace
+
+TEST_CASE("block service: EMF_BREAK_TERRAIN runs the terrain pass for every sphere after the kernel, at the full radius") {
+    g_answers.clear();
+    BlockService s;
+    Fake f;
+    TerrainFake t;
+    BlockEngine e = f.engine();
+    t.add_to(e);
+    float give = 0.5f;
+    e.shrink = [&](const Sphere&, const float*) { return give; };
+    std::string why;
+    REQUIRE(s.request(req(1, 2, EMF_BREAK_TERRAIN), on_done, nullptr, &why) != 0);  // 3 spheres
+    deliver(s.step(e));
+    REQUIRE(t.spheres.size() == 3);
+    CHECK(t.spheres[0].r == 1);  // never shrunk: the pass judges each cell itself
+    CHECK(f.spheres.size() == 3);
+    CHECK(f.spheres[0].r == doctest::Approx(0.5f));
+    CHECK(t.stone_entries[0] == doctest::Approx(8.0f));  // 400 / 50 (VeryHard, the default damage)
+    REQUIRE(g_answers.size() == 1);
+    CHECK(g_answers[0].r.status == EMF_BREAK_DONE);
+    CHECK(g_answers[0].r.damaged == 3 * (3 + 4));  // the kernel's and the terrain pass's
+    CHECK(g_answers[0].r.removed == 3 * (2 + 3));
+    // a sphere the ruin shrink skips still runs the terrain pass
+    give = 0;
+    t.spheres.clear();
+    t.instants.clear();
+    t.stone_entries.clear();
+    f.spheres.clear();
+    REQUIRE(s.request(req(1, 0, EMF_BREAK_TERRAIN | EMF_BREAK_INSTANT), on_done, nullptr, &why) != 0);
+    deliver(s.step(e));
+    CHECK(f.spheres.empty());
+    REQUIRE(t.spheres.size() == 1);
+    CHECK(t.instants[0]);
+    CHECK(t.stone_entries[0] == 1.0f);
+    // without the flag no terrain pass
+    t.spheres.clear();
+    give = 1;
+    REQUIRE(s.request(req(), on_done, nullptr, &why) != 0);
+    deliver(s.step(e));
+    CHECK(t.spheres.empty());
+}
+
+TEST_CASE("block service: terrain drops come from each terrain material's own item, with their own remainder") {
+    g_answers.clear();
+    BlockService s;
+    Fake f;
+    TerrainFake t;
+    BlockEngine e = f.engine();
+    t.add_to(e);
+    std::string why;
+    REQUIRE(s.request(req(1, 0, EMF_BREAK_TERRAIN | EMF_BREAK_DROPS), on_done, nullptr, &why) != 0);
+    deliver(s.step(e));  // 3 Stone cells: none yet (5 a piece)
+    CHECK(f.drops.empty());
+    REQUIRE(s.request(req(1, 0, EMF_BREAK_TERRAIN | EMF_BREAK_DROPS), on_done, nullptr, &why) != 0);
+    deliver(s.step(e));  // 6: one, 1 kept
+    REQUIRE(f.drops.size() == 1);
+    CHECK(f.drops[0].guid0 == 0x43);
+    CHECK(f.drops[0].count == 1);
+    REQUIRE(g_answers.size() == 2);
+    CHECK(g_answers[1].r.dropped == 1);
+}
+
+TEST_CASE("block service: a faulted terrain pass ends the request FAILED; terrain facts that cannot be read skip only the terrain") {
+    g_answers.clear();
+    BlockService s;
+    Fake f;
+    TerrainFake t;
+    BlockEngine e = f.engine();
+    t.add_to(e);
+    t.pass_ok = false;
+    std::string why;
+    REQUIRE(s.request(req(1, 0, EMF_BREAK_TERRAIN), on_done, nullptr, &why) != 0);
+    REQUIRE(s.request(req(), on_done, nullptr, &why) != 0);
+    deliver(s.step(e));
+    REQUIRE(g_answers.size() == 2);
+    CHECK(g_answers[0].r.status == EMF_BREAK_FAILED);
+    CHECK(g_answers[1].r.status == EMF_BREAK_FAILED);
+    g_answers.clear();
+    t.pass_ok = true;
+    t.facts_ok = false;
+    t.spheres.clear();
+    REQUIRE(s.request(req(1, 0, EMF_BREAK_TERRAIN), on_done, nullptr, &why) != 0);
+    deliver(s.step(e));
+    CHECK(t.spheres.empty());
+    REQUIRE(g_answers.size() == 1);
+    CHECK(g_answers[0].r.status == EMF_BREAK_DONE);
+    CHECK(g_answers[0].r.removed == 2);  // the kernel's only
+    // an engine without a terrain side: the flag breaks building blocks only
+    BlockEngine plain = f.engine();
+    g_answers.clear();
+    REQUIRE(s.request(req(1, 0, EMF_BREAK_TERRAIN), on_done, nullptr, &why) != 0);
+    deliver(s.step(plain));
+    REQUIRE(g_answers.size() == 1);
+    CHECK(g_answers[0].r.status == EMF_BREAK_DONE);
+}

@@ -17,7 +17,8 @@ namespace emf::core {
 constexpr size_t kBlockRequestsMax = 64;
 constexpr uint64_t kBlockWatchdogMs = 3000;  // requests waiting and emf_blocks has not run this long: cancelled
 
-// What one kernel call (both passes for a sphere) did; added to by each call.
+// What one kernel call (both passes for a sphere) did; added to by each call (and by the terrain pass: terrain
+// materials are voxel materials 1..127).
 struct KernelCount {
     uint32_t damaged = 0, removed = 0;
     float removed_per_material[256] = {};  // by voxel material
@@ -34,6 +35,11 @@ struct BlockEngine {
     // Ruin protection: how far a sphere may reach (shrink_off_world over the world as it is); 0 skips it. Not asked
     // for a request with EMF_BREAK_WORLD. Unset: the full radius.
     std::function<float(const Sphere& s, const float table[256])> shrink;
+    // API v47, EMF_BREAK_TERRAIN: the terrain materials' facts (by terrain material 1..127; false: not readable, the
+    // terrain part of the request is skipped), and the terrain pass over one sphere at its full radius (it judges
+    // each cell: only terrain a player placed); false: a game call faulted. Unset: the flag breaks building blocks only.
+    std::function<bool(MaterialFacts out[128])> terrain_facts;
+    std::function<bool(const Sphere& s, const float table[128], bool instant, KernelCount* out)> terrain;
 };
 
 // A finished request, for its callback (after the step).
@@ -72,7 +78,8 @@ private:
     mutable SRWLOCK lock_ = SRWLOCK_INIT;
     std::vector<Request> waiting_;
     uint32_t next_id_ = 1;
-    float carry_[128] = {};  // drop remainders (only touched inside the program)
+    float carry_[128] = {};          // drop remainders (only touched inside the program)
+    float terrain_carry_[128] = {};  // the same for terrain materials
 };
 
 }  // namespace emf::core

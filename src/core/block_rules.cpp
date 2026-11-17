@@ -141,10 +141,23 @@ BreakSpec break_spec(const EmfBreakBlocks& r) {
     return s;
 }
 
+namespace {
+std::vector<DropStack> drops_of(const float removed[128], const MaterialFacts facts[128], float carry[128]);
+}
+
 std::vector<DropStack> break_drops(const float removed[256], const MaterialFacts facts[128], float carry[128]) {
+    return drops_of(removed + 128, facts, carry);
+}
+
+std::vector<DropStack> terrain_drops(const float removed[256], const MaterialFacts terrain_facts[128], float carry[128]) {
+    return drops_of(removed, terrain_facts, carry);
+}
+
+namespace {
+std::vector<DropStack> drops_of(const float removed[128], const MaterialFacts facts[128], float carry[128]) {
     std::vector<DropStack> out;
     for (uint32_t id = 0; id < 128; ++id) {
-        const float got = removed[128 + id];
+        const float got = removed[id];
         if (got <= 0.0f) continue;
         const MaterialFacts& f = facts[id];
         if (!f.known || !f.loot_rate || !any_item(f.item_guid)) continue;
@@ -156,6 +169,7 @@ std::vector<DropStack> break_drops(const float removed[256], const MaterialFacts
     }
     return out;
 }
+}  // namespace
 
 // ---- terrain a player placed (API v47) ----
 
