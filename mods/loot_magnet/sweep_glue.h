@@ -50,7 +50,7 @@ inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::stri
         t.disabled = o->isDisabled;
         t.last_accept_guest = o->lastAcceptData.guestId.id;
     }
-    if (auto* ts = w.get<gen::ServerToggleState>(id)) t.toggle = ts->state ? 1 : 0;
+    if (auto* ts = w.get<gen::ServerToggleState>(id)) t.toggle = ts->state && !ts->isExtinguished ? 1 : 0;
     if (auto* st = w.get<gen::SpawnTime>(id)) t.fingerprint = static_cast<uint64_t>(st->spawnTime.value);
     if (auto* p = w.get<gen::PickupItem>(id)) {
         t.pickup = true;

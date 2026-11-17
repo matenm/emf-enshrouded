@@ -118,6 +118,9 @@ void magnet_program(void* ctx) {
 magnet::Magnet g_magnet;
 magnet::Toggles g_toggles;
 emf::WorldFile g_file(kMod);
+// The chests the magnet emptied, per world (emf\config\loot_magnet_chests\<slot>.txt): after a reload the game offers an
+// emptied chest again, and an accept would open it for nothing.
+emf::WorldFile g_chests("loot_magnet_chests");
 std::vector<magnet::Vec3> g_bases;
 uint64_t g_last_ms = 0, g_bases_ms = 0;
 uint32_t g_session = 0;
@@ -297,6 +300,7 @@ void sweep_tick(emf::World w, const Config& c, const std::vector<magnet::Looter>
 void on_tick(emf::World w) {
     if (!w.is_server() || g_switched_off) return;  // switched off in the Mods tab: no more looting from now on
     g_file.poll([](const std::string& text) { g_toggles.parse(text); });
+    g_chests.poll([](const std::string& text) { g_sweeper.load_emptied(text); });
     const uint32_t session = emf::server_session();
     if (session != g_session) {
         g_session = session;
@@ -398,6 +402,7 @@ void on_tick(emf::World w) {
     if (now - g_sweep_ms >= 1000) {
         g_sweep_ms = now;
         sweep_tick(w, c, looters, session, now);
+        if (g_sweeper.emptied_dirty() && g_chests.save(g_sweeper.emptied_text())) g_sweeper.emptied_saved();
     }
 }
 
@@ -503,6 +508,7 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         g_magnet.on_pickup(e.pickedUpByEntityId.id, e.pickedUpFromEntityId.id);
     });
     g_file.attach();
+    g_chests.attach();
     if (!emf::add_command("loot.toggle", "[on|off]: your Loot Magnet (the loot of kills and what lies near you come to you)",
                           cmd_toggle, EMF_COMMAND_PLAYERS))
         EMF_LOG(kMod, "the command loot.toggle could not be added (see the core log)");

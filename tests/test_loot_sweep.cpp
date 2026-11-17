@@ -197,10 +197,10 @@ TEST_CASE("sweep: a chest: accept while offered (it rolls its loot), then the lo
     acts = s.tick(2000, 1, me(), {c}, {}, r);
     REQUIRE(acts.size() == 1);
     CHECK(acts[0].act == Act::Loot);
-    Thing empty = chest(21);
+    Thing empty = chest(21, 3);  // chests never share a place (the magnet remembers emptied ones by it)
     CHECK(s.tick(1000, 1, me(), {empty}, {}, r).size() == 1);   // the accept
     CHECK(s.tick(4500, 1, me(), {empty}, {}, r).empty());       // nothing rolled yet: asked again later
-    Thing taken = chest(22);
+    Thing taken = chest(22, 4);
     taken.offered = false;  // not offered (another player's turn, or out of the game's range): wait
     CHECK(s.tick(1000, 1, me(), {taken}, {}, r).empty());
 }
@@ -484,4 +484,48 @@ TEST_CASE("sweep: a gathering spot without a pickup is a plant when it can be de
     drop.destructible = false;
     CHECK(classify(drop) == Kind::Ground);
     CHECK(classify(plant(1)) == Kind::Plant);
+}
+
+// ServerToggleState: a swarm's state stayed true by day and by night (seen in game, 2026-11-17); one the game
+// switched off or put out (isExtinguished) is not there to take.
+TEST_CASE("sweep: a swarm the game switched off or put out is left") {
+    Thing f = pickup(1, "Material_T1_Fire_Fly_FishingBait", 1);
+    f.toggle = 0;
+    CHECK(classify(f) == Kind::None);
+    f.toggle = 1;
+    CHECK(classify(f) == Kind::Firefly);
+    f.toggle = -1;  // no toggle at all: as before
+    CHECK(classify(f) == Kind::Firefly);
+}
+
+// After a world reload the game enables an emptied chest's offer again and an accept rolls nothing (seen in game):
+// the chests the magnet emptied are kept per world (Loot Magnet's file), by where they stand (scene chests never move).
+TEST_CASE("sweep: a chest the magnet emptied is remembered for the world and not opened in a later session") {
+    Sweeper s;
+    const auto r = all_on();
+    Thing c = chest(20);
+    c.pos = {2.04, 0.0, -3.0};
+    CHECK_FALSE(s.emptied_dirty());
+    REQUIRE(s.tick(1000, 1, me(), {c}, {}, r).size() == 1);  // the accept
+    CHECK_FALSE(s.emptied_dirty());  // asked, not emptied yet
+    c.stacks = {"Material_T1_Twigs"};
+    REQUIRE(s.tick(2000, 1, me(), {c}, {}, r).size() == 1);  // the loot event
+    CHECK(s.emptied_dirty());
+    const std::string text = s.emptied_text();
+    CHECK(text == "20 0 -30\n");  // decimetres
+    s.emptied_saved();
+    CHECK_FALSE(s.emptied_dirty());
+
+    Sweeper next;  // the next session: the file read again
+    next.load_emptied("junk\n" + text);
+    Thing again = chest(99);  // another id in that session, the same place
+    again.pos = {2.0, 0.02, -3.01};
+    CHECK(next.tick(1000, 2, me(), {again}, {}, r).empty());
+    CHECK(next.tick(40000, 2, me(), {again}, {}, r).empty());
+    Thing other = chest(98);
+    other.pos = {5, 0, -3};
+    CHECK(next.tick(41000, 2, me(), {other}, {}, r).size() == 1);  // a chest elsewhere is opened
+    CHECK_FALSE(next.emptied_dirty());
+    next.load_emptied("");  // another world without a file
+    CHECK(next.emptied_text().empty());
 }

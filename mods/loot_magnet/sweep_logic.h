@@ -15,7 +15,11 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cmath>
 #include <map>
+#include <set>
+#include <sstream>
+#include <tuple>
 #include <string>
 #include <vector>
 
@@ -117,7 +121,7 @@ inline Kind classify(const Thing& t) {
         !t.enemy_spawner)
         return Kind::Chest;
     if (!t.offer || !t.destroy_on_loot || t.actor || t.inventory || t.setup || t.faction || t.spawn_on_destroy ||
-        t.enemy_spawner || t.used_item || t.food_bait || t.crop_stage || t.looted || t.disabled)
+        t.enemy_spawner || t.used_item || t.food_bait || t.crop_stage || t.looted || t.disabled || t.toggle == 0)
         return Kind::None;
     if (t.pickup) return pickup_kind(t.item, t.exclude);
     if (!t.default_inv) return Kind::None;
@@ -270,6 +274,26 @@ public:
 
     size_t watched() const { return st_.size(); }
 
+    // The chests the magnet emptied in this world, as the mod's world file keeps them (one "x y z" in decimetres a line).
+    void load_emptied(const std::string& text) {
+        emptied_.clear();
+        dirty_ = false;
+        std::istringstream in(text);
+        std::string line;
+        while (std::getline(in, line)) {
+            std::istringstream l(line);
+            long x = 0, y = 0, z = 0;
+            if (l >> x >> y >> z) emptied_.insert({x, y, z});
+        }
+    }
+    std::string emptied_text() const {
+        std::string out;
+        for (const auto& [x, y, z] : emptied_) out += std::to_string(x) + " " + std::to_string(y) + " " + std::to_string(z) + "\n";
+        return out;
+    }
+    bool emptied_dirty() const { return dirty_; }  // a chest was emptied since the text was last saved
+    void emptied_saved() { dirty_ = false; }
+
 private:
     struct State {
         uint64_t seen_ms = 0, next_ms = 0, accepted_ms = 0;
@@ -279,7 +303,12 @@ private:
         uint64_t fingerprint = 0;
     };
 
-    static bool decide(const Thing& t, Kind k, const Player& who, uint64_t now, State& s, const SweepRules& r, Action* a) {
+    using Place = std::tuple<long, long, long>;  // a chest's position in decimetres
+    static Place place_of(const magnet::Vec3& p) {
+        return {std::lround(p.x * 10), std::lround(p.y * 10), std::lround(p.z * 10)};
+    }
+
+    bool decide(const Thing& t, Kind k, const Player& who, uint64_t now, State& s, const SweepRules& r, Action* a) {
         *a = Action{};
         a->kind = k;
         a->player = who.id;
@@ -300,7 +329,7 @@ private:
             // the accept would use up a lockpick or a key: it waits for a player to open it with the item
             if ((t.lock_item || t.lock_item_ref) && !t.lock_item_used) return false;
             if (t.stacks.empty()) {
-                if (s.emptied) {  // the magnet took its loot: done, never opened again
+                if (s.emptied || emptied_.count(place_of(t.pos))) {  // the magnet took its loot: done, never opened again
                     s.done = true;
                     return false;
                 }
@@ -332,6 +361,7 @@ private:
                 return false;
             }
             s.emptied = true;
+            if (emptied_.insert(place_of(t.pos)).second) dirty_ = true;
         } else if (t.pickup) {
             if (t.item.empty()) return false;  // the game names it a moment later
             if (!who.room) return false;       // a part that did not fit could be lost: wait for an empty slot
@@ -369,6 +399,8 @@ private:
     }
     std::map<uint32_t, State> st_;
     uint32_t session_ = 0;
+    std::set<Place> emptied_;  // the chests the magnet emptied in this world (its file)
+    bool dirty_ = false;
 };
 
 // When the flame altars must be read again before a sweep: a player arrived, or moved far since the last sweep (a

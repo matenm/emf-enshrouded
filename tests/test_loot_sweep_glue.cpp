@@ -309,6 +309,10 @@ TEST_CASE("sweep glue: an offer's isDisabled, a swarm's toggle state and a plant
     CHECK(t.toggle == 1);
     comp<gen::ServerToggleState>(60).state = false;
     CHECK(sweep::read_thing(r.w(), 60, names).toggle == 0);
+    auto& lit = comp<gen::ServerToggleState>(60);
+    lit.state = true;
+    lit.isExtinguished = true;  // put out: off
+    CHECK(sweep::read_thing(r.w(), 60, names).toggle == 0);
     g_comps.erase({gen::ServerToggleState::kHash, 60});
     CHECK(sweep::read_thing(r.w(), 60, names).toggle == -1);
 }
