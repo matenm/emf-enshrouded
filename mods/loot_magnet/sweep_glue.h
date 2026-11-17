@@ -10,6 +10,7 @@
 
 #include "emf/emf.hpp"
 #include "emf/generated/components.hpp"
+#include "magnet_glue.h"
 #include "sweep_logic.h"
 
 namespace sweep {
@@ -46,8 +47,10 @@ inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::stri
         t.offer = true;
         t.offer_id = o->offerId;
         t.offered = o->isOffered;
+        t.disabled = o->isDisabled;
         t.last_accept_guest = o->lastAcceptData.guestId.id;
     }
+    if (auto* ts = w.get<gen::ServerToggleState>(id)) t.toggle = ts->state ? 1 : 0;
     if (auto* st = w.get<gen::SpawnTime>(id)) t.fingerprint = static_cast<uint64_t>(st->spawnTime.value);
     if (auto* p = w.get<gen::PickupItem>(id)) {
         t.pickup = true;
@@ -78,6 +81,7 @@ inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::stri
         for (const auto& s : inv->slots)
             if (s.id.value) t.stacks.push_back(name_of(s.id.value));
     }
+    if (t.default_inv && !t.pickup) t.destructible = has<gen::Destructible>(w, id);  // a plant (a creature's drop is not)
     t.random_loot = has<gen::RandomLoot>(w, id);
     t.random_container = t.random_loot && has<gen::RandomLootContainer>(w, id);
     if (!t.random_container || !(want.smash || want.chests)) return t;
@@ -171,6 +175,30 @@ inline void fill_accept(emf::gen::ecs::AcceptOfferedInteractionEvent& e, uint32_
     e.guestEntityId.id = player;
     e.hostEntityId.id = host;
     e.offerId = offer_id;
+}
+
+// A loot event or a chest's accept for the program, which sends it on a game worker thread.
+struct Request {
+    uint32_t guest = 0, host = 0, session = 0;
+    bool accept = false;    // the game's accept of the chest's offer (it rolls the loot), not the loot event
+    uint32_t offer_id = 0;  // the offer it accepts
+};
+inline Request request_of(const Action& a, uint32_t session) {
+    Request r;
+    r.guest = a.player;
+    r.host = a.entity;
+    r.session = session;
+    r.accept = a.act == Act::Accept;
+    r.offer_id = a.offer_id;
+    return r;
+}
+// From the program (on the game's worker thread): the request as the game's event.
+inline void send(void* ctx, const Request& r) {
+    if (r.accept) {
+        if (auto* e = emf::emit<emf::gen::ecs::AcceptOfferedInteractionEvent>(ctx)) fill_accept(*e, r.guest, r.host, r.offer_id);
+    } else if (auto* e = emf::emit<emf::gen::ecs::LootInteractionEvent>(ctx)) {
+        magnet::fill_loot_event(*e, r.guest, r.host);
+    }
 }
 
 }  // namespace sweep

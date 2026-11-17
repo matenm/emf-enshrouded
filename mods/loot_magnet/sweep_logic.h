@@ -46,6 +46,8 @@ struct Thing {
     bool offer = false;     // InteractionOfferRuntime
     uint32_t offer_id = 0;  // its offerId (the accept must name it)
     bool offered = false;   // its isOffered (a player in the game's range; nobody else accepting)
+    bool disabled = false;  // its isDisabled: the game takes no interaction now (an emptied chest, a hidden swarm)
+    int toggle = -1;        // ServerToggleState.state: -1 none, 0, 1
     uint32_t last_accept_guest = 0;  // lastAcceptData.guestId: who opened it last (0 = nobody)
     bool pickup = false;    // PickupItem
     std::string item;       // PickupItem's item, by debug name ("" = not named by the game yet)
@@ -79,19 +81,34 @@ inline std::string lower(std::string s) {
 inline bool contains(const std::string& hay, const char* needle) { return lower(hay).find(lower(needle)) != std::string::npos; }
 inline bool starts(const std::string& hay, const char* prefix) { return lower(hay).rfind(lower(prefix), 0) == 0; }
 
+// A material or food item that no plant gives: stone, ore, wood, bones, fur, meat, drinks and the like, as they lie in
+// ruins and camps (the game's item names: Material_T1_Stone, Food_T1_raw_bad_meat_LeanMeat ...).
+inline bool not_a_plant(const std::string& item) {
+    for (const char* w : {"stone", "_ore", "metal", "scrap", "cloth", "charcoal", "clay", "amber", "obsidian", "_wood",
+                          "twig", "bone", "fur", "leather", "meat", "honey", "hydration", "water", "essence",
+                          "resin", "salt", "string", "plank", "_bar", "token", "skillpoint", "cooked", "processed",
+                          "_dust", "feather", "wool", "grain", "fogcore"})
+        if (contains(item, w)) return true;
+    // an egg is a word of its own (Food_T1_raw_egg, Food_T3_raw_egg_BirdEggs; an eggplant is a plant)
+    const std::string n = "_" + lower(item) + "_";
+    return n.find("_egg_") != std::string::npos;
+}
+
 // The group of a pickup by its item. A drop (exclude absent or 0) is a ground item whatever it is (a collection item
 // stays a collectible); the game's scene pickups it keeps out of its own area loot (exclude 1: keys, weapons, lore,
-// mushrooms, fireflies, wild plants) are taken only by the group of their kind of item.
+// mushrooms, fireflies, wild plants, materials in ruins) are taken only by the group of their kind of item.
 inline Kind pickup_kind(const std::string& item, int exclude) {
     const bool collection = starts(item, "collection_");
     if (exclude != 1) return collection ? Kind::Collectible : Kind::Ground;
     if (collection) return Kind::Collectible;
     if (contains(item, "mushroom")) return Kind::Mushroom;
     if (contains(item, "fishingbait")) return Kind::Firefly;  // fireflies and the other bait critters
-    return magnet::is_material(item, false) ? Kind::Plant : Kind::None;  // a wild plant that carries a pickup
+    if (!magnet::is_material(item, false)) return Kind::None;  // keys, weapons, lore: left to the player
+    return not_a_plant(item) ? Kind::Ground : Kind::Plant;      // a wild plant that carries a pickup
 }
 
 inline Kind classify(const Thing& t) {
+    if (t.disabled) return Kind::None;  // the game takes no interaction now (an emptied chest, a hidden swarm)
     if (t.random_loot && t.random_container && t.loot_on_destroy && t.destructible && !t.offer && !t.inventory &&
         !t.setup && !t.faction && !t.actor && !t.enemy_spawner && !t.spawn_on_destroy && !t.mining_node && !t.used_item &&
         !t.disable_loot_on_destroy)
@@ -100,10 +117,12 @@ inline Kind classify(const Thing& t) {
         !t.enemy_spawner)
         return Kind::Chest;
     if (!t.offer || !t.destroy_on_loot || t.actor || t.inventory || t.setup || t.faction || t.spawn_on_destroy ||
-        t.enemy_spawner || t.used_item || t.food_bait || t.crop_stage || t.looted)
+        t.enemy_spawner || t.used_item || t.food_bait || t.crop_stage || t.looted || t.disabled)
         return Kind::None;
     if (t.pickup) return pickup_kind(t.item, t.exclude);
-    return t.default_inv ? Kind::Plant : Kind::None;
+    if (!t.default_inv) return Kind::None;
+    // without a pickup: plants can be destroyed; a bat's fur patch or a skeleton's bones (a creature's drop) cannot
+    return t.destructible ? Kind::Plant : Kind::Ground;
 }
 
 // Items a quest needs: the game has no flag for them (they are scene data), so names that look like one stay.

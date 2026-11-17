@@ -57,6 +57,11 @@ Config config() {
     std::lock_guard<std::mutex> l(g_config_lock);
     return g_config;
 }
+// The host's toggle key alone (read every frame; the whole Config is copied only when the magnet works, twice a second).
+std::string config_key() {
+    std::lock_guard<std::mutex> l(g_config_lock);
+    return g_config.key;
+}
 void read_settings() {
     Config c;
     c.rules.radius = emf::setting_float(kMod, "radius", 8.0);
@@ -94,11 +99,7 @@ void read_settings() {
 }
 
 // ---- loot events (and a chest's accept) for the program (server tick -> a game worker thread) ----
-struct Request {
-    uint32_t guest, host, session;
-    bool accept = false;    // the game's accept of the chest's offer (it rolls the loot), not the loot event
-    uint32_t offer_id = 0;  // the offer it accepts
-};
+using Request = sweep::Request;
 std::mutex g_requests_lock;
 std::vector<Request> g_requests;
 
@@ -109,14 +110,8 @@ void magnet_program(void* ctx) {
         mine.swap(g_requests);
     }
     const uint32_t session = emf::server_session();
-    for (const auto& r : mine) {
-        if (r.session != session) continue;
-        if (r.accept) {
-            if (auto* e = emf::emit<gen::AcceptOfferedInteractionEvent>(ctx)) sweep::fill_accept(*e, r.guest, r.host, r.offer_id);
-        } else if (auto* e = emf::emit<gen::LootInteractionEvent>(ctx)) {
-            magnet::fill_loot_event(*e, r.guest, r.host);
-        }
-    }
+    for (const auto& r : mine)
+        if (r.session == session) sweep::send(ctx, r);
 }
 
 // ---- server tick state ----
@@ -279,9 +274,7 @@ void sweep_tick(emf::World w, const Config& c, const std::vector<magnet::Looter>
             }
             continue;
         }
-        Request r{a.player, a.entity, session};
-        r.accept = a.act == sweep::Act::Accept;
-        r.offer_id = a.offer_id;
+        const Request r = sweep::request_of(a, session);
         {
             std::lock_guard<std::mutex> lock(g_requests_lock);
             g_requests.push_back(r);
@@ -303,7 +296,6 @@ void sweep_tick(emf::World w, const Config& c, const std::vector<magnet::Looter>
 
 void on_tick(emf::World w) {
     if (!w.is_server() || g_switched_off) return;  // switched off in the Mods tab: no more looting from now on
-    const Config c = config();
     g_file.poll([](const std::string& text) { g_toggles.parse(text); });
     const uint32_t session = emf::server_session();
     if (session != g_session) {
@@ -315,8 +307,8 @@ void on_tick(emf::World w) {
         if (!g_file.ready()) g_toggles.clear();
     }
     const uint64_t now = GetTickCount64();
-    if (!c.key.empty()) {  // the host's own key
-        const uint32_t vk = emf::keys::parse_key(std::wstring(c.key.begin(), c.key.end()));
+    if (const std::string key = config_key(); !key.empty()) {  // the host's own key
+        const uint32_t vk = emf::keys::parse_key(std::wstring(key.begin(), key.end()));
         if (g_key.pressed(emf::keys::down(vk)) && emf::local_player()) {
             bool on = false;
             if (toggle(w, emf::local_player(), -1, &on)) EMF_NOTIFY("Loot Magnet %s", on ? "on" : "off");
@@ -324,6 +316,7 @@ void on_tick(emf::World w) {
     }
     if (now - g_last_ms < 500) return;
     g_last_ms = now;
+    const Config c = config();
     if (now - g_bases_ms >= 10000) {
         g_bases_ms = now;
         refresh_bases(w);
@@ -360,7 +353,7 @@ void on_tick(emf::World w) {
         if (plan.event) {
             {
                 std::lock_guard<std::mutex> lock(g_requests_lock);
-                if (g_requests.size() < 256) g_requests.push_back({l.player, l.corpse, session});
+                if (g_requests.size() < 256) g_requests.push_back({l.player, l.corpse, session, false, 0});
             }
             g_magnet.on_sent(l.corpse, l.player, now, session);
         }
@@ -393,7 +386,7 @@ void on_tick(emf::World w) {
                 EMF_LOG(kMod, "corpse %u: nothing came from the loot event yet (try %d of %d): sent again", late.corpse,
                         late.tries, magnet::Magnet::kMaxTries);
             std::lock_guard<std::mutex> lock(g_requests_lock);
-            g_requests.push_back({late.player, late.corpse, session});
+            g_requests.push_back({late.player, late.corpse, session, false, 0});
             g_magnet.on_sent(late.corpse, late.player, now, session, late.tries + 1);
             continue;
         }

@@ -28,6 +28,7 @@ Thing plant(uint32_t id, double x = 2) {
     t.offer = true;
     t.destroy_on_loot = true;
     t.default_inv = true;
+    t.destructible = true;  // a plant can be destroyed (364 of the game's 369 gathering spots without a pickup)
     return t;
 }
 Thing chest(uint32_t id, double x = 2) {
@@ -445,4 +446,42 @@ TEST_CASE("sweep: a chest the magnet emptied is done, never opened again") {
     c.stacks.clear();
     CHECK(s.tick(2500, 1, me(), {c}, {}, r).empty());
     CHECK(s.tick(40000, 1, me(), {c}, {}, r).empty());  // no second accept
+}
+
+// The game disables an offer it no longer takes: a chest it emptied (remove_interaction_on_empty_inventory), a swarm
+// it hid. Such a thing is left while disabled, and comes once enabled again.
+TEST_CASE("sweep: a thing whose offer the game disabled is left while it stays disabled") {
+    Sweeper s;
+    const auto r = all_on();
+    Thing p = pickup(10, "Material_T1_Twigs");
+    Thing c = chest(11);
+    Thing pl = plant(12);
+    p.disabled = c.disabled = pl.disabled = true;
+    CHECK(classify(p) == Kind::None);
+    CHECK(classify(c) == Kind::None);
+    CHECK(s.tick(1000, 1, me(), {p, c, pl}, {}, r).empty());
+    p.disabled = false;
+    CHECK(s.tick(1500, 1, me(), {p}, {}, r).size() == 1);
+}
+
+// The game's scene pickups it keeps out of its own area loot (exclude 1) that are materials or food: a plant's item is
+// a plant; stones, ore, wood, bones, fur, meat, drinks and the like that lie in ruins and camps are ground items.
+TEST_CASE("sweep: a scene pickup that is not a plant (stone, ore, wood, bones, meat, a drink) is a ground item") {
+    for (const char* item : {"Material_T1_Stone", "Material_T1_Wood_Logs", "Material_T1_Bones", "Material_T1_Animal_Fur",
+                             "Food_T1_processed_meat_Grilled_WolfMeat", "Food_T1_raw_bad_meat_LeanMeat",
+                             "Food_T1_raw_hydration_Milk", "Material_T1_Metal_Scraps", "Material_T1_Charcoal",
+                             "Material_T4_Iron_Ore", "Material_T1_Torn_Cloth", "Material_T1_Resin", "Food_T3_raw_egg_BirdEggs"})
+        CHECK_MESSAGE(pickup_kind(item, 1) == Kind::Ground, std::string(item));
+    for (const char* item : {"Material_T1_Plant_Fibre", "Food_T1_raw_fruit_Red_Berries", "Material_T5_Wolfsbane",
+                             "Material_T1_Flax", "Food_T7_raw_vegetable_Eggplant"})
+        CHECK_MESSAGE(pickup_kind(item, 1) == Kind::Plant, std::string(item));
+}
+
+// Gathering spots without a pickup: plants carry Destructible; a bat's fur patch and a skeleton's bones (creature
+// drops that lie on the ground) do not.
+TEST_CASE("sweep: a gathering spot without a pickup is a plant when it can be destroyed, else a ground item") {
+    Thing drop = plant(1);
+    drop.destructible = false;
+    CHECK(classify(drop) == Kind::Ground);
+    CHECK(classify(plant(1)) == Kind::Plant);
 }

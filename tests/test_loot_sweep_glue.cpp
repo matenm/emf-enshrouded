@@ -295,3 +295,53 @@ TEST_CASE("sweep glue: a barrel whose RandomLootOnDestroy is its own component (
     REQUIRE(near.size() == 1);
     CHECK(sweep::classify(near[0]) == sweep::Kind::Smash);
 }
+
+TEST_CASE("sweep glue: an offer's isDisabled, a swarm's toggle state and a plant's Destructible are read") {
+    Rig r;
+    comp<gen::InteractionOfferRuntime>(60).isDisabled = true;
+    comp<gen::DestroyOnLoot>(60);
+    tpl<gen::DefaultInventory>(60);
+    tpl<gen::Destructible>(60).maxHealth = 5;
+    comp<gen::ServerToggleState>(60).state = true;
+    sweep::Thing t = sweep::read_thing(r.w(), 60, names);
+    CHECK(t.disabled);
+    CHECK(t.destructible);
+    CHECK(t.toggle == 1);
+    comp<gen::ServerToggleState>(60).state = false;
+    CHECK(sweep::read_thing(r.w(), 60, names).toggle == 0);
+    g_comps.erase({gen::ServerToggleState::kHash, 60});
+    CHECK(sweep::read_thing(r.w(), 60, names).toggle == -1);
+}
+
+namespace {
+std::string g_emitted;
+std::vector<uint8_t> g_event(64);
+void* f_emit(void*, const char* name, uint32_t size) {
+    g_emitted = name;
+    g_event.assign(size, 0);
+    return g_event.data();
+}
+}  // namespace
+
+TEST_CASE("sweep glue: an accept becomes the game's AcceptOfferedInteractionEvent, a loot its LootInteractionEvent") {
+    Rig r;
+    r.api.emit_event = f_emit;
+    sweep::Action a;
+    a.act = sweep::Act::Accept;
+    a.player = 1;
+    a.entity = 40;
+    a.offer_id = 7;
+    const sweep::Request req = sweep::request_of(a, 3);
+    CHECK(req.accept);
+    CHECK(req.offer_id == 7);
+    CHECK(req.session == 3);
+    sweep::send(reinterpret_cast<void*>(0x1), req);
+    CHECK(g_emitted == "AcceptOfferedInteractionEvent");
+    const auto* e = reinterpret_cast<const gen::AcceptOfferedInteractionEvent*>(g_event.data());
+    CHECK(e->guestEntityId.id == 1);
+    CHECK(e->hostEntityId.id == 40);
+    CHECK(e->offerId == 7);
+    a.act = sweep::Act::Loot;
+    sweep::send(reinterpret_cast<void*>(0x1), sweep::request_of(a, 3));
+    CHECK(g_emitted == "LootInteractionEvent");
+}
