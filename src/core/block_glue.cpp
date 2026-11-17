@@ -160,7 +160,11 @@ float mining_factor(void* balancing) {
 float shrink_sphere(void* editor, const Sphere& s, const float table[256]);  // below, after the reads
 
 void blocks_program(void* ctx, void*) {
-    if (!g_on.load() || !g_service) return;
+    if (!g_service) return;
+    if (!g_on.load()) {  // off since a fault: what still waits ends FAILED now, not CANCELLED by the watchdog later
+        if (g_service->waiting()) deliver(failed(g_service->cancel_all()), {});
+        return;
+    }
     const ProgramCall* call = current_program_call();
     if (!call) return;
     g_last_run_ms = now();
@@ -174,7 +178,11 @@ void blocks_program(void* ctx, void*) {
     }
     (void)ctx;
     BlockEngine e;
-    e.facts = [&](MaterialFacts out[128]) { return blocks_read_facts(h.efficiency, out); };
+    e.facts = [&](MaterialFacts out[128]) {
+        if (blocks_read_facts(h.efficiency, out)) return true;
+        turn_off("off (the game's material config lookup faulted); breaks are refused until a restart");
+        return false;
+    };
     e.mining_factor = [&] { return mining_factor(h.balancing); };
     e.kernel = [&](const Sphere& s, const float table[256], bool instant, KernelCount* k) -> bool {
         if (!g_on.load()) return false;

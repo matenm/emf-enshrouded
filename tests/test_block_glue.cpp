@@ -56,7 +56,9 @@ uint64_t f_register(void*, const void*, char) { return 1; }
 
 // configs by building id: stone 7 (VeryHard, 1000, 8 blocks per item), straw 2 (Soft, 100, 4 per item)
 alignas(4) uint8_t g_cfg[128][0xB4];
+bool g_config_faults = false;
 const uint8_t* f_config(void* registry, uint8_t id) {
+    if (g_config_faults) return *static_cast<const uint8_t* const volatile*>(nullptr);
     CHECK(registry == g_efficiency);
     if (id != 7 && id != 2) return nullptr;
     return g_cfg[id];
@@ -268,6 +270,7 @@ struct Fixture {
         g_drops.clear();
         g_answers.clear();
         g_kernel_faults = false;
+        g_config_faults = false;
         g_swap_slots = false;
         g_damaged = 4;
         g_removed = 2;
@@ -807,4 +810,31 @@ TEST_CASE("block glue: a world cell whose material the break would not touch (no
     f.step();
     REQUIRE(g_calls.size() == 2);
     CHECK(g_calls[0].radius == doctest::Approx(1.5f));
+}
+
+TEST_CASE("block glue: after a kernel fault every other waiting request answers FAILED at the next step, not CANCELLED by the watchdog") {
+    Fixture f;
+    for (int i = 0; i < 10; ++i) REQUIRE(f.ask() != 0);  // more than one step's spheres
+    g_kernel_faults = true;
+    f.step();
+    REQUIRE_FALSE(g_answers.empty());
+    CHECK(g_answers.size() < 10);
+    f.step();  // breaking is off: what still waited ends FAILED now
+    REQUIRE(g_answers.size() == 10);
+    for (const auto& a : g_answers) CHECK(a.r.status == EMF_BREAK_FAILED);
+    blocks_server_tick(g_now + 5000);
+    CHECK(f.after.empty());  // nothing left for the watchdog
+}
+
+TEST_CASE("block glue: a fault in the material config lookup turns breaking off (logged); later requests are refused") {
+    Fixture f;
+    REQUIRE(f.ask() != 0);
+    g_config_faults = true;
+    f.step();
+    REQUIRE(g_answers.size() == 1);
+    CHECK(g_answers[0].r.status == EMF_BREAK_FAILED);
+    std::string why;
+    CHECK(f.ask(0, 0, &why) == 0);
+    CHECK(why.find("off") != std::string::npos);
+    CHECK(blocks_unavailable_why().find("config") != std::string::npos);
 }

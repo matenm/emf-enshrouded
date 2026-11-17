@@ -48,7 +48,8 @@ class BlockService {
 public:
     // Checks and queues a request: its id (> 0), or 0 and *why. Any thread.
     uint32_t request(const EmfBreakBlocks& r, EmfBreakCallback cb, void* user, std::string* why);
-    // Inside emf_blocks: runs waiting requests in order while their spheres fit in this step's kBlockMaxSpheres.
+    // Inside emf_blocks: runs waiting requests in order while their spheres fit in this step's kBlockMaxSpheres. A
+    // failed kernel call (a fault) ends that request and the rest of the step FAILED.
     std::vector<BlockDone> step(const BlockEngine& e);
     // A new world (or the watchdog): every waiting request ends CANCELLED; the drop remainders are forgotten.
     std::vector<BlockDone> world_reset();

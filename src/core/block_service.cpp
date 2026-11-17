@@ -84,12 +84,10 @@ std::vector<BlockDone> BlockService::step(const BlockEngine& e) {
             }
         }
         if (!ok) {
+            // the kernel faulted: breaking is off, so the rest of this step ends FAILED too (nothing goes back into the
+            // queue, which could then hold more than kBlockRequestsMax)
             done.push_back(answer(r, EMF_BREAK_FAILED, &k));
-            // the rest of this step waits, in front of what came in meanwhile
-            AcquireSRWLockExclusive(&lock_);
-            waiting_.insert(waiting_.begin(), std::make_move_iterator(run.begin() + static_cast<std::ptrdiff_t>(i) + 1),
-                            std::make_move_iterator(run.end()));
-            ReleaseSRWLockExclusive(&lock_);
+            for (size_t j = i + 1; j < run.size(); ++j) done.push_back(answer(run[j], EMF_BREAK_FAILED));
             return done;
         }
         uint32_t dropped = 0;

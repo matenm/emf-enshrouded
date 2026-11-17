@@ -17,6 +17,7 @@ struct Fake {
     MaterialFacts facts[128] = {};
     float factor = 1.0f;
     bool kernel_ok = true;
+    std::function<void()> on_kernel;  // runs inside each kernel call (requests arriving meanwhile)
     std::vector<Sphere> spheres;
     std::vector<bool> instants;
     std::vector<float> stone_entries;  // table[128 + 7] as each call saw it
@@ -46,6 +47,7 @@ struct Fake {
             spheres.push_back(s);
             instants.push_back(instant);
             stone_entries.push_back(table[128 + 7]);
+            if (on_kernel) on_kernel();
             if (!kernel_ok) return false;
             out->damaged += damaged_each;
             out->removed += removed_each;
@@ -161,7 +163,7 @@ TEST_CASE("block service: world_reset answers every waiting request CANCELLED on
     CHECK(g_answers.size() == 2);
 }
 
-TEST_CASE("block service: a failed kernel call ends that request FAILED; the rest of the step waits") {
+TEST_CASE("block service: a failed kernel call (a fault: breaking goes off) ends that request and the rest of its step FAILED; none goes back into the queue") {
     g_answers.clear();
     BlockService s;
     Fake f;
@@ -169,15 +171,26 @@ TEST_CASE("block service: a failed kernel call ends that request FAILED; the res
     const uint32_t b = s.request(req(), on_done, nullptr, nullptr);
     f.kernel_ok = false;
     deliver(s.step(f.engine()));
-    REQUIRE(g_answers.size() == 1);
-    CHECK(g_answers[0].id == a);
-    CHECK(g_answers[0].r.status == EMF_BREAK_FAILED);
-    CHECK(s.waiting() == 1);
-    f.kernel_ok = true;
-    deliver(s.step(f.engine()));
     REQUIRE(g_answers.size() == 2);
+    CHECK(g_answers[0].id == a);
     CHECK(g_answers[1].id == b);
-    CHECK(g_answers[1].r.status == EMF_BREAK_DONE);
+    CHECK(g_answers[0].r.status == EMF_BREAK_FAILED);
+    CHECK(g_answers[1].r.status == EMF_BREAK_FAILED);
+    CHECK(s.waiting() == 0);
+}
+
+TEST_CASE("block service: after a failed kernel call the queue never holds more than 64") {
+    g_answers.clear();
+    BlockService s;
+    Fake f;
+    for (size_t i = 0; i < kBlockRequestsMax; ++i) REQUIRE(s.request(req(), on_done, nullptr, nullptr) != 0);
+    f.kernel_ok = false;
+    f.on_kernel = [&] {  // more come in while the step runs (another thread)
+        while (s.request(req(), on_done, nullptr, nullptr) != 0) {
+        }
+    };
+    deliver(s.step(f.engine()));
+    CHECK(s.waiting() <= kBlockRequestsMax);
 }
 
 TEST_CASE("block service: drops go through the loot rate with a remainder kept between requests") {
