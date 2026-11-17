@@ -261,11 +261,14 @@ uint32_t npc_id_of(emf::World w, uint32_t villager) {
 }
 
 // What a job checks about its entities each tick: still that kind, where it is, and the villager's npcId.
+bool moved_elsewhere(emf::World w, uint32_t villager);  // below
+
 std::optional<jobs::EntityInfo> lookup(emf::World w, uint32_t id, jobs::Kind kind) {
     if (!(kind == jobs::Kind::Villager ? is_villager(w, id) : is_chest(w, id))) return std::nullopt;
     const auto p = position(w, id);
     if (!p) return std::nullopt;
-    return jobs::EntityInfo{*p, kind == jobs::Kind::Villager ? npc_id_of(w, id) : 0u};
+    const bool villager = kind == jobs::Kind::Villager;
+    return jobs::EntityInfo{*p, villager ? npc_id_of(w, id) : 0u, villager && moved_elsewhere(w, id)};
 }
 
 // A new job remembers who and where, so a reload that renumbers entities cannot point it at others.

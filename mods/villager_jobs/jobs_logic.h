@@ -146,6 +146,7 @@ struct JobStatus {
 struct EntityInfo {
     Vec3 pos;
     uint32_t npc = 0;
+    bool busy = false;  // a villager another mod walks or holds (API v46 villager_move): its job pauses
 };
 // The entity, or nullopt when it does not exist or is no longer that kind of entity (after a reload a saved id can
 // name something else).
@@ -279,6 +280,11 @@ public:
                 changed_ = true;
             }
             if (s.job.kind != JobKind::Craft) {
+                if (vi->busy) {  // the walk and wait timers start again when the other mod's move ends
+                    s.work.since_ms = now_ms;
+                    ++i;
+                    continue;
+                }
                 work_tick(s, *vi, *ci, c2i ? c2i->pos : Vec3{}, now_ms, view, out);
                 ++i;
                 continue;

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <fstream>
 #include <map>
+#include <set>
 #include <optional>
 #include <regex>
 #include <sstream>
@@ -95,6 +96,7 @@ struct World {
     std::map<uint32_t, Vec3> pos;
     std::map<uint32_t, Kind> kind;     // not listed: a villager below 6000, a chest above (the ids the tests use)
     std::map<uint32_t, uint32_t> npc;  // a villager's npcId (0 if not listed)
+    std::set<uint32_t> busy;           // villagers another mod walks or holds (API v46)
     LookupFn fn() {
         return [this](uint32_t id, Kind want) -> std::optional<EntityInfo> {
             auto it = pos.find(id);
@@ -103,7 +105,7 @@ struct World {
             const Kind is = k != kind.end() ? k->second : (id < 6000 ? Kind::Villager : Kind::Chest);
             if (is != want) return std::nullopt;
             auto n = npc.find(id);
-            return EntityInfo{it->second, n != npc.end() ? n->second : 0u};
+            return EntityInfo{it->second, n != npc.end() ? n->second : 0u, busy.count(id) > 0};
         };
     }
 };
@@ -1437,4 +1439,26 @@ TEST_CASE("jobs remote: jobs are given by EMF's admins and by the game's own adm
     CHECK(may_give_jobs(false, 0x3F));
     CHECK_FALSE(may_give_jobs(false, EMF_PERM_EDIT_BASE | EMF_PERM_RECEIVE_EXP));  // a friend
     CHECK_FALSE(may_give_jobs(false, 0));
+}
+
+// Another mod's move (API v46 villager_move): the job sends no walk orders meanwhile (the game takes one command per
+// villager a step), so its walk timer must not run either, or it ends in a false "cannot get close" note.
+TEST_CASE("jobs: a villager another mod is moving does no job work meanwhile; its walk timer starts again after the move") {
+    JobBook book(test_cfg());  // gives up after 40 s
+    World w;
+    Wilds f;
+    w.pos[1025] = {0, 0, 0};
+    w.pos[6830] = {0, 0, 0};
+    f.items = {{8001, {15, 0, 0}}};
+    REQUIRE(book.assign(gather_job(), 0, 30000));
+    REQUIRE(first_of(book.tick(0, w.fn(), f.view()), ActionKind::GoToPos));
+    w.busy.insert(1025);
+    size_t acts = 0;
+    for (uint64_t t = 500; t <= 120000; t += 500) acts += book.tick(t, w.fn(), f.view()).size();
+    CHECK(acts == 0);  // no walk orders, no note
+    w.busy.erase(1025);
+    CHECK(first_of(book.tick(120500, w.fn(), f.view()), ActionKind::GoToPos));  // back at its job
+    size_t notes = 0;
+    for (uint64_t t = 121000; t <= 155000; t += 500) notes += count(book.tick(t, w.fn(), f.view()), ActionKind::Notice);
+    CHECK(notes == 0);  // the 40 s count from the move's end
 }
