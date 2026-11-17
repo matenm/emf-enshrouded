@@ -120,6 +120,7 @@ TEST_CASE("signature table: build 1283531's RVAs, game and dedicated server, as 
         if (d.id >= Sig::PathGridRegister && d.id <= Sig::PathGridCellList) continue;  // 1287369 alone (both exes)
         if (d.id >= Sig::BlockKernel && d.id <= Sig::BlockColumnRelease) continue;  // 1287369 alone (both exes)
         if (d.id == Sig::HudScreenRead) continue;  // 1287369 alone (client)
+        if (d.id == Sig::TerrainConfigFind || d.id == Sig::VoxelBoxFillAir) continue;  // 1287369 alone (both exes)
         CHECK(d.rva[static_cast<size_t>(client)] != kRvaUnchecked);
         CHECK(d.rva[static_cast<size_t>(server)] != kRvaUnchecked);
     }
@@ -278,7 +279,7 @@ TEST_CASE("signature table has the inventory transaction and readOther, optional
         CHECK(d->rva[1] == w.rva_1273043);
         CHECK_FALSE(d->required);
     }
-    CHECK(kSigCount == 96);
+    CHECK(kSigCount == 98);
 }
 
 TEST_CASE("signature table has XpRequired and MaxPlayerLevel (API v22 levels), optional, on both exes of 1283531") {
@@ -679,7 +680,7 @@ TEST_CASE("signature table has PlayerVitalBar (the HUD parts): a call site, clie
     CHECK(std::string(d->pattern).find("4C 8D 86 F8 DB 00 00 48 8D 57 18") == 0);
     CHECK(std::string(d->pattern).find("48 8D 97 F0 00 00 00") != std::string::npos);
     CHECK(std::string(d->pattern).find("48 8D 97 C8 01 00 00") != std::string::npos);
-    CHECK(kSigCount == 96);
+    CHECK(kSigCount == 98);
 }
 
 TEST_CASE("signature table has LocaPoolLookup and LocaSlotFind (item names): function starts, client only, 1287369") {
@@ -712,7 +713,7 @@ TEST_CASE("signature table has ApplyHitToEntity (hits): a call site, both exes o
     CHECK(std::string(d->pattern).find("4C 8D 8D 40 02 00 00") == 0);
     REQUIRE(d->call_target_pattern != nullptr);
     CHECK(std::string(d->call_target_pattern).find("4C 89 44 24 18 48 89 54 24 10") == 0);
-    CHECK(kSigCount == 96);
+    CHECK(kSigCount == 98);
 }
 
 TEST_CASE("signature table has PanelLayerOpen (the panel colour): a call site, client only, 1287369's function at 0xa3c8b0") {
@@ -728,7 +729,7 @@ TEST_CASE("signature table has PanelLayerOpen (the panel colour): a call site, c
     CHECK(std::string(d->pattern).find("4D 8B 89 F8 DB 00 00 E8") != std::string::npos);
     REQUIRE(d->call_target_pattern != nullptr);
     CHECK(std::string(d->call_target_pattern).find("4C 8B DC 53 48 81 EC A0 00 00 00") == 0);
-    CHECK(kSigCount == 96);
+    CHECK(kSigCount == 98);
 }
 
 TEST_CASE("signature table has the markers' four guards (v33): client only, 1287369's places, displacements masked") {
@@ -756,7 +757,7 @@ TEST_CASE("signature table has the markers' four guards (v33): client only, 1287
         CHECK(std::string(d->pattern).find(w.starts) == 0);
         for (size_t b = 0; b < 7; ++b) CHECK(d->rva[b] == (known_builds()[b].server ? 0u : kRvaUnchecked));
     }
-    CHECK(kSigCount == 96);
+    CHECK(kSigCount == 98);
 }
 
 TEST_CASE("signature table has the ground search's two (v34): the voxel ray and the reset bounds' setter, both exes") {
@@ -777,7 +778,7 @@ TEST_CASE("signature table has the ground search's two (v34): the voxel ray and 
         CHECK(d->rva[8] == w.server);
         for (size_t b = 0; b < 7; ++b) CHECK(d->rva[b] == kRvaUnchecked);
     }
-    CHECK(kSigCount == 96);
+    CHECK(kSigCount == 98);
 }
 
 TEST_CASE("signature table has the fog sampler (the shroud at a map teleport's landing), both exes") {
@@ -788,7 +789,7 @@ TEST_CASE("signature table has the fog sampler (the shroud at a map teleport's l
     CHECK(d->rva[7] == 0x1222180u);
     CHECK(d->rva[8] == 0xa484b0u);
     for (size_t b = 0; b < 7; ++b) CHECK(d->rva[b] == kRvaUnchecked);
-    CHECK(kSigCount == 96);
+    CHECK(kSigCount == 98);
 }
 
 TEST_CASE("signature table has the water surface query (a map teleport lands on the water, not the lake bed), both exes") {
@@ -822,7 +823,7 @@ TEST_CASE("signature table has the minimap's three (the game's map canvas, the U
         CHECK(absent_on(*d, 8));
         CHECK(d->call_at == w.call_at);
     }
-    CHECK(kSigCount == 96);
+    CHECK(kSigCount == 98);
 }
 
 TEST_CASE("signature table has the four path query calls (API v37 path_find), both exes of 1287369") {
@@ -847,7 +848,7 @@ TEST_CASE("signature table has the four path query calls (API v37 path_find), bo
     }
     // destroy is kind 8, not the kind-7 twin (ResetPathQueryResults keeps the record)
     CHECK(std::string(find_signature("DestroyPathQuery")->pattern).find("41 B0 08") != std::string::npos);
-    CHECK(kSigCount == 96);
+    CHECK(kSigCount == 98);
 }
 
 TEST_CASE("signature table has the path grid's four guards (path.door): door table, metres, nodes, cell list; both exes of 1287369") {
@@ -898,7 +899,7 @@ TEST_CASE("signature table has the path grid's four guards (path.door): door tab
         CHECK(p.find("0F 1F 84 00") == std::string::npos);
         CHECK(p.find("66 90") == std::string::npos);
     }
-    CHECK(kSigCount == 96);
+    CHECK(kSigCount == 98);
 }
 
 TEST_CASE("signature table has the four for breaking blocks (API v44): kernel, region read, config lookup, damage get; both exes of 1287369") {
@@ -932,7 +933,7 @@ TEST_CASE("signature table has the four for breaking blocks (API v44): kernel, r
         CHECK(std::string(d->pattern).find(w.holds) != std::string::npos);
     }
     CHECK(std::string(find_signature("BuildingConfigFind")->pattern).size() >= 52 * 3 - 1);
-    CHECK(kSigCount == 96);
+    CHECK(kSigCount == 98);
 }
 
 TEST_CASE("signature table has the four that read the shipped world's voxels (ruin protection): column acquire, brick seek, brick decode, column release; both exes of 1287369") {

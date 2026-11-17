@@ -36,6 +36,11 @@ EmfBlockInfo decode_voxel(uint16_t v, const MaterialFacts facts[128]) {
 
 std::optional<EmfBlockInfo> first_building_on_line(const float from[3], const float to[3], const VoxelReader& read,
                                                    const MaterialFacts facts[128]) {
+    return first_wall_on_line(from, to, read, facts, {});
+}
+
+std::optional<EmfBlockInfo> first_wall_on_line(const float from[3], const float to[3], const VoxelReader& read,
+                                               const MaterialFacts facts[128], const PlacedTerrain& placed) {
     // in cell units (0.5 m)
     double p[3], d[3];
     for (int a = 0; a < 3; ++a) {
@@ -69,7 +74,10 @@ std::optional<EmfBlockInfo> first_building_on_line(const float from[3], const fl
         if (!read(static_cast<int32_t>(c[0]), static_cast<int32_t>(c[1]), static_cast<int32_t>(c[2]), &v))
             return std::nullopt;
         EmfBlockInfo b = decode_voxel(v, facts);
-        if (b.kind == EMF_BLOCK_BUILDING) {
+        const bool wall = b.kind == EMF_BLOCK_BUILDING ||
+                          (b.kind == EMF_BLOCK_TERRAIN && placed &&
+                           placed(static_cast<int32_t>(c[0]), static_cast<int32_t>(c[1]), static_cast<int32_t>(c[2]), v));
+        if (wall) {
             b.x = static_cast<float>((static_cast<double>(c[0]) + 0.5) / 2.0);
             b.y = static_cast<float>((static_cast<double>(c[1]) + 0.5) / 2.0);
             b.z = static_cast<float>((static_cast<double>(c[2]) + 0.5) / 2.0);

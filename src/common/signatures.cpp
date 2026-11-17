@@ -282,6 +282,10 @@ constexpr SigDef kSignatures[] = {
     {Sig::BlockBrickDecode, "BlockBrickDecode", "48 89 6C 24 18 48 89 74 24 20 48 89 4C 24 08 57 41 54 41 55 41 56 41 57 49 8B 30 48 8B FA 49 8B", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x10cc7d0u, 0x8514b0u}, false},
     {Sig::BlockColumnRelease, "BlockColumnRelease", "4C 8B C9 85 D2 75 05 45 33 C9 EB 5F 48 8B 89 B8 01 00 00 8B C2 25 FF FF", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0x10cc750u, 0x851430u}, false},
     {Sig::HudScreenRead, "HudScreenRead", "44 0F B6 BF ?? ?? ?? ?? 41 80 FF ?? 44 88 BD ?? ?? ?? ?? 48 C7 44 24 78 0E 00 00 00 41 0F 94 C5 0F 94 C0", {kRvaUnchecked, kRvaUnchecked, 0u, kRvaUnchecked, 0u, kRvaUnchecked, 0u, 0xcdc3dcu, 0u}, false},
+    // breaking terrain a player placed (v47): TerrainConfigFind(registry, terrain material) -> its config (stride 0xB8)
+    // or null; VoxelBoxFillAir(editor, 0, voxel data, &{Vec4 lo, Vec4 hi}, &u64 0, 1)
+    {Sig::TerrainConfigFind, "TerrainConfigFind", "4C 8B 51 38 4D 85 D2 74 3A 45 8B 5A 04 33 C9 4D 85 DB 74 2F 4D 63 0A 45 33 C0 66 0F 1F 44 00 00 45 85 C9 75 04 33 C0 EB 04 4B 8D 04 0A 49 03 C0 38 10 74 11 48 FF C1 49 81 C0 B8 00 00 00", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0xe9f270u, 0x9464b0u}, false},
+    {Sig::VoxelBoxFillAir, "VoxelBoxFillAir", "48 8B C4 48 89 58 10 48 89 68 18 48 89 70 20 48 89 48 08 57 41 54 41 55 41 56 41 57 48 81 EC 00", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0xa9aac0u, 0xa453c0u}, false},
 };
 static_assert(std::size(kSignatures) == kSigCount, "one entry per Sig");
 }  // namespace

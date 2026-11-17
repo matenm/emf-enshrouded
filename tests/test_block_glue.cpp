@@ -241,6 +241,48 @@ void f_column_release(void* loader, uint32_t id) {
     ++*static_cast<int*>(loader);
 }
 
+// v47 terrain: the terrain config lookup (Stone 67: VeryHard, 400, 5 cells an item, item 0x43; dirt 5: Soft, 50, 10 cells
+// an item, item 0x05) and the box fill "air" (it clears g_voxels inside the box, as the game's does)
+alignas(4) uint8_t g_tcfg[128][0xB8];
+bool g_box_fill_faults = false;
+const uint8_t* f_terrain_config(void* registry, uint8_t material) {
+    CHECK(registry == g_efficiency);
+    if (material != 67 && material != 5) return nullptr;
+    return g_tcfg[material];
+}
+void set_tcfg(uint8_t m, uint8_t hardness, int32_t health, uint32_t rate, uint8_t guid0) {
+    std::memset(g_tcfg[m], 0, 0xB8);
+    g_tcfg[m][0] = m;
+    g_tcfg[m][4] = guid0;
+    g_tcfg[m][0x14] = hardness;
+    std::memcpy(g_tcfg[m] + 0x18, &rate, 4);
+    std::memcpy(g_tcfg[m] + 0x1C, &health, 4);
+}
+struct BoxFill {
+    float lo[4], hi[4];
+    bool aligned;
+};
+std::vector<BoxFill> g_fills;
+void f_box_fill(void* editor, void* zero, void* voxel_data, const void* box, const void* zero8, uint8_t one) {
+    if (g_box_fill_faults) *static_cast<volatile int*>(nullptr) = 1;
+    CHECK(editor == g_editor);
+    CHECK(zero == nullptr);
+    CHECK(voxel_data == g_voxel_data);
+    CHECK(*static_cast<const uint64_t*>(zero8) == 0);
+    CHECK(one == 1);
+    BoxFill b{};
+    std::memcpy(b.lo, box, 16);
+    std::memcpy(b.hi, static_cast<const uint8_t*>(box) + 16, 16);
+    b.aligned = (reinterpret_cast<uintptr_t>(box) & 15) == 0;
+    g_fills.push_back(b);
+    for (auto it = g_voxels.begin(); it != g_voxels.end();) {
+        const auto [x, y, z] = it->first;
+        const bool in = x / 2.0 >= b.lo[0] && x / 2.0 < b.hi[0] && y / 2.0 >= b.lo[1] && y / 2.0 < b.hi[1] &&
+                        z / 2.0 >= b.lo[2] && z / 2.0 < b.hi[2];
+        it = in ? g_voxels.erase(it) : std::next(it);
+    }
+}
+
 std::vector<std::string> g_log;
 struct Drop {
     uint8_t guid0;
@@ -263,7 +305,7 @@ struct Fixture {
     SystemPrograms programs;
     std::vector<std::function<void(EmfWorld*)>> after;
     FakeProgramCtx ctx;
-    explicit Fixture(bool with_kernel = true, bool with_region = true) : ctx(w.p()) {
+    explicit Fixture(bool with_kernel = true, bool with_region = true, bool with_terrain = true) : ctx(w.p()) {
         programs.reset();
         g_calls.clear();
         g_log.clear();
@@ -304,6 +346,12 @@ struct Fixture {
         d.fns.brick_seek = f_brick_seek;
         d.fns.brick_decode = f_brick_decode;
         d.fns.column_release = f_column_release;
+        d.fns.terrain_config_find = with_terrain ? f_terrain_config : nullptr;
+        d.fns.box_fill_air = with_terrain ? f_box_fill : nullptr;
+        set_tcfg(67, 4, 400, 5, 0x43);
+        set_tcfg(5, 0, 50, 10, 0x05);
+        g_fills.clear();
+        g_box_fill_faults = false;
         g_base.clear();
         g_base_columns.clear();
         g_column_released = g_column_acquired = 0;
@@ -837,4 +885,162 @@ TEST_CASE("block glue: a fault in the material config lookup turns breaking off 
     CHECK(f.ask(0, 0, &why) == 0);
     CHECK(why.find("off") != std::string::npos);
     CHECK(blocks_unavailable_why().find("config") != std::string::npos);
+}
+
+// ---- API v47: terrain a player placed ----
+
+namespace {
+// A Stone wall a player built (cells x 19..20, y 39..40, z 59..60: 9.5..10.5, 19.5..20.5, 29.5..30.5 m) on natural dirt
+// (y 38) next to a natural Stone hill (x 21): the shipped world has the dirt and the hill, nothing where the wall is.
+void terrain_scene() {
+    g_base_columns = {{2, 7}};
+    for (int i = 17; i <= 23; ++i)
+        for (int k = 57; k <= 63; ++k) g_voxels[{i, 38, k}] = g_base[{i, 38, k}] = 0xFF05;
+    for (int j = 39; j <= 40; ++j)
+        for (int k = 59; k <= 60; ++k) {
+            g_voxels[{19, j, k}] = g_voxels[{20, j, k}] = 0xFF43;
+            g_voxels[{21, j, k}] = g_base[{21, j, k}] = 0xFF43;
+        }
+}
+int stone_wall_cells() {
+    int n = 0;
+    for (int i = 19; i <= 20; ++i)
+        for (int j = 39; j <= 40; ++j)
+            for (int k = 59; k <= 60; ++k) n += g_voxels.count({i, j, k}) ? 1 : 0;
+    return n;
+}
+}  // namespace
+
+TEST_CASE("block glue: EMF_BREAK_TERRAIN clears a player's Stone wall, one box fill per column, never the natural dirt or hill") {
+    Fixture f;
+    terrain_scene();
+    REQUIRE(f.ask(EMF_BREAK_TERRAIN | EMF_BREAK_INSTANT) != 0);
+    f.step();
+    REQUIRE(g_fills.size() == 4);
+    for (const BoxFill& b : g_fills) {
+        CHECK(b.aligned);
+        CHECK(b.lo[1] == doctest::Approx(19.5f));  // y 39..40: one fill for the column
+        CHECK(b.hi[1] == doctest::Approx(20.5f));
+        CHECK(b.hi[0] - b.lo[0] == doctest::Approx(0.5f));
+        CHECK(b.hi[2] - b.lo[2] == doctest::Approx(0.5f));
+        CHECK((b.lo[0] == doctest::Approx(9.5f) || b.lo[0] == doctest::Approx(10.0f)));
+    }
+    CHECK(stone_wall_cells() == 0);
+    CHECK(g_voxels.count({21, 39, 59}) == 1);  // the hill
+    CHECK(g_voxels.count({19, 38, 59}) == 1);  // the dirt under the wall
+    CHECK(g_voxels.count({20, 38, 60}) == 1);
+    REQUIRE(g_answers.size() == 1);
+    CHECK(g_answers[0].r.status == EMF_BREAK_DONE);
+    CHECK(g_answers[0].r.removed == 2 + 8);  // the fake kernel's 2 and the wall's 8 cells
+    // without the flag the terrain stays
+    terrain_scene();
+    g_fills.clear();
+    REQUIRE(f.ask(EMF_BREAK_INSTANT) != 0);
+    f.step();
+    CHECK(g_fills.empty());
+    CHECK(stone_wall_cells() == 8);
+}
+
+TEST_CASE("block glue: terrain in damage mode takes the material's hits (Stone: 9 at the default damage) and heals 20 s after the last") {
+    Fixture f;
+    terrain_scene();
+    for (int i = 0; i < 8; ++i) {
+        REQUIRE(f.ask(EMF_BREAK_TERRAIN) != 0);
+        f.step();
+    }
+    CHECK(g_fills.empty());  // 400 / 50 = 8 hits: 31 bytes each, so 9 reach 255
+    REQUIRE(f.ask(EMF_BREAK_TERRAIN) != 0);
+    f.step();
+    CHECK(g_fills.size() == 4);
+    CHECK(stone_wall_cells() == 0);
+    // healed in between: from the start again
+    terrain_scene();
+    g_fills.clear();
+    for (int i = 0; i < 5; ++i) {
+        REQUIRE(f.ask(EMF_BREAK_TERRAIN) != 0);
+        f.step();
+    }
+    g_now += 20001;
+    for (int i = 0; i < 8; ++i) {
+        REQUIRE(f.ask(EMF_BREAK_TERRAIN) != 0);
+        f.step();
+    }
+    CHECK(g_fills.empty());
+}
+
+TEST_CASE("block glue: terrain drops each terrain material's own item; a shipped world not known spares every terrain cell") {
+    Fixture f;
+    terrain_scene();
+    REQUIRE(f.ask(EMF_BREAK_TERRAIN | EMF_BREAK_INSTANT | EMF_BREAK_DROPS) != 0);
+    f.step();  // 8 Stone cells, 5 an item: 1 (3 kept)
+    bool stone = false;
+    for (const auto& d : g_drops) stone = stone || (d.guid0 == 0x43 && d.count == 1);
+    CHECK(stone);
+    Fixture g;
+    terrain_scene();
+    g_base_columns.clear();  // the shipped world's columns not loaded
+    REQUIRE(g.ask(EMF_BREAK_TERRAIN | EMF_BREAK_INSTANT) != 0);
+    g.step();
+    CHECK(g_fills.empty());
+    CHECK(stone_wall_cells() == 8);
+}
+
+TEST_CASE("block glue: without the terrain signatures EMF_BREAK_TERRAIN is refused with the reason; other breaks still run") {
+    Fixture f(true, true, false);
+    std::string why;
+    CHECK(f.ask(EMF_BREAK_TERRAIN, 0, &why) == 0);
+    CHECK(why == "breaking terrain is not available on this game version");
+    CHECK(f.ask(0, 0, &why) != 0);
+}
+
+TEST_CASE("block glue: a fault in the box fill turns breaking off (logged); the request answers FAILED") {
+    Fixture f;
+    terrain_scene();
+    g_box_fill_faults = true;
+    REQUIRE(f.ask(EMF_BREAK_TERRAIN | EMF_BREAK_INSTANT) != 0);
+    f.step();
+    REQUIRE(g_answers.size() == 1);
+    CHECK(g_answers[0].r.status == EMF_BREAK_FAILED);
+    std::string why;
+    CHECK(f.ask(0, 0, &why) == 0);
+    CHECK(why.find("box fill") != std::string::npos);
+    bool said = false;
+    for (const auto& l : g_log) said = said || l.find("box fill") != std::string::npos;
+    CHECK(said);
+}
+
+TEST_CASE("block glue: find_wall with EMF_FIND_TERRAIN stops at terrain a player placed; block_at tells the world's ground from a player's") {
+    Fixture f;
+    terrain_scene();
+    const float from[3] = {8.1f, 20.2f, 29.8f}, to[3] = {12.1f, 20.2f, 29.8f};
+    EmfBlockInfo out{};
+    out.size = sizeof out;
+    std::string why;
+    bool ok = true;
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_find_wall(w, from, to, &out, &why); });
+    CHECK_FALSE(ok);  // terrain is passed over without the flag
+    run_in_callback(f.world(), EMF_WORLD_SERVER,
+                    [&](EmfWorld* w) { ok = blocks_find_wall(w, from, to, &out, &why, EMF_FIND_TERRAIN); });
+    REQUIRE(ok);
+    CHECK(out.kind == EMF_BLOCK_TERRAIN);
+    CHECK(out.material == 67);
+    CHECK(out.world == 0);
+    CHECK(out.x == doctest::Approx(9.75));
+    // from the hill's side: the natural hill is passed over, the wall's far face found
+    run_in_callback(f.world(), EMF_WORLD_SERVER,
+                    [&](EmfWorld* w) { ok = blocks_find_wall(w, to, from, &out, &why, EMF_FIND_TERRAIN); });
+    REQUIRE(ok);
+    CHECK(out.x == doctest::Approx(10.25));
+    // block_at: the hill is the world's own ground, the wall a player's, a cell whose base is not known unknown
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_block_at(w, 10.7f, 20.2f, 29.8f, &out, &why); });
+    REQUIRE(ok);
+    CHECK(out.kind == EMF_BLOCK_TERRAIN);
+    CHECK(out.world == 1);
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_block_at(w, 9.7f, 20.2f, 29.8f, &out, &why); });
+    REQUIRE(ok);
+    CHECK(out.world == 0);
+    g_base_columns.clear();
+    run_in_callback(f.world(), EMF_WORLD_SERVER, [&](EmfWorld* w) { ok = blocks_block_at(w, 9.7f, 20.2f, 29.8f, &out, &why); });
+    REQUIRE(ok);
+    CHECK(out.world == -1);
 }

@@ -58,6 +58,8 @@ std::atomic<bool> g_on{false};
 std::atomic<uint64_t> g_last_run_ms{0};
 std::atomic<bool> g_watchdog_said{false}, g_cb_fault_said{false}, g_kernel_said{false}, g_factor_said{false};
 std::vector<PendingDrop> g_drops;  // inside the program only
+TerrainDamage g_terrain_damage;    // v47: EMF's damage of terrain cells (inside the program only)
+std::atomic<bool> g_terrain_off{false}, g_terrain_facts_said{false};
 
 uint64_t now() { return g_deps.now_ms ? g_deps.now_ms() : GetTickCount64(); }
 void say(const std::string& line) {
@@ -95,6 +97,23 @@ bool call_config(decltype(BlockFns::config_find) fn, void* reg, uint8_t id, cons
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
+}
+bool call_box_fill(decltype(BlockFns::box_fill_air) fn, void* editor, void* voxel_data, const void* box) {
+    __try {
+        const uint64_t zero = 0;
+        fn(editor, nullptr, voxel_data, box, &zero, 1);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// v47: breaking terrain needs the terrain config lookup, the box fill, the voxel read and the shipped world's reader
+// (without it no terrain cell could be judged).
+bool terrain_usable() {
+    const BlockFns& f = g_deps.fns;
+    return !g_terrain_off.load() && f.terrain_config_find && f.box_fill_air && f.region_read && f.column_acquire &&
+           f.brick_seek && f.brick_decode && f.column_release;
 }
 
 // Drops, then each callback under its own guard, after the step on the server world's thread.
@@ -158,6 +177,7 @@ float mining_factor(void* balancing) {
 }
 
 float shrink_sphere(void* editor, const Sphere& s, const float table[256]);  // below, after the reads
+bool terrain_pass(const BlockHandles& h, const Sphere& s, const float table[128], bool instant, KernelCount* k);
 
 void blocks_program(void* ctx, void*) {
     if (!g_service) return;
@@ -213,6 +233,13 @@ void blocks_program(void* ctx, void*) {
         return true;
     };
     e.shrink = [&](const Sphere& s, const float table[256]) -> float { return shrink_sphere(h.editor, s, table); };
+    if (terrain_usable()) {  // v47 EMF_BREAK_TERRAIN
+        e.terrain_facts = [&](MaterialFacts out[128]) { return blocks_read_terrain_facts(h.efficiency, out); };
+        e.terrain = [&](const Sphere& s, const float table[128], bool instant, KernelCount* k) -> bool {
+            if (!g_on.load()) return false;
+            return terrain_pass(h, s, table, instant, k);
+        };
+    }
     e.drop = [&](const uint8_t guid[16], uint32_t count, const float pos[3]) -> uint32_t {
         PendingDrop d{};
         std::memcpy(d.guid, guid, 16);
@@ -455,10 +482,63 @@ float shrink_sphere(void* editor, const Sphere& s, const float table[256]) {
     });
 }
 
+// v47 EMF_BREAK_TERRAIN, one sphere: its box read at once, each terrain cell judged against the shipped world
+// (terrain_sphere: only a player's), the cells that went cleared with one box fill per column run. Not loaded or not
+// readable: nothing (true). A fault in the box fill: false (breaking goes off).
+bool terrain_pass(const BlockHandles& h, const Sphere& s, const float table[128], bool instant, KernelCount* k) {
+    int32_t lo[3];
+    uint32_t n[3];
+    const double c[3] = {s.x, s.y, s.z};
+    for (int a = 0; a < 3; ++a) {
+        lo[a] = static_cast<int32_t>(std::floor((c[a] - s.r) * 2.0));
+        const auto hi = static_cast<int32_t>(std::floor((c[a] + s.r) * 2.0));
+        n[a] = static_cast<uint32_t>(hi - lo[a] + 1);
+        if (n[a] > 16) return true;  // larger than the game's own reads (radius <= 3.5: at most 15)
+    }
+    if (!g_deps.fns.region_read || g_reads_off.load()) return true;
+    std::vector<uint16_t> cells(static_cast<size_t>(n[0]) * n[1] * n[2], 0);
+    const ReadReq q{cells.data(), cells.size(), n[0], n[1], n[2], kReadLevel, lo[0], lo[1], lo[2], 0};
+    const ReadSlice sl{&q, 1};
+    bool ok = false;
+    if (!call_region(g_deps.fns.region_read, &sl, h.editor, &ok)) {
+        if (!g_reads_off.exchange(true)) say("block reads off (the game's voxel region read faulted)");
+        return true;
+    }
+    if (!ok) return true;  // part of the box is not loaded: every cell spared
+    auto cache = std::make_unique<BaseCache>();
+    cache->editor = h.editor;
+    const uint64_t t = now();
+    g_terrain_damage.heal(t);
+    const TerrainPassResult res =
+        terrain_sphere(s, table, instant, g_terrain_damage, t, [&](int32_t i, int32_t j, int32_t kk) -> TerrainCellRead {
+            TerrainCellRead r;
+            const int64_t di = i - lo[0], dj = j - lo[1], dk = kk - lo[2];
+            if (di < 0 || dj < 0 || dk < 0 || di >= n[0] || dj >= n[1] || dk >= n[2]) return r;  // outside the read box
+            r.ok = true;
+            r.cur = cells[static_cast<size_t>(di) + n[0] * (static_cast<size_t>(dj) + n[1] * static_cast<size_t>(dk))];
+            const uint32_t m = r.cur & 0xFFu;
+            if (m != 0 && m < 0x80 && (r.cur >> 8) != 0) r.base_known = cache->cell(i, j, kk, &r.base);  // terrain only
+            return r;
+        });
+    for (const TerrainRun& run : res.runs) {
+        alignas(16) float box[8] = {run.x / 2.0f,       run.y0 / 2.0f,       run.z / 2.0f,       0.0f,
+                                    (run.x + 1) / 2.0f, (run.y1 + 1) / 2.0f, (run.z + 1) / 2.0f, 0.0f};
+        if (!call_box_fill(g_deps.fns.box_fill_air, h.editor, h.voxel_data, box)) {
+            turn_off("off (the game's box fill faulted); breaks are refused until a restart");
+            return false;
+        }
+    }
+    k->damaged += res.damaged;
+    k->removed += res.removed;
+    for (int m = 0; m < 128; ++m) k->removed_per_material[m] += res.removed_per_material[m];
+    return true;
+}
+
 struct Reads {
     void* editor = nullptr;
     void* damage_store = nullptr;
     MaterialFacts facts[128] = {};
+    MaterialFacts terrain[128] = {};  // v47: by terrain material (unknown: 0 hardness and health)
 };
 
 bool reads_for(EmfWorld* w, Reads& r, std::string* why) {
@@ -473,8 +553,17 @@ bool reads_for(EmfWorld* w, Reads& r, std::string* why) {
     const auto* vw = static_cast<const uint8_t*>(view.singleton("VoxelWorld"));
     if (!vw || !seh_read(vw + 8, &r.editor, 8) || !r.editor) return refuse("the world has no voxel editor yet");
     blocks_read_facts(view.singleton("TerraformingEfficiencyRegistry"), r.facts);  // unknown facts: 0 health
+    if (g_deps.fns.terrain_config_find && !g_terrain_off.load())
+        blocks_read_terrain_facts(view.singleton("TerraformingEfficiencyRegistry"), r.terrain);
     r.damage_store = view.singleton("ServerVoxelDamageSystem");
     return true;
+}
+
+// A terrain cell's hardness and health are its terrain material's (v47); building cells have theirs from decode_voxel.
+void fill_terrain_facts(const Reads& r, EmfBlockInfo& b) {
+    if (b.kind != EMF_BLOCK_TERRAIN || b.material >= 128 || !r.terrain[b.material].known) return;
+    b.hardness = r.terrain[b.material].hardness;
+    b.health = r.terrain[b.material].health;
 }
 
 VoxelReader reader_of(const Reads& r) {
@@ -500,16 +589,17 @@ void fill_damage(const Reads& r, EmfBlockInfo& b) {
     if (call_damage(g_deps.fns.damage_get, r.damage_store, cell, &d)) b.damage = d;
 }
 
-// EmfBlockInfo.world (v45) for the cell whose voxel is v.
+// EmfBlockInfo.world (v45) for the cell whose voxel is v; for a terrain cell (v47) 1 the world's own ground, 0 a
+// player placed it, -1 not known.
 void fill_world(const Reads& r, EmfBlockInfo& b, uint16_t v) {
     b.world = 0;
-    if (b.kind != EMF_BLOCK_BUILDING) return;
+    if (b.kind != EMF_BLOCK_BUILDING && b.kind != EMF_BLOCK_TERRAIN) return;
     auto cache = std::make_unique<BaseCache>();
     cache->editor = r.editor;
     uint16_t base = 0;
     const bool known = cache->cell(static_cast<int32_t>(std::floor(b.x * 2.0f)), static_cast<int32_t>(std::floor(b.y * 2.0f)),
                                    static_cast<int32_t>(std::floor(b.z * 2.0f)), &base);
-    b.world = world_verdict(v, known, base);
+    b.world = b.kind == EMF_BLOCK_BUILDING ? world_verdict(v, known, base) : terrain_verdict(v, known, base);
 }
 
 }  // namespace
@@ -532,6 +622,7 @@ bool blocks_block_at(EmfWorld* w, float x, float y, float z, EmfBlockInfo* out, 
     b.x = (static_cast<float>(cx) + 0.5f) / 2.0f;
     b.y = (static_cast<float>(cy) + 0.5f) / 2.0f;
     b.z = (static_cast<float>(cz) + 0.5f) / 2.0f;
+    fill_terrain_facts(*r, b);
     fill_damage(*r, b);
     fill_world(*r, b, v);
     *out = b;
@@ -569,18 +660,35 @@ bool blocks_origin(EmfWorld* w, float x, float y, float z, BlockOrigin* out, std
 
 void blocks_base_reader_off_for_test(bool off) { g_base_test_off = off; }
 
-bool blocks_find_wall(EmfWorld* w, const float from[3], const float to[3], EmfBlockInfo* out, std::string* why) {
+bool blocks_find_wall(EmfWorld* w, const float from[3], const float to[3], EmfBlockInfo* out, std::string* why,
+                      uint32_t flags) {
     if (why) why->clear();
     for (int a = 0; a < 3; ++a)
         if (!std::isfinite(from[a]) || !std::isfinite(to[a])) {
             if (why) *why = "a point is not a number";
             return false;
         }
+    if (flags & ~EMF_FIND_TERRAIN) {
+        if (why) *why = "unknown flags";
+        return false;
+    }
     auto r = std::make_unique<Reads>();
     if (!reads_for(w, *r, why)) return false;
-    const auto hit = first_building_on_line(from, to, reader_of(*r), r->facts);
+    // v47 EMF_FIND_TERRAIN: also a terrain cell a player placed (the shipped world had no ground there); a cell whose
+    // shipped state is not known is passed over
+    auto cache = std::make_unique<BaseCache>();
+    cache->editor = r->editor;
+    PlacedTerrain placed;
+    if (flags & EMF_FIND_TERRAIN)
+        placed = [&](int32_t x, int32_t y, int32_t z, uint16_t v) {
+            uint16_t base = 0;
+            const bool known = cache->cell(x, y, z, &base);
+            return terrain_verdict(v, known, base) == 0;
+        };
+    const auto hit = first_wall_on_line(from, to, reader_of(*r), r->facts, placed);
     if (!hit) return false;
     EmfBlockInfo b = *hit;
+    fill_terrain_facts(*r, b);
     fill_damage(*r, b);
     const auto cx = static_cast<int32_t>(std::floor(b.x * 2.0f)), cy = static_cast<int32_t>(std::floor(b.y * 2.0f)),
                cz = static_cast<int32_t>(std::floor(b.z * 2.0f));
@@ -626,11 +734,37 @@ bool blocks_read_facts(void* efficiency, MaterialFacts out[128]) {
     return true;
 }
 
+bool blocks_read_terrain_facts(void* efficiency, MaterialFacts out[128]) {
+    for (uint32_t m = 0; m < 128; ++m) out[m] = MaterialFacts{};
+    if (!g_deps.fns.terrain_config_find || !efficiency || g_terrain_off.load()) return false;
+    for (uint32_t m = 1; m < 128; ++m) {
+        const uint8_t* cfg = nullptr;
+        if (!call_config(g_deps.fns.terrain_config_find, efficiency, static_cast<uint8_t>(m), &cfg)) {
+            g_terrain_off = true;
+            if (!g_terrain_facts_said.exchange(true))
+                say("the game's terrain config lookup faulted: breaking terrain is off until a restart");
+            for (uint32_t i = 0; i < 128; ++i) out[i] = MaterialFacts{};
+            return false;
+        }
+        if (!cfg) continue;
+        MaterialFacts f;
+        if (!seh_read(cfg + kCfgHardness, &f.hardness, 1) || !seh_read(cfg + kCfgLootRate, &f.loot_rate, 4) ||
+            !seh_read(cfg + kCfgHealth, &f.health, 4) || !seh_read(cfg + kCfgItem, f.item_guid, 16))
+            continue;
+        if (f.hardness > 5 || f.health < 0) continue;  // not the layout EMF knows: never broken
+        f.known = true;
+        out[m] = f;
+    }
+    return true;
+}
+
 ProgramSpec blocks_setup(BlockGlueDeps deps) {
     g_on = false;
     g_deps = std::move(deps);
     g_service = std::make_unique<BlockService>();
     g_drops.clear();
+    g_terrain_damage.clear();
+    g_terrain_off = g_terrain_facts_said = false;
     g_watchdog_said = g_cb_fault_said = g_kernel_said = g_factor_said = false;
     g_reads_off = false;
     g_base_off = false;
@@ -656,6 +790,12 @@ uint32_t blocks_request(const EmfBreakBlocks& r, EmfBreakCallback cb, void* user
         if (why) *why = blocks_unavailable_why();
         return 0;
     }
+    if ((r.flags & EMF_BREAK_TERRAIN) && !terrain_usable()) {
+        if (why)
+            *why = g_terrain_off.load() ? "breaking terrain is off (the game's terrain config lookup faulted) until a restart"
+                                        : "breaking terrain is not available on this game version";
+        return 0;
+    }
     return g_service->request(r, cb, user, why);
 }
 
@@ -669,6 +809,7 @@ void blocks_world_reset() {
     g_watchdog_said = false;
     g_last_run_ms = now();
     if (g_service) deliver(g_service->world_reset(), {});
+    g_terrain_damage.clear();  // another world's cells
 }
 
 void blocks_server_tick(uint64_t now_ms) {

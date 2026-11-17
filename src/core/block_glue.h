@@ -33,6 +33,12 @@ struct BlockFns {
     bool (*brick_seek)(void* handle_at_0x30, uint32_t by) = nullptr;
     void (*brick_decode)(uint8_t result[8], void* out_slice, void* in_slice) = nullptr;
     void (*column_release)(void* loader, uint32_t id) = nullptr;
+    // v47 terrain a player placed (EMF_BREAK_TERRAIN): the terrain config lookup (TerrainTerraformingConfig by terrain
+    // material, the building config's offsets) and the box fill "air" the building kernel removes a block with:
+    // fill(editor, 0, voxel data, &{Vec4 lo, Vec4 hi} (16-byte aligned, metres), &u64 0, 1)
+    const uint8_t* (*terrain_config_find)(void* registry, uint8_t terrain_material) = nullptr;
+    void (*box_fill_air)(void* editor, void* zero, void* voxel_data, const void* box, const void* zero8,
+                         uint8_t one) = nullptr;
 };
 
 // What one step's program call holds.
@@ -78,8 +84,11 @@ void blocks_stop(const std::string& why = "off (the emf_blocks program could not
 
 // block_at / find_wall (API v44), on the server world's thread between steps (inside a world callback): the voxel at a
 // point, the first building block on a line. False and *why when refused ("" with false: find_wall's line is clear).
+// v47: a terrain cell's world is 1 (the world's own ground), 0 (a player placed it) or -1 (not known), and its hardness
+// and health are its terrain material's; find_wall with EMF_FIND_TERRAIN also stops at terrain a player placed.
 bool blocks_block_at(EmfWorld* w, float x, float y, float z, EmfBlockInfo* out, std::string* why);
-bool blocks_find_wall(EmfWorld* w, const float from[3], const float to[3], EmfBlockInfo* out, std::string* why);
+bool blocks_find_wall(EmfWorld* w, const float from[3], const float to[3], EmfBlockInfo* out, std::string* why,
+                      uint32_t flags = 0);
 
 // The `blocks origin` probe (ruin protection): one cell now, the shipped world's cell there, and the verdict; on the
 // server world's thread between steps (inside a world callback). False and *why when refused or not loaded.
@@ -89,5 +98,7 @@ void blocks_base_reader_off_for_test(bool off);
 
 // The material facts of every building id through the config lookup (false: the lookup is missing or faulted).
 bool blocks_read_facts(void* efficiency_registry, MaterialFacts out[128]);
+// The same for every terrain material 1..127 through the terrain config lookup (v47).
+bool blocks_read_terrain_facts(void* efficiency_registry, MaterialFacts out[128]);
 
 }  // namespace emf::core

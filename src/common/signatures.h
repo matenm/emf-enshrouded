@@ -77,6 +77,10 @@ enum class Sig : size_t {
     // the chat key gate: the chat window's read of the HUD screen byte in UiPlayData (movzx r15d, byte [rdi+off];
     // cmp r15b, TextChat): the offset is the u32 at +4, TextChat (0x2b) the byte at +11. Client only.
     HudScreenRead,
+    // breaking terrain a player placed (API v47), both exes: the terrain config lookup (TerrainTerraformingConfig by
+    // terrain material) and the box fill "air" the building kernel removes a block with (private research
+    // wall_damage_2026-11-15.md 13.1; the terrain walls design 2026-11-18)
+    TerrainConfigFind, VoxelBoxFillAir,
     _Count
 };
 constexpr size_t kSigCount = static_cast<size_t>(Sig::_Count);

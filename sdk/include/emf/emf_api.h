@@ -833,6 +833,8 @@ typedef void (*EmfMoveCallback)(EmfWorld* world, uint32_t id, uint32_t status, v
                                   heals 20 s after the last hit); EMF_BREAK_INSTANT and EMF_BREAK_DROPS apply; materials
                                   lists building ids only. A cell whose shipped state is not known is never broken. An
                                   older core refuses the flag */
+#define EMF_FIND_TERRAIN 0x1u  /* API v47 find_wall_ex: stop at a terrain cell a player placed too (other terrain is
+                                  passed over) */
 #define EMF_BREAK_DONE 0u
 #define EMF_BREAK_CANCELLED 1u /* the world ended first */
 #define EMF_BREAK_FAILED 2u    /* a game call faulted: breaking is off until a restart */

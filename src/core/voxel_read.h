@@ -27,4 +27,10 @@ EmfBlockInfo decode_voxel(uint16_t v, const MaterialFacts facts[128]);
 std::optional<EmfBlockInfo> first_building_on_line(const float from[3], const float to[3], const VoxelReader& read,
                                                    const MaterialFacts facts[128]);
 
+// The same, also stopping at a terrain cell for which placed(x, y, z, voxel) says a player placed it (v47,
+// EMF_FIND_TERRAIN); other terrain is passed over. An empty placed: building cells only.
+using PlacedTerrain = std::function<bool(int32_t vx, int32_t vy, int32_t vz, uint16_t voxel)>;
+std::optional<EmfBlockInfo> first_wall_on_line(const float from[3], const float to[3], const VoxelReader& read,
+                                               const MaterialFacts facts[128], const PlacedTerrain& placed);
+
 }  // namespace emf::core

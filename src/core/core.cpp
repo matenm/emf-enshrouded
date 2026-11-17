@@ -1775,6 +1775,10 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
         deps.fns.brick_seek = reinterpret_cast<decltype(deps.fns.brick_seek)>(addr(emf::Sig::BlockBrickSeek));
         deps.fns.brick_decode = reinterpret_cast<decltype(deps.fns.brick_decode)>(addr(emf::Sig::BlockBrickDecode));
         deps.fns.column_release = reinterpret_cast<decltype(deps.fns.column_release)>(addr(emf::Sig::BlockColumnRelease));
+        // v47 terrain a player placed: without these two EMF_BREAK_TERRAIN is refused, the rest of breaking works
+        deps.fns.terrain_config_find =
+            reinterpret_cast<decltype(deps.fns.terrain_config_find)>(addr(emf::Sig::TerrainConfigFind));
+        deps.fns.box_fill_air = reinterpret_cast<decltype(deps.fns.box_fill_air)>(addr(emf::Sig::VoxelBoxFillAir));
         deps.after_step = [](std::function<void(EmfWorld*)> fn) {
             auto* job = new std::function<void(EmfWorld*)>(std::move(fn));
             g_state->dispatcher.post(EMF_WORLD_SERVER, [](EmfWorld* w, void* u) {
