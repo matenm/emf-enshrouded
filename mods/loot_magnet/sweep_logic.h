@@ -138,7 +138,8 @@ inline Kind classify(const Thing& t) {
     // a bee hive (one hit: honey and wax on the ground, and a wasp swarm): known by what it spawns when destroyed, since
     // fog nest resources and the Flame Power capsules carry the same parts
     if (t.bee_hive)
-        return t.destructible && !t.hive_triggered && !t.faction && !t.actor && !t.used_item && !t.enemy_spawner
+        return t.destructible && !t.hive_triggered && !t.faction && !t.actor && !t.used_item && !t.enemy_spawner &&
+                       !t.inventory && !t.setup  // a beehive that holds things is a player's
                    ? Kind::Hive
                    : Kind::None;
     if (t.random_loot && t.random_container && t.loot_on_destroy && t.destructible && !t.offer && !t.inventory &&

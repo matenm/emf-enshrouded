@@ -581,12 +581,14 @@ TEST_CASE("sweep: a bee hive is smashed with its own group (off by default), not
     Thing other = hive(1);
     other.bee_hive = false;  // a fog nest's resource, a Flame Power capsule, a campfire
     CHECK(classify(other) == Kind::None);
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 6; ++i) {
         Thing h = hive(1);
         if (i == 0) h.faction = true;
         if (i == 1) h.used_item = true;
         if (i == 2) h.hive_triggered = true;  // already broken open
         if (i == 3) h.disabled = true;
+        if (i == 4) h.inventory = true;  // a hive that holds things (a player's beehive makes honey into one)
+        if (i == 5) h.setup = true;
         CHECK(classify(h) == Kind::None);
     }
     CHECK_FALSE(SweepRules{}.group(Kind::Hive).on);
