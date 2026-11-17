@@ -54,21 +54,47 @@ def landmarks(points):
             "top": top, "width": max(abs(p.x) for p in band), "belly": min(inner) if inner else (top + zmin) / 2}
 
 
+def centre_x(points, c):
+    """The x of a creature's centre line: the middle of its trunk's width (between the front and the hind feet,
+    above the belly). The middle of the whole body's width is off it when a tail or a turned head swings out to
+    one side."""
+    xs = [p.x for p in points if c["front"] <= p.y <= c["back"] and p.z >= c["belly"]]
+    return (min(xs) + max(xs)) / 2 if xs else 0.0
+
+
+def _stretch(c, t):
+    """(the creature's higher ground, its belly, how many times longer than down to that ground its legs are at t,
+    0 at the front feet and 1 at the hind feet): 1 everywhere for a creature that stands level; a creature whose
+    own pairs of feet hang at different heights (made in a game body's rest pose) has one pair's legs longer."""
+    base = max(c["ground_front"], c["ground_back"])
+    belly = c["belly"]
+    if belly <= base:
+        return base, belly, 1.0
+    kf = (belly - c["ground_front"]) / (belly - base)
+    kb = (belly - c["ground_back"]) / (belly - base)
+    return base, belly, kf + (kb - kf) * t
+
+
 def fit_z(z, y, c, g):
     """The height on the game body `g` of a creature point at height z (landmarks `c`) and at the game's y.
 
-    The creature's feet go to the game's higher pair of feet and its top to the game's top (a uniform scale). Below the
-    game's belly the legs then stretch, evenly down to the feet, so that the other pair reaches its own ground: the
-    front pair at the front feet's y, the hind pair at the hind feet's y, blended in between."""
+    The creature's higher pair of feet goes to the game's higher pair of feet and its top to the game's top (a uniform
+    scale). Below the game's belly the legs then stretch, evenly down to the feet, so that the other pair reaches its
+    own ground: the front pair at the front feet's y, the hind pair at the hind feet's y, blended in between. A
+    creature whose own pairs of feet hang at different heights is taken level first (its longer legs shortened
+    below its belly), so its own stretch is not added to the game's."""
     base = max(g["ground_front"], g["ground_back"])
-    sz = (g["top"] - base) / ((c["top"] - c["ground"]) or 1e-6)
-    zz = base + (z - c["ground"]) * sz
+    t = min(1.0, max(0.0, (y - g["front"]) / ((g["back"] - g["front"]) or 1e-6)))
+    cbase, cbelly, ck = _stretch(c, t)
+    if z < cbelly:
+        z = cbelly - (cbelly - z) / ck
+    sz = (g["top"] - base) / ((c["top"] - cbase) or 1e-6)
+    zz = base + (z - cbase) * sz
     belly = g["belly"]
     if zz >= belly or belly <= base:
         return zz
     kf = (belly - g["ground_front"]) / (belly - base)
     kb = (belly - g["ground_back"]) / (belly - base)
-    t = min(1.0, max(0.0, (y - g["front"]) / ((g["back"] - g["front"]) or 1e-6)))
     return belly - (belly - zz) * (kf + (kb - kf) * t)
 
 
@@ -94,15 +120,17 @@ def unwarp_y(y, c, g, keep_head=False):
 def unfit_z(z, y, c, g):
     """The creature's height of a game-body height z at the game's y (the inverse of fit_z)."""
     base = max(g["ground_front"], g["ground_back"])
-    sz = (g["top"] - base) / ((c["top"] - c["ground"]) or 1e-6)
+    t = min(1.0, max(0.0, (y - g["front"]) / ((g["back"] - g["front"]) or 1e-6)))
+    cbase, cbelly, ck = _stretch(c, t)
+    sz = (g["top"] - base) / ((c["top"] - cbase) or 1e-6)
     belly = g["belly"]
     zz = z
     if z < belly and belly > base:
         kf = (belly - g["ground_front"]) / (belly - base)
         kb = (belly - g["ground_back"]) / (belly - base)
-        t = min(1.0, max(0.0, (y - g["front"]) / ((g["back"] - g["front"]) or 1e-6)))
         zz = belly - (belly - z) / (kf + (kb - kf) * t)
-    return c["ground"] + (zz - base) / sz
+    own = cbase + (zz - base) / sz
+    return cbelly - (cbelly - own) * ck if own < cbelly else own
 
 
 def warp(p, c, g, sx, keep_head=False):
@@ -118,11 +146,12 @@ def unwarp(p, c, g, sx, keep_head=False):
 
 def own_space(p, c, g, size=1.0):
     """A point of the creature's own shape at the game body's size: a uniform scale (the fit's height scale times
-    size) that puts the creature's front feet on the ground where the game's front feet stand (at the higher of the
-    game's two grounds)."""
+    size) that puts the creature's front feet where the game's front feet stand along the body and the higher of its
+    two grounds at the higher of the game's two grounds."""
     base = max(g["ground_front"], g["ground_back"])
-    k = (g["top"] - base) / ((c["top"] - c["ground"]) or 1e-6) * size
-    return p.x * k, g["front"] + (p.y - c["front"]) * k, base + (p.z - c["ground"]) * k
+    cbase = max(c["ground_front"], c["ground_back"])
+    k = (g["top"] - base) / ((c["top"] - cbase) or 1e-6) * size
+    return p.x * k, g["front"] + (p.y - c["front"]) * k, base + (p.z - cbase) * k
 
 
 def width_scale(c, g, mode="fit"):
@@ -136,7 +165,8 @@ def width_scale(c, g, mode="fit"):
         return g["width"] / (c["width"] or 1e-6)
     if mode == "keep":
         length = (g["back"] - g["front"]) / ((c["back"] - c["front"]) or 1e-6)
-        height = (g["top"] - max(g["ground_front"], g["ground_back"])) / ((c["top"] - c["ground"]) or 1e-6)
+        height = ((g["top"] - max(g["ground_front"], g["ground_back"]))
+                  / ((c["top"] - max(c["ground_front"], c["ground_back"])) or 1e-6))
         return (length + height) / 2
     return float(mode)
 

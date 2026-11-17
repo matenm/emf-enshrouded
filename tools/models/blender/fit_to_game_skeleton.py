@@ -44,7 +44,7 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from quad_landmarks import (clean_detail_weights, fit_z, kept_head_bones, landmarks, leg_chains,  # noqa: E402
+from quad_landmarks import (centre_x, clean_detail_weights, fit_z, kept_head_bones, landmarks, leg_chains,  # noqa: E402
                             main_bones, own_space, rigid_weights, side_weights, tail_slices, unwarp, warp_y,
                             width_scale)
 from quad_landmarks import along, tail_chain_weights, tail_curve, tail_distances  # noqa: E402
@@ -171,6 +171,13 @@ def world_points(objs):
 
 g = landmarks(world_points([o for o in game_meshes if o is uv_source] or game_meshes))
 c = landmarks(world_points([body]))
+# the creature's centre line onto the game's (x = 0): a tail out to one side puts a model's body off its middle
+off_x = centre_x(world_points([body]), c)
+for v in body.data.vertices:
+    v.co.x -= off_x
+body.data.update()
+c = landmarks(world_points([body]))
+print("FIT centre line: the creature moved %.3f sideways" % -off_x)
 
 
 sx = width_scale(c, g, width_mode)
@@ -405,7 +412,7 @@ if own_path:
     base = max(g["ground_front"], g["ground_back"])
     with open(os.path.abspath(own_path), "w", encoding="utf-8") as f:
         json.dump({"space": "Blender after the glTF import (forward -y, up +z, width x), the game armature's world",
-                   "ground": base, "scale": (g["top"] - base) / ((c["top"] - c["ground"]) or 1e-6) * size,
+                   "ground": base, "scale": (g["top"] - base) / ((c["top"] - max(c["ground_front"], c["ground_back"])) or 1e-6) * size,
                    "joints": joints}, f, indent=1)
     print("FIT own proportions: %d joints moved into the creature's shape, sidecar %s" % (len(joints), own_path))
 
@@ -432,6 +439,6 @@ try:
     bpy.ops.export_scene.gltf(export_vertex_color="ACTIVE" if vertex_colors else "NONE", **kw)
 except TypeError:
     bpy.ops.export_scene.gltf(**kw)
-sz = (g["top"] - max(g["ground_front"], g["ground_back"])) / ((c["top"] - c["ground"]) or 1e-6)
+sz = (g["top"] - max(g["ground_front"], g["ground_back"])) / ((c["top"] - max(c["ground_front"], c["ground_back"])) or 1e-6)
 print("FIT game", {k: round(v, 3) for k, v in g.items()}, "creature", {k: round(v, 3) for k, v in c.items()},
       "scales x %.3f z %.3f" % (sx, sz), "verts", len(body.data.vertices))

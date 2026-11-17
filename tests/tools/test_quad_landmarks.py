@@ -86,10 +86,27 @@ class HeightTests(unittest.TestCase):
         # halfway down the leg (0.4 of 0.8 m) maps halfway down the game's longer leg (0.8 + 0.35 m)
         self.assertAlmostEqual(ql.fit_z(0.4, -0.8, self.c, self.g), 0.8 - 0.575, delta=1e-6)
 
+    def test_a_creature_made_in_the_game_bodys_pose_is_not_stretched_again(self):
+        """A creature whose own front paws hang as low as the game body's (a model made from pictures of the game
+        body's rest pose): every height maps to itself, and unwarp undoes it."""
+        c = ql.landmarks(quadruped(front_ground=-0.35))
+        for z, y in ((-0.35, -0.8), (0.2, -0.8), (0.0, 0.7), (0.4, 0.7), (1.1, 0.0)):
+            self.assertAlmostEqual(ql.fit_z(z, y, c, self.g), z, delta=1e-6, msg=(z, y))
+            self.assertAlmostEqual(ql.unfit_z(ql.fit_z(z, y, c, self.g), y, c, self.g), z, delta=1e-6, msg=(z, y))
+        # its own shape stands with the higher pair of feet on the game's higher ground
+        self.assertAlmostEqual(ql.own_space(P(0.0, c["back"], 0.0), c, self.g)[2], 0.0, delta=1e-9)
+
     def test_a_level_game_body_is_a_plain_scale(self):
         g = ql.landmarks(quadruped())
         self.assertAlmostEqual(ql.fit_z(0.4, -0.8, self.c, g), 0.4, delta=1e-6)
         self.assertAlmostEqual(ql.fit_z(0.0, 0.7, self.c, g), 0.0, delta=1e-6)
+
+
+class CentreTests(unittest.TestCase):
+    def test_a_tail_out_to_one_side_does_not_move_the_centre_line(self):
+        pts = [P(p.x + 0.1, p.y, p.z) for p in quadruped()]
+        pts += [P(0.1 + 0.05 * i, 1.0 + 0.05 * i, 1.2) for i in range(1, 20)]      # a tail swinging out to +x
+        self.assertAlmostEqual(ql.centre_x(pts, ql.landmarks(pts)), 0.1, delta=1e-9)
 
 
 class InverseWarpTests(unittest.TestCase):
