@@ -85,7 +85,7 @@ general **Reach**):
 | Wild plants (`pick_plants`) | off | herbs, flowers, bushes and wild crops you collect with E, and wild shiitake (it grows like a plant); a plant is gone once collected, as by hand |
 | Chests in ruins (`open_chests`) | off | the chests the game placed in the world: it opens them as you would (the game rolls their loot), then empties them; a chest it emptied is remembered for that world (`emf\config\loot_magnet_chests`), so it is not opened again after a reload |
 | Smash barrels, crates and urns (`smash`) | off | only those that drop loot: one hit with their own health; the drop lies on the ground, and Items on the ground picks it up |
-| Smash bee hives (`smash_hives`) | off | experimental: one hit breaks a wild bee hive open; its honey and wax drop on the ground (Items on the ground picks them up) and **a wasp swarm comes out and attacks** |
+| Smash bee hives (`smash_hives`) | off | experimental: one hit breaks a wild bee hive open; its honey and wax drop on the ground (Items on the ground picks them up) and **a wasp swarm may come out and attack** |
 
 Never:
 - **Inside a base:** within **Never within (m) of a flame altar**. Smashing keeps 10 m more away. So your chests and
