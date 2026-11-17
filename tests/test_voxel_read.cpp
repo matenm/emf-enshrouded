@@ -74,7 +74,14 @@ TEST_CASE("voxel read: a building block is building whatever its high byte (bloc
     CHECK(decode_voxel(0x008f, g_facts).kind == EMF_BLOCK_BUILDING);
     CHECK(decode_voxel(0x009b, g_facts).kind == EMF_BLOCK_BUILDING);
     CHECK(decode_voxel(0x00b1, g_facts).kind == EMF_BLOCK_BUILDING);
+    const EmfBlockInfo first = decode_voxel(0x0080, g_facts);  // the edges: building id 0 and id 127, unpainted
+    CHECK(first.kind == EMF_BLOCK_BUILDING);
+    CHECK(first.material == 0);
+    const EmfBlockInfo last = decode_voxel(0x00FF, g_facts);
+    CHECK(last.kind == EMF_BLOCK_BUILDING);
+    CHECK(last.material == 127);
     CHECK(decode_voxel(0x0005, g_facts).kind == EMF_BLOCK_EMPTY);  // terrain without fill stays empty
+    CHECK(decode_voxel(0x007F, g_facts).kind == EMF_BLOCK_EMPTY);  // the last terrain material, no fill
     FakeVoxels v;
     v.cells[{10, 2, 2}] = 0x0087;
     const float from[3] = {0.1f, 1.1f, 1.1f}, to[3] = {10.1f, 1.1f, 1.1f};

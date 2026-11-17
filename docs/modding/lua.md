@@ -855,8 +855,9 @@ all mods; the rest wait.
 line at most 64 m) give `{kind = "empty" | "terrain" | "building", material, fill, hardness, health, damage, x, y, z,
 world}` (1.38: `world` is `true` for the world's own block, a ruin as shipped, `false` for a player's, nil when not known
 or not a building block)
-(`hardness` 0 Soft .. 4 VeryHard, 5 Unbreakable; `damage` 0..255 so far, nil when unknown; `fill` the cell's high byte:
-terrain's fill, for a building block not a fill, 0 for blocks a player placed; `x, y, z` the block's centre), or nil (the line is clear, the place is not loaded, not the server world, an older core). Inside a world
+(`hardness` 0 Soft .. 4 VeryHard, 5 Unbreakable; `damage` 0..255 so far, nil when unknown; `fill` the cell's high
+byte: terrain's fill; for a building block its paint, bit 7 weathered and bits 4-6 overgrowth, 0 unpainted, not a sign
+of who placed it (see `world`); `x, y, z` the block's centre), or nil (the line is clear, the place is not loaded, not the server world, an older core). Inside a world
 callback on the server world, like `world:get`.
 
 ```lua

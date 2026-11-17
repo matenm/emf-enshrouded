@@ -223,7 +223,9 @@ TEST_CASE("block rules: world_verdict: a building cell whose material equals the
     CHECK(world_verdict(0xFF05, true, 0xFF05) == 0);   // terrain
     CHECK(world_verdict(0xFF8A, true, 0xFF8A) == 1);   // a ruin's stone as the game shipped it
     CHECK(world_verdict(0x7F8A, true, 0xFF8A) == 1);   // the same with other paint (decay, overgrowth: the high byte)
+    CHECK(world_verdict(0x008A, true, 0xFF8A) == 1);   // a ruin's stone repainted unweathered (high byte 0)
     CHECK(world_verdict(0xFF8A, true, 0x0000) == 0);   // placed on air
+    CHECK(world_verdict(0x008F, true, 0x0000) == 0);   // a block placed with the hammer (high byte 0) on air
     CHECK(world_verdict(0xFF8F, true, 0xFF8A) == 0);   // another material than the shipped one
     CHECK(world_verdict(0xFF8A, true, 0xFF05) == 0);   // built where terrain was
     CHECK(world_verdict(0xFF8A, false, 0) == -1);      // the base is not known (not loaded)

@@ -13,8 +13,8 @@ EmfBlockInfo decode_voxel(uint16_t v, const MaterialFacts facts[128]) {
     b.damage = -1;
     const uint32_t m = v & 0xFFu, fill = v >> 8;
     b.fill = fill;
-    // the game tells a building block by its material alone: blocks a player places read 0x00.. (high byte 0); the
-    // high byte is a fill for terrain only
+    // the game tells a building block by its material alone: a building cell's high byte is its paint (weathered,
+    // overgrown), 0 when unpainted, as blocks a player places read; it is a fill for terrain only
     if (!m || (m < 128 && !fill)) {
         b.kind = EMF_BLOCK_EMPTY;
         return b;

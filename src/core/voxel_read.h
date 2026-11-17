@@ -16,8 +16,9 @@ constexpr float kFindWallMaxLength = 64.0f;  // metres of a line find_wall walks
 using VoxelReader = std::function<bool(int32_t vx, int32_t vy, int32_t vz, uint16_t* voxel)>;
 
 // The voxel as a mod sees it (size set; x, y, z and damage left for the caller: damage -1): no material = empty;
-// 128..255 = building whatever the high byte (blocks a player places read 0x00..; material = id 0..127, hardness and
-// health from facts when known); 1..127 = terrain when it has fill, else empty.
+// 128..255 = building whatever the high byte (a building cell's high byte is its paint, 0 when unpainted, as blocks a
+// player places read; material = id 0..127, hardness and health from facts when known); 1..127 = terrain when it has
+// fill, else empty.
 EmfBlockInfo decode_voxel(uint16_t v, const MaterialFacts facts[128]);
 
 // The first building cell on the line from `from` to `to` (metres; at most kFindWallMaxLength of it), visiting every
