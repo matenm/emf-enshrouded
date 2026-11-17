@@ -234,6 +234,7 @@ struct WallSettings {
     double hole_radius = 1.0;   // "Hole size"
     bool drops = false;         // "Broken blocks drop items"
     double damage_scale = 1.0;  // from the difficulty, divided by "Wall strength"
+    bool terrain = false;       // 1.3.0 "Raiders also break walls of terrain blocks" (Stone, Granite ... a player placed)
 };
 // The "Hole size" setting: small (about a door), medium, large.
 inline double hole_radius_of(const std::string& v) {
@@ -273,7 +274,7 @@ inline int32_t gate_damage(int32_t max_health, double scale) {
 // The wall settings plus the scale of the (effective) difficulty (a preset's while one is chosen) divided by "Wall
 // strength" (x hits, 0.5..10: 2 = every wall and gate takes twice the hits).
 inline WallSettings wall_settings(bool on, const std::string& hole_size, bool drops, const std::string& preset_name,
-                                  const std::string& difficulty, double strength = 1.0);
+                                  const std::string& difficulty, double strength = 1.0, bool terrain = false);
 
 struct Gate {
     uint32_t door = 0;
@@ -1152,9 +1153,10 @@ private:
 };
 
 inline WallSettings wall_settings(bool on, const std::string& hole_size, bool drops, const std::string& preset_name,
-                                  const std::string& difficulty, double strength) {
+                                  const std::string& difficulty, double strength, bool terrain) {
     WallSettings s;
     s.on = on;
+    s.terrain = on && terrain;
     s.hole_radius = hole_radius_of(hole_size);
     s.drops = drops;
     const auto p = preset(preset_name);

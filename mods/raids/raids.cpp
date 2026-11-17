@@ -92,7 +92,8 @@ void read_settings() {
     c.walls = raids::wall_settings(emf::setting_bool(kMod, "break_walls", false), emf::setting_text(kMod, "hole_size", "small"),
                                    emf::setting_bool(kMod, "wall_drops", false), c.preset,
                                    emf::setting_text(kMod, "difficulty", "normal"),
-                                   emf::setting_float(kMod, "wall_strength", 1.0));
+                                   emf::setting_float(kMod, "wall_strength", 1.0),
+                                   emf::setting_bool(kMod, "break_terrain", false));
     c.custom = emf::setting_text(kMod, "templates", "verified") == "custom";
     std::vector<std::string> bad;
     c.custom_pool = raids::parse_custom_templates(emf::setting_text(kMod, "custom_templates", ""), &bad);
@@ -182,6 +183,12 @@ bool g_walls_v44_said = false;
 constexpr double kFoeNear = 4.0;  // a worker fights a foe this near instead of the wall
 
 bool g_walls_unavailable = false;  // a hit was refused because breaking is not there: no more wall looks this run
+bool g_terrain_unavailable = false;  // a hit with terrain was refused because breaking terrain is not there (1.3.0)
+
+// find_wall's flags: terrain a player placed too when the setting is on and the core can (API v47).
+uint32_t wall_find_flags(const raids::WallSettings& s) {
+    return s.terrain && !g_terrain_unavailable && emf::has_v47() ? EMF_FIND_TERRAIN : 0u;
+}
 
 void wall_say_once(const std::string& key, const std::string& line) {
     if (g_wall_said.insert(key).second) EMF_LOG(kMod, "%s", line.c_str());
@@ -278,7 +285,7 @@ void on_wall_hit(EmfWorld* raw, uint32_t, const EmfBreakResult* res, void* user)
             const auto line = raids::chest_line(*p, altar, raids::WallWork::kReach);
             const float f[3] = {float(line.first.x), float(line.first.y), float(line.first.z)};
             const float t[3] = {float(line.second.x), float(line.second.y), float(line.second.z)};
-            if (const auto b = emf::find_wall(w, f, t)) {
+            if (const auto b = emf::find_wall(w, f, t, wall_find_flags(config().walls))) {
                 if (!raids::breakable_wall(*b, emf::has_v45())) continue;  // a ruin behind the hole: no deeper there
                 if (!deeper) {
                     deeper = raids::Vec3{b->x, b->y, b->z};
@@ -349,7 +356,7 @@ void wall_look(emf::World w, uint32_t id, const raids::Vec3& p, const Config& c)
     const float f[3] = {float(line.first.x), float(line.first.y), float(line.first.z)};
     const float t[3] = {float(line.second.x), float(line.second.y), float(line.second.z)};
     std::optional<raids::Vec3> wall;
-    if (const auto b = g_walls_unavailable ? std::nullopt : emf::find_wall(w, f, t)) {
+    if (const auto b = g_walls_unavailable ? std::nullopt : emf::find_wall(w, f, t, wall_find_flags(c.walls))) {
         if (raids::breakable_wall(*b, emf::has_v45()))
             wall = raids::Vec3{b->x, b->y, b->z};
         else
@@ -385,9 +392,17 @@ void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, cons
                 r.height = float(x.hole.height);
                 raids::wall_hit_damage(x.damage_scale, r.damage);
                 if (c.walls.drops) r.flags |= EMF_BREAK_DROPS;
+                if (wall_find_flags(c.walls)) r.flags |= EMF_BREAK_TERRAIN;  // the terrain a player placed too
                 auto* ctx = new HitCtx{x.spot, emf::server_session()};
                 if (!emf::break_blocks(w, r, on_wall_hit, ctx)) {
                     delete ctx;
+                    if ((r.flags & EMF_BREAK_TERRAIN) && raids::terrain_unavailable(r.why)) {
+                        if (!g_terrain_unavailable)
+                            EMF_LOG(kMod, "breaking terrain walls is not available (%s): raiders break building blocks only",
+                                    r.why);
+                        g_terrain_unavailable = true;
+                        break;
+                    }
                     wall_say_once("hit", std::string("a wall hit was refused: ") + r.why);
                     if (raids::breaking_unavailable(r.why) && !g_walls_unavailable) {
                         g_walls_unavailable = true;

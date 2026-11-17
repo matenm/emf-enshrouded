@@ -1063,6 +1063,12 @@ TEST_CASE("walls: the settings: hole size, drops and the difficulty scale (a pre
     CHECK(wall_settings(true, "?", false, "nonsense", "deadly").damage_scale == 2.0);  // not a preset: its own
 }
 
+TEST_CASE("walls (1.3.0): Raiders also break walls of terrain blocks: off by default, only with Raiders break walls") {
+    CHECK_FALSE(wall_settings(true, "small", false, "custom", "normal").terrain);
+    CHECK(wall_settings(true, "small", false, "custom", "normal", 1.0, true).terrain);
+    CHECK_FALSE(wall_settings(false, "small", false, "custom", "normal", 1.0, true).terrain);
+}
+
 TEST_CASE("walls: Wall strength is x hits: the damage scale (walls and gates) is divided by it; 0.5..10") {
     CHECK(wall_settings(true, "small", false, "custom", "normal", 2.0).damage_scale == doctest::Approx(0.5));
     CHECK(wall_settings(true, "small", false, "custom", "hard", 3.0).damage_scale == doctest::Approx(0.5));
@@ -1122,7 +1128,7 @@ TEST_CASE("raids: mod.json: Raiders break walls (off), Hole size (small), Broken
         CHECK(key != "wall_drops");
         CHECK(key != "wall_strength");
     }
-    CHECK(emf::core::version_text(r.manifest->version) == "1.2.1");
+    CHECK(emf::core::version_text(r.manifest->version) == "1.3.0");
 }
 
 TEST_CASE("walls (review I1): after a give-up the raider does not look again until it makes 3 m of progress") {

@@ -311,3 +311,22 @@ TEST_CASE("raids glue: a break refused because breaking is not available or off 
     CHECK_FALSE(raids::breaking_unavailable("64 breaks wait already"));
     CHECK_FALSE(raids::breaking_unavailable(""));
 }
+
+// Night Raids 1.3.0 (API v47): walls of terrain blocks a player placed (Stone, Granite ...), with the setting.
+TEST_CASE("raids glue: a terrain wall a player placed is breakable; the world's own ground never; a terrain refusal stops terrain only") {
+    EmfBlockInfo b{};
+    b.size = sizeof b;
+    b.kind = EMF_BLOCK_TERRAIN;
+    b.world = 0;  // placed by a player
+    CHECK(raids::breakable_wall(b, true));
+    b.world = 1;  // the world's own ground
+    CHECK_FALSE(raids::breakable_wall(b, true));
+    b.world = 0;
+    CHECK_FALSE(raids::breakable_wall(b, false));  // a core before v45 cannot say whose terrain is: never
+    CHECK(raids::terrain_unavailable("breaking terrain is not available on this game version"));
+    CHECK(raids::terrain_unavailable("breaking terrain is off (the game's terrain config lookup faulted) until a restart"));
+    CHECK(raids::terrain_unavailable("unknown flags"));  // a core before v47
+    CHECK_FALSE(raids::terrain_unavailable("not available on this game version"));
+    CHECK_FALSE(raids::terrain_unavailable("64 break requests are already waiting"));
+    CHECK_FALSE(raids::breaking_unavailable("breaking terrain is not available on this game version"));
+}

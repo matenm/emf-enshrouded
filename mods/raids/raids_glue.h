@@ -184,11 +184,20 @@ inline bool player_near(const Vec3& p, const std::vector<Player>& players, doubl
 // 0 would ask break_blocks for the full default).
 // A wall raiders may work on: any building block on a core before API v45; from v45 not the world's own (a ruin as the
 // game shipped it) nor one whose origin is not known (EMF's breaks spare those anyway, so the raider would stand there).
-inline bool breakable_wall(const EmfBlockInfo& b, bool v45) { return !v45 || b.world == 0; }
+// A terrain cell (1.3.0, found with EMF_FIND_TERRAIN on API v47) only when the core says a player placed it.
+inline bool breakable_wall(const EmfBlockInfo& b, bool v45) {
+    if (b.kind == EMF_BLOCK_TERRAIN) return v45 && b.world == 0;
+    return !v45 || b.world == 0;
+}
 
 // Whether a refused break means breaking itself is not there (EMF's reasons): then no wall looks for the session.
 inline bool breaking_unavailable(const std::string& why) {
     return why == "not available on this game version" || why.rfind("off (", 0) == 0;
+}
+// Whether a refused break means only breaking terrain is not there (a core without its signatures, after a fault, or a
+// core before API v47, which knows no such flag): then raiders break building blocks only for the session.
+inline bool terrain_unavailable(const std::string& why) {
+    return why.rfind("breaking terrain", 0) == 0 || why == "unknown flags";
 }
 
 inline void wall_hit_damage(double scale, int32_t out[5]) {

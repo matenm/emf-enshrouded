@@ -64,6 +64,7 @@ raid comes when you sleep through nightfall.
 | Hole size (`hole_size`) | small | small (about a door, 2 m), medium (3.5 m), large (5 m) |
 | Wall strength (x hits) (`wall_strength`) | 1 | 0.5-10: how many hits walls and gates take, times the normal. At 1 a wood wall cracks at the first hit and breaks at the second or third, planks take 5, stone about 20, a gate about 6. Several raiders at one wall, and harder raids, hit harder |
 | Broken blocks drop items (`wall_drops`) | off | what a pickaxe would give for the broken blocks, and a broken gate's own item, at the hole |
+| Raiders also break walls of terrain blocks (`break_terrain`) | off | walls of Stone, Granite, Field Stones, dirt, sand or road blocks are terrain to the game; with this on, raiders break those too, as long as a player placed them (where the world as the game shipped it had no ground). The world's own ground, hills and ruins are never touched. Needs EMF 0.6.19 |
 
 Every setting applies at once.
 
@@ -130,4 +131,6 @@ Switch the rule off to get the old behaviour.
 - Raiders never appear inside a base, but they do walk in: that is the attack.
 - They break walls only with **Raiders break walls** on, and never the world's own ruins (EMF 0.6.14 tells them from
   what players built by comparing each block with the world as the game shipped it).
+- Walls of terrain blocks (Stone, Granite, dirt ...) only with **Raiders also break walls of terrain blocks** on (1.3.0,
+  EMF 0.6.19), and only the cells a player placed: the natural ground is never dug.
 - The log (`emf\emf_core.log`, lines `[raids]`) has every raider's id, position and level.
