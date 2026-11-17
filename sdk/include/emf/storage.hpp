@@ -4,7 +4,8 @@
 // The game knows nothing about your mod's data, so keep it next to EMF: <game>\emf\config\<mod>\<slot>.txt, one file
 // per world save slot. WorldFile does the bookkeeping every mod otherwise gets wrong:
 //   - it learns the slot when the host's world save loads (on_load), per hosted session (server_session),
-//   - it hands you the file once per session, after that session's save loaded,
+//   - it hands you the file once per session, after that session's save loaded (one another program holds open is
+//     read on a later poll: never handed over as "" and never saved over meanwhile),
 //   - it saves only while the file it read belongs to the running session (never into another world's file after a
 //     reload or a world switch) and while that world runs (poll called within the last 2 s: not after you quit to the
 //     menu or joined someone else's game), atomically (a crash leaves the old file or the new one, never an empty one).
@@ -73,7 +74,13 @@ public:
             load_players();  // another program had it open: read it again
         if (loaded_session_ != session || (file_session_ == session && read_loads_ == loads) || !slot_) return false;
         file_slot_ = slot_;
-        const std::string text = read(path());
+        std::string text;
+        if (!read_into(path(), text)) {  // there, but another program holds it: never handed over as "" (no file)
+            say_once(unreadable_said_, "could not read %ls (another program has it open?): the mod's world data waits until it can",
+                     path().c_str());
+            return false;  // not read: not ready, so nothing is saved over it; the next poll tries again
+        }
+        unreadable_said_ = false;
         file_session_ = session;
         read_loads_ = loads;
         written_ = text;
@@ -272,16 +279,19 @@ private:
         return d.substr(0, d.find_last_of(L"\\/")) + L"\\emf\\config\\" + std::wstring(mod_.begin(), mod_.end());
     }
     static std::wstring parent(const std::wstring& d) { return d.substr(0, d.find_last_of(L"\\/")); }
-    static std::string read(const std::wstring& file) {
-        std::string text;
+    // The file's text into `text` ("" when there is no file); false when it is there but cannot be read.
+    static bool read_into(const std::wstring& file, std::string& text) {
+        text.clear();
         FILE* f = nullptr;
-        if (_wfopen_s(&f, file.c_str(), L"rb") == 0 && f) {
-            char buf[4096];
-            size_t n;
-            while ((n = fread(buf, 1, sizeof(buf), f)) > 0) text.append(buf, n);
-            fclose(f);
-        }
-        return text;
+        const errno_t e = _wfopen_s(&f, file.c_str(), L"rb");
+        if (e == ENOENT) return true;
+        if (e != 0 || !f) return false;
+        char buf[4096];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), f)) > 0) text.append(buf, n);
+        const bool bad = ferror(f) != 0;
+        fclose(f);
+        return !bad;
     }
     std::string mod_;
     std::wstring dir_;
@@ -296,6 +306,7 @@ private:
     uint32_t file_session_ = 0, read_loads_ = 0;
     std::string written_;
     std::wstring failed_path_;          // the world file whose write failure was logged
+    bool unreadable_said_ = false;      // the log said the world file could not be read (until it could)
     std::wstring failed_players_path_;  // the players file whose write failure was logged
     std::map<uint64_t, std::string> players_;  // the running world's player texts (read by poll)
     enum class PlayersState { Ok, Unreadable, Bad };  // Unreadable: poll reads it again; Bad: never overwritten

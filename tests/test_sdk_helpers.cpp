@@ -1136,3 +1136,36 @@ TEST_CASE("emf::has_v45 by the version (the table did not grow); has_v46 by the 
     CHECK(emf::has_v45());
     CHECK(emf::has_v46());
 }
+
+TEST_CASE("storage: a world file another program holds open is not handed over as empty, nor saved over; a later poll reads it") {
+    reset();
+    static EmfApi api = fake_api();
+    REQUIRE(emf::init(&api));
+    const std::wstring dir = temp_dir(L"emf_world_locked");
+    const std::wstring main = dir + L"\\0003.txt";
+    CreateDirectoryW(dir.c_str(), nullptr);
+    spill(main, "keep me");
+    emf::WorldFile file("mymod");
+    file.set_dir(dir);
+    REQUIRE(file.attach());
+    HANDLE h = CreateFileW(main.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);  // no sharing
+    REQUIRE(h != INVALID_HANDLE_VALUE);
+    g_load_cb(3, g_load_user);
+    g_logged.clear();
+    std::string got = "none";
+    CHECK_FALSE(file.poll([&](const std::string& t) { got = t; }));
+    CHECK(got == "none");  // not "" as if there were no file
+    CHECK_FALSE(file.ready());
+    CHECK_FALSE(file.save("new"));
+    CHECK(g_logged.size() == 1);
+    CHECK_FALSE(file.poll([&](const std::string& t) { got = t; }));
+    CHECK(g_logged.size() == 1);  // said once
+    CloseHandle(h);
+    CHECK(slurp(main) == "keep me");
+    CHECK(file.poll([&](const std::string& t) { got = t; }));
+    CHECK(got == "keep me");
+    REQUIRE(file.save("new"));
+    CHECK(slurp(main) == "new");
+    DeleteFileW(main.c_str());
+    RemoveDirectoryW(dir.c_str());
+}
