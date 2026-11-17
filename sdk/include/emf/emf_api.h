@@ -855,7 +855,8 @@ typedef struct EmfBlockInfo {
     uint32_t size;     /* sizeof(EmfBlockInfo) */
     uint32_t kind;     /* EMF_BLOCK_* */
     uint32_t material; /* building 0..127, terrain 1..127 */
-    uint32_t fill;     /* 0..255 */
+    uint32_t fill;     /* the cell's high byte, 0..255: terrain's fill; for a building block not a fill (0 for
+                          blocks a player placed) */
     uint32_t hardness; /* building: 0 Soft .. 4 VeryHard, 5 Unbreakable; terrain: 0 */
     int32_t health;    /* building: the material's health points; 0 unknown */
     int32_t damage;    /* building: the damage so far, 0..255 (it heals 20 s after the last hit); -1 unknown */

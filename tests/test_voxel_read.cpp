@@ -60,6 +60,30 @@ TEST_CASE("voxel read: decode empty, terrain and building") {
     CHECK(u.health == 0);
 }
 
+// Reported from a hosted game (0.6.16, build 1287369): Rough Wood Block, Rough Stone Block and a floor placed with the
+// construction hammer read 0x008f, 0x009b and 0x00b1, a building material with a zero high byte. The game decides
+// "building" by the material byte alone (research: the building kernel tests only the low byte); the high byte is a
+// fill for terrain only.
+TEST_CASE("voxel read: a building block is building whatever its high byte (blocks a player placed read 0x00..)") {
+    const EmfBlockInfo b = decode_voxel(0x0087, g_facts);
+    CHECK(b.kind == EMF_BLOCK_BUILDING);
+    CHECK(b.material == 7);
+    CHECK(b.fill == 0);
+    CHECK(b.hardness == 4);
+    CHECK(b.health == 1000);
+    CHECK(decode_voxel(0x008f, g_facts).kind == EMF_BLOCK_BUILDING);
+    CHECK(decode_voxel(0x009b, g_facts).kind == EMF_BLOCK_BUILDING);
+    CHECK(decode_voxel(0x00b1, g_facts).kind == EMF_BLOCK_BUILDING);
+    CHECK(decode_voxel(0x0005, g_facts).kind == EMF_BLOCK_EMPTY);  // terrain without fill stays empty
+    FakeVoxels v;
+    v.cells[{10, 2, 2}] = 0x0087;
+    const float from[3] = {0.1f, 1.1f, 1.1f}, to[3] = {10.1f, 1.1f, 1.1f};
+    const auto hit = first_building_on_line(from, to, v.reader(), g_facts);
+    REQUIRE(hit);
+    CHECK(hit->material == 7);
+    CHECK(hit->x == doctest::Approx(5.25));
+}
+
 TEST_CASE("voxel read: the first building cell on a line, with its centre") {
     FakeVoxels v;
     for (int y = 0; y < 8; ++y)
