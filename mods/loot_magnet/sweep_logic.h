@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstring>
 #include <cstdint>
 #include <cmath>
 #include <map>
@@ -88,14 +89,32 @@ inline bool starts(const std::string& hay, const char* prefix) { return lower(ha
 // A material or food item that no plant gives: stone, ore, wood, bones, fur, meat, drinks and the like, as they lie in
 // ruins and camps (the game's item names: Material_T1_Stone, Food_T1_raw_bad_meat_LeanMeat ...).
 inline bool not_a_plant(const std::string& item) {
-    for (const char* w : {"stone", "_ore", "metal", "scrap", "cloth", "charcoal", "clay", "amber", "obsidian", "_wood",
-                          "twig", "bone", "fur", "leather", "meat", "honey", "hydration", "water", "essence",
-                          "resin", "salt", "string", "plank", "_bar", "token", "skillpoint", "cooked", "processed",
-                          "_dust", "feather", "wool", "grain", "fogcore"})
-        if (contains(item, w)) return true;
-    // an egg is a word of its own (Food_T1_raw_egg, Food_T3_raw_egg_BirdEggs; an eggplant is a plant)
-    const std::string n = "_" + lower(item) + "_";
-    return n.find("_egg_") != std::string::npos;
+    // whole parts of the name (split at _), so a plant whose name only contains such a word stays a plant (Watermelon,
+    // Barley, Woodruff, Oregano, Stonecrop, Eggplant)
+    static const char* const kWords[] = {"stone", "ore", "metal", "scrap", "scraps", "cloth", "charcoal", "clay", "amber",
+                                         "obsidian", "wood", "logs", "twig", "twigs", "bone", "bones", "fur", "leather",
+                                         "meat", "honey", "hydration", "water", "egg", "eggs", "resin", "salt", "string",
+                                         "plank", "planks", "bar", "token", "skillpoint", "cooked", "processed", "dust",
+                                         "feather", "wool", "grain", "fogcore", "flint", "sulfur", "milk"};
+    static const char* const kEndings[] = {"meat", "stone", "eggs"};  // WolfMeat, LeanMeat, Moonstone, BirdEggs
+    static const char* const kStarts[] = {"essence"};                 // Fog_Essence01_ShroudSpores
+    const std::string n = lower(item);
+    size_t start = 0;
+    while (start <= n.size()) {
+        size_t end = n.find('_', start);
+        if (end == std::string::npos) end = n.size();
+        const std::string part = n.substr(start, end - start);
+        for (const char* w : kWords)
+            if (part == w) return true;
+        for (const char* w : kEndings) {
+            const size_t len = std::strlen(w);
+            if (part.size() > len && part.compare(part.size() - len, len, w) == 0) return true;
+        }
+        for (const char* w : kStarts)
+            if (part.rfind(w, 0) == 0) return true;
+        start = end + 1;
+    }
+    return false;
 }
 
 // The group of a pickup by its item. A drop (exclude absent or 0) is a ground item whatever it is (a collection item
@@ -293,6 +312,12 @@ public:
     }
     bool emptied_dirty() const { return dirty_; }  // a chest was emptied since the text was last saved
     void emptied_saved() { dirty_ = false; }
+    size_t emptied_count() const { return emptied_.size(); }
+    // The host's "forget": a world started anew in the same save slot would inherit the list (it belongs to the slot).
+    void forget_emptied() {
+        emptied_.clear();
+        dirty_ = true;
+    }
 
 private:
     struct State {
@@ -330,6 +355,9 @@ private:
             if ((t.lock_item || t.lock_item_ref) && !t.lock_item_used) return false;
             if (t.stacks.empty()) {
                 if (s.emptied || emptied_.count(place_of(t.pos))) {  // the magnet took its loot: done, never opened again
+                    // seen empty after the magnet's loot event: remembered for the world (a chest that kept part of
+                    // its loot, a full bag, is not: the next session leaves it to the player)
+                    if (s.emptied && emptied_.insert(place_of(t.pos)).second) dirty_ = true;
                     s.done = true;
                     return false;
                 }
@@ -361,7 +389,6 @@ private:
                 return false;
             }
             s.emptied = true;
-            if (emptied_.insert(place_of(t.pos)).second) dirty_ = true;
         } else if (t.pickup) {
             if (t.item.empty()) return false;  // the game names it a moment later
             if (!who.room) return false;       // a part that did not fit could be lost: wait for an empty slot

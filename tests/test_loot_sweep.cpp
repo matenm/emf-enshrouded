@@ -470,10 +470,12 @@ TEST_CASE("sweep: a scene pickup that is not a plant (stone, ore, wood, bones, m
     for (const char* item : {"Material_T1_Stone", "Material_T1_Wood_Logs", "Material_T1_Bones", "Material_T1_Animal_Fur",
                              "Food_T1_processed_meat_Grilled_WolfMeat", "Food_T1_raw_bad_meat_LeanMeat",
                              "Food_T1_raw_hydration_Milk", "Material_T1_Metal_Scraps", "Material_T1_Charcoal",
-                             "Material_T4_Iron_Ore", "Material_T1_Torn_Cloth", "Material_T1_Resin", "Food_T3_raw_egg_BirdEggs"})
+                             "Material_T4_Iron_Ore", "Material_T1_Torn_Cloth", "Material_T1_Resin", "Food_T3_raw_egg_BirdEggs",
+                             "Material_T7_Moonstone", "Material_T1_Fog_Essence01_ShroudSpores", "Food_T1_raw_bad_meat_WolfMeat"})
         CHECK_MESSAGE(pickup_kind(item, 1) == Kind::Ground, std::string(item));
     for (const char* item : {"Material_T1_Plant_Fibre", "Food_T1_raw_fruit_Red_Berries", "Material_T5_Wolfsbane",
-                             "Material_T1_Flax", "Food_T7_raw_vegetable_Eggplant"})
+                             "Material_T1_Flax", "Food_T7_raw_vegetable_Eggplant", "Food_T6_raw_fruit_Watermelon",
+                             "Material_T3_Barley", "Material_T2_Woodruff", "Food_T5_raw_herb_Oregano", "Material_T4_Stonecrop"})
         CHECK_MESSAGE(pickup_kind(item, 1) == Kind::Plant, std::string(item));
 }
 
@@ -510,6 +512,9 @@ TEST_CASE("sweep: a chest the magnet emptied is remembered for the world and not
     CHECK_FALSE(s.emptied_dirty());  // asked, not emptied yet
     c.stacks = {"Material_T1_Twigs"};
     REQUIRE(s.tick(2000, 1, me(), {c}, {}, r).size() == 1);  // the loot event
+    CHECK_FALSE(s.emptied_dirty());  // sent; not seen empty yet
+    c.stacks.clear();
+    CHECK(s.tick(4500, 1, me(), {c}, {}, r).empty());  // seen empty after the magnet's loot (its retry time): remembered
     CHECK(s.emptied_dirty());
     const std::string text = s.emptied_text();
     CHECK(text == "20 0 -30\n");  // decimetres
@@ -528,4 +533,30 @@ TEST_CASE("sweep: a chest the magnet emptied is remembered for the world and not
     CHECK_FALSE(next.emptied_dirty());
     next.load_emptied("");  // another world without a file
     CHECK(next.emptied_text().empty());
+}
+
+// A full bag: the loot event takes what fits and the chest keeps the rest; such a chest is not remembered (the next
+// session leaves it to the player rather than skipping loot that was never taken).
+TEST_CASE("sweep: a chest that kept part of its loot is not remembered as emptied") {
+    Sweeper s;
+    const auto r = all_on();
+    Thing c = chest(20);
+    REQUIRE(s.tick(1000, 1, me(), {c}, {}, r).size() == 1);
+    c.stacks = {"Material_T1_Twigs", "Material_T1_Stone"};
+    REQUIRE(s.tick(2000, 1, me(), {c}, {}, r).size() == 1);
+    c.stacks = {"Material_T1_Stone"};  // what did not fit
+    CHECK(s.tick(4500, 1, me(), {c}, {}, r).size() == 1);  // asked again this session
+    CHECK_FALSE(s.emptied_dirty());
+}
+
+// The record belongs to a save slot: a world started anew in the same slot (a wiped dedicated server) would inherit it.
+// The host clears it with a command; the count is logged when the file is read.
+TEST_CASE("sweep: the remembered chests can be counted and forgotten") {
+    Sweeper s;
+    s.load_emptied("1 2 3\n4 5 6\n");
+    CHECK(s.emptied_count() == 2);
+    s.forget_emptied();
+    CHECK(s.emptied_count() == 0);
+    CHECK(s.emptied_dirty());  // the empty list is saved
+    CHECK(s.emptied_text().empty());
 }

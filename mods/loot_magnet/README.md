@@ -20,6 +20,9 @@ each player switches their own:
 
 - `/loot.toggle` in the game's chat (or `loot.toggle` in the console): on / off; `/loot.toggle on`, `/loot.toggle off`;
 - `/loot.status`: whether yours is on, and the rules.
+- `loot.chests` (host, or the chat admins): how many chests the magnet emptied in this world. They are not opened
+  again; `loot.chests forget` clears the list. The list belongs to the world's save slot: clear it when a world
+  starts anew in the same slot (a wiped dedicated server), or that world's chests are skipped.
 
 These two are commands for every player: they work from the chat on a dedicated server, and in a game you host with
 `[chat] players=1` in `emf\emf_core.ini` (see `docs/modding/server.md`). Each player's choice is kept with the world,

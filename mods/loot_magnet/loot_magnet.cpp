@@ -300,7 +300,12 @@ void sweep_tick(emf::World w, const Config& c, const std::vector<magnet::Looter>
 void on_tick(emf::World w) {
     if (!w.is_server() || g_switched_off) return;  // switched off in the Mods tab: no more looting from now on
     g_file.poll([](const std::string& text) { g_toggles.parse(text); });
-    g_chests.poll([](const std::string& text) { g_sweeper.load_emptied(text); });
+    g_chests.poll([](const std::string& text) {
+        g_sweeper.load_emptied(text);
+        if (g_sweeper.emptied_count())
+            EMF_LOG(kMod, "%zu chest(s) the magnet emptied in this world are remembered (loot.chests forget clears them)",
+                    g_sweeper.emptied_count());
+    });
     const uint32_t session = emf::server_session();
     if (session != g_session) {
         g_session = session;
@@ -309,6 +314,7 @@ void on_tick(emf::World w) {
         g_swept.clear();
         g_told_gear = false;
         if (!g_file.ready()) g_toggles.clear();
+        if (!g_chests.ready()) g_sweeper.load_emptied("");  // not the last world's list until this world's file is read
     }
     const uint64_t now = GetTickCount64();
     if (const std::string key = config_key(); !key.empty()) {  // the host's own key
@@ -434,6 +440,27 @@ void cmd_toggle(emf::World w, const std::vector<std::string>& a) {
               on ? "on" : "off", c.rules.radius, c.rules.materials_only ? "materials only" : "everything");
 }
 
+// The host's (and the chat admins') look at the chests the magnet remembers as emptied in this world, and "forget": the
+// list belongs to the save slot, so a world started anew in the same slot (a wiped dedicated server) would inherit it.
+void cmd_chests(emf::World, const std::vector<std::string>& a) {
+    if (a.size() > 1 && a[1] == "forget") {
+        const size_t n = g_sweeper.emptied_count();
+        g_sweeper.forget_emptied();
+        const bool saved = g_chests.save(g_sweeper.emptied_text());
+        if (saved) g_sweeper.emptied_saved();
+        EMF_REPLY("Loot Magnet forgot the %zu chest(s) it emptied in this world%s", n,
+                  saved ? "" : " (the world's file is not read yet: try again in a moment)");
+        return;
+    }
+    if (a.size() > 1) {
+        EMF_REPLY("usage: loot.chests [forget]");
+        return;
+    }
+    EMF_REPLY("Loot Magnet remembers %zu chest(s) it emptied in this world and does not open them again; "
+              "loot.chests forget clears the list (for a world started anew in the same save slot)",
+              g_sweeper.emptied_count());
+}
+
 void cmd_status(emf::World w, const std::vector<std::string>&) {
     const Config c = config();
     const uint32_t player = sender_player();
@@ -514,6 +541,9 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         EMF_LOG(kMod, "the command loot.toggle could not be added (see the core log)");
     if (!emf::add_command("loot.status", ": is your Loot Magnet on, and its rules", cmd_status, EMF_COMMAND_PLAYERS))
         EMF_LOG(kMod, "the command loot.status could not be added (see the core log)");
+    if (!emf::add_command("loot.chests", "[forget]: the chests Loot Magnet emptied in this world (host); forget clears them",
+                          cmd_chests, 0))
+        EMF_LOG(kMod, "the command loot.chests could not be added (see the core log)");
     emf::on_tick(on_tick);
     const Config c = config();
     std::string groups;

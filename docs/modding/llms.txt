@@ -557,6 +557,7 @@ From the mods in the EMF zip (only while that mod runs):
 - lua.reload: reload the Lua mods whose files changed (this also happens every second) [lua]
 - loot.toggle [on|off]: your Loot Magnet (the loot of kills and what lies near you come to you) [loot_magnet]
 - loot.status: is your Loot Magnet on, and its rules [loot_magnet]
+- loot.chests [forget]: the chests Loot Magnet emptied in this world (host); forget clears them [loot_magnet]
 - sleep.status: who is asleep, and whether the day is being skipped [sleep]
 - sleep.pretend [on|off]: every player counts as asleep (host, for tests) [sleep]
 - herald.say <text>: a line for everyone [herald]
