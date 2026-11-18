@@ -1469,10 +1469,15 @@ terrain material without fill, or a building cell a player replaced); any shippe
 whatever happened to it since (dug into, smoothed, refilled). A cell whose shipped state is not known is never broken.
 
 - `EMF_BREAK_TERRAIN` (flag `0x8`): a break's spheres also take the terrain a player placed. Each cell judged by its
-  centre (within the radius, as building blocks), the world's own ground never touched; the cells that go are cleared
-  with the game's own box fill (one call a column). Each cell takes its terrain material's hits (the game's
-  `TerrainTerraformingConfig`: hardness class and health, the same damage table and mining setting as building blocks);
-  EMF keeps that damage (the game keeps none for terrain), healing 20 s after the last hit, never shown as cracks.
+  centre (within the radius, as building blocks), the world's own ground never touched; each cell that goes is cleared
+  with the game's own box fill of exactly that cell (the call its building code removes a block with), then read back:
+  only cells that are really gone count as removed, and a game build whose box fill leaves terrain in place turns
+  breaking terrain off ("breaking terrain is off: ..."). Each cell takes its terrain material's hits (the game's
+  `TerrainTerraformingConfig`: hardness class and health, the same damage table and mining setting as building
+  blocks). The game keeps terrain health on a far smaller scale (dirt 2, stone 5; its pickaxe digs a whole sphere a
+  hit), so EMF uses it x 250: a wall of Stone takes about the hits of a wall of stone blocks (about 21 at the default
+  damage), dirt about 5. EMF keeps that damage (the game keeps none for terrain), healing 20 s after the last hit,
+  never shown as cracks.
   `EMF_BREAK_INSTANT` and `EMF_BREAK_DROPS` (each terrain material's own item, one per so many cells) apply;
   `materials` lists building ids only. `damaged` and `removed` count terrain cells too. A core without the terrain
   signatures refuses the flag ("breaking terrain is not available on this game version"); an older core refuses it as
@@ -1482,8 +1487,11 @@ whatever happened to it since (dug into, smoothed, refilled). A cell whose shipp
   `find_wall`. Unknown flags: false (logged once).
 - `EmfBlockInfo` for a terrain cell: `world` 1 the world's own ground, 0 a player placed it, -1 not known (0 before
   v47); `hardness` and `health` its terrain material's. `damage` stays -1.
-- C++: `emf::has_v47()`, `emf::find_wall(w, from, to, EMF_FIND_TERRAIN)`. Lua 1.40: `terrain = true` in
-  `emf.break_blocks`' options and in `emf.find_wall`'s fourth argument.
+- C++: `emf::has_v47()`, `emf::find_wall(w, from, to, EMF_FIND_TERRAIN)` (an older core: building blocks only). Lua
+  1.40: `terrain = true` in `emf.break_blocks`' options and in `emf.find_wall`'s fourth argument.
+- Good to know: ground a player raised where there was air (placed dirt, a flattened terrace built up) counts as
+  placed, so a break at its foot can dent it. A world saved before a game update that changed the shipped terrain may
+  read old natural ground there as a player's (the ruins have the same caveat).
 - Console: `break ... terrain`; `blocks` finds terrain a player placed too and says whose a terrain cell is.
 
 ## SDK headers (header-only C++, no ABI)

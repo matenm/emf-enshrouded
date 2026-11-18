@@ -285,7 +285,10 @@ constexpr SigDef kSignatures[] = {
     // breaking terrain a player placed (v47): TerrainConfigFind(registry, terrain material) -> its config (stride 0xB8)
     // or null; VoxelBoxFillAir(editor, 0, voxel data, &{Vec4 lo, Vec4 hi}, &u64 0, 1)
     {Sig::TerrainConfigFind, "TerrainConfigFind", "4C 8B 51 38 4D 85 D2 74 3A 45 8B 5A 04 33 C9 4D 85 DB 74 2F 4D 63 0A 45 33 C0 66 0F 1F 44 00 00 45 85 C9 75 04 33 C0 EB 04 4B 8D 04 0A 49 03 C0 38 10 74 11 48 FF C1 49 81 C0 B8 00 00 00", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0xe9f270u, 0x9464b0u}, false},
-    {Sig::VoxelBoxFillAir, "VoxelBoxFillAir", "48 8B C4 48 89 58 10 48 89 68 18 48 89 70 20 48 89 48 08 57 41 54 41 55 41 56 41 57 48 81 EC 00", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0xa9aac0u, 0xa453c0u}, false},
+    // VoxelBoxFillAir's prologue is generic, so it is found through the building kernel's own call to it (the box's
+    // two Vec4 stored, then the call), its prologue checked at the target
+    {Sig::VoxelBoxFillAir, "VoxelBoxFillAir", "0F C6 C0 C9 F3 0F 10 CF 0F C6 C9 C9 0F 29 4D 20 0F 29 4D 60 0F 29 45 10 0F 29 45 50 E8 ?? ?? ?? ?? F3 0F 10 3D", {kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, kRvaUnchecked, 0xa9aac0u, 0xa453c0u}, false, 0x1C,
+     "48 8B C4 48 89 58 10 48 89 68 18 48 89 70 20 48 89 48 08 57 41 54 41 55 41 56 41 57 48 81 EC 00"},
 };
 static_assert(std::size(kSignatures) == kSigCount, "one entry per Sig");
 }  // namespace

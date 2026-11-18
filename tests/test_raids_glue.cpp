@@ -318,7 +318,15 @@ TEST_CASE("raids glue: a terrain wall a player placed is breakable; the world's 
     b.size = sizeof b;
     b.kind = EMF_BLOCK_TERRAIN;
     b.world = 0;  // placed by a player
+    b.hardness = 3;
+    b.health = 5;
     CHECK(raids::breakable_wall(b, true));
+    b.hardness = 5;  // Unbreakable: hits would do nothing
+    CHECK_FALSE(raids::breakable_wall(b, true));
+    b.hardness = 3;
+    b.health = 0;  // no config known
+    CHECK_FALSE(raids::breakable_wall(b, true));
+    b.health = 5;
     b.world = 1;  // the world's own ground
     CHECK_FALSE(raids::breakable_wall(b, true));
     b.world = 0;

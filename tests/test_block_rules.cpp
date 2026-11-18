@@ -301,26 +301,28 @@ TEST_CASE("block rules: terrain_verdict: terrain where the shipped world had no 
     CHECK(terrain_verdict(0x008F, false, 0) == 0);
 }
 
-TEST_CASE("block rules: the terrain table: hits per terrain material from its health and hardness, as for buildings") {
+// Seen live (2026-11-18): the game's terrain configs give dirt 2 and stone 5 health (Soft, Hard), a building stone
+// block about 1000: with the building formula every terrain wall fell in one hit, whatever the Wall strength.
+TEST_CASE("block rules: the terrain table: hits per terrain material from its health x 250 and hardness") {
     MaterialFacts t[128] = {};
-    t[5] = {true, 0, 50, 10, {}};    // dirt: Soft, 50
-    t[67] = {true, 4, 400, 5, {}};   // Stone: VeryHard, 400
-    t[90] = {true, 5, 400, 5, {}};   // Unbreakable
-    t[91] = {true, 2, 0, 5, {}};     // no health known
+    t[5] = {true, 0, 2, 10, {}};    // dirt: Soft, 2
+    t[67] = {true, 3, 5, 5, {}};    // Stone: Hard, 5
+    t[90] = {true, 5, 5, 5, {}};    // Unbreakable
+    t[91] = {true, 2, 0, 5, {}};    // no health known
     float table[128];
     BreakSpec s = damage_spec();  // T4 pickaxe: 100, 100, 95, 60, 50
     build_terrain_table(t, s, 1.0f, table);
     CHECK(table[0] == 0.0f);
-    CHECK(table[5] == doctest::Approx(0.5f));   // 50 / 100
-    CHECK(table[67] == doctest::Approx(8.0f));  // 400 / 50
+    CHECK(table[5] == doctest::Approx(5.0f));          // 2 x 250 / 100
+    CHECK(table[67] == doctest::Approx(1250.0f / 60));  // 5 x 250 / 60: about 21, as a stone block wall
     CHECK(table[90] == 0.0f);
     CHECK(table[91] == 0.0f);
     CHECK(table[6] == 0.0f);  // no config
     build_terrain_table(t, s, 2.0f, table);  // the world's mining damage x2
-    CHECK(table[67] == doctest::Approx(4.0f));
+    CHECK(table[67] == doctest::Approx(625.0f / 60));
     s.materials = {7};  // a building list never limits terrain
     build_terrain_table(t, s, 1.0f, table);
-    CHECK(table[67] == doctest::Approx(8.0f));
+    CHECK(table[67] == doctest::Approx(1250.0f / 60));
     s.instant = true;
     build_terrain_table(t, s, 1.0f, table);
     CHECK(table[5] == 1.0f);

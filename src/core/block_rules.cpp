@@ -193,7 +193,7 @@ void build_terrain_table(const MaterialFacts facts[128], const BreakSpec& s, flo
         }
         if (f.health <= 0) continue;
         const float dmg = static_cast<float>(s.damage[f.hardness]) * mining_factor;
-        const float hits = dmg > 0.0f ? static_cast<float>(f.health) / dmg : 0.0f;
+        const float hits = dmg > 0.0f ? static_cast<float>(f.health) * kTerrainHealthScale / dmg : 0.0f;
         if (hits > 0.0f && hits <= 255.0f) table[m] = hits;  // past 255 hits a hit would add no damage (as the kernel)
     }
 }

@@ -840,9 +840,11 @@ the game, the same kind of thing as the ground. With `terrain = true` a break al
 placed: a cell where the world as the game shipped it had no ground. The world's own ground (hills, cliffs, the ground
 under a base, ground a player dug into), the ruins, and a cell whose shipped state is not known are never touched. Each
 cell takes its terrain material's hits (its health and hardness, the same damage table); EMF keeps that damage, since
-the game keeps none for terrain, and it heals 20 s after the last hit. `mode = "break"` and `drops` work for it too
-(each terrain material's own item). `materials` lists building ids only and does not limit terrain. On an older core
-the option is dropped: building blocks break, terrain stays.
+the game keeps none for terrain, and it heals 20 s after the last hit. A wall of Stone takes about the hits of a wall
+of stone blocks, dirt about 5. `mode = "break"` and `drops` work for it too (each terrain material's own item).
+`materials` lists building ids only and does not limit terrain. On a core older than 1.40 the option is dropped:
+building blocks break, terrain stays. A 1.40 core whose game build lacks what breaking terrain needs refuses the whole
+break (nil; the log says why): ask again without `terrain`.
 
 | `opts` field | What |
 |---|---|

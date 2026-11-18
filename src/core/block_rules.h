@@ -104,9 +104,14 @@ std::vector<DropStack> terrain_drops(const float removed[256], const MaterialFac
 // world not known there: -1, never broken. A cell that is no terrain now (empty, building): 0.
 int terrain_verdict(uint16_t cur, bool base_known, uint16_t base);
 
-// Hits to break per terrain material (index = material 1..127; 0 = untouched), as build_break_table: health /
-// (damage[hardness] x mining_factor), 0 past 255 hits; instant: 1. Unbreakable never. A building materials list does not
-// limit terrain.
+// The game's terrain configs keep health on a far smaller scale than building blocks (dirt 2 and stone 5, a stone block
+// about 1000): its pickaxe digs a whole sphere of terrain a hit. EMF's terrain cells take health x this, so a wall of
+// Stone terrain takes about the hits of a wall of stone blocks (about 21 at the default damage) and dirt about 5.
+constexpr float kTerrainHealthScale = 250.0f;
+
+// Hits to break per terrain material (index = material 1..127; 0 = untouched), as build_break_table: health x
+// kTerrainHealthScale / (damage[hardness] x mining_factor), 0 past 255 hits; instant: 1. Unbreakable never. A building
+// materials list does not limit terrain.
 void build_terrain_table(const MaterialFacts facts[128], const BreakSpec& s, float mining_factor, float table[128]);
 
 // EMF's damage for terrain cells (0..255, removed at 255), healing like the game's building damage: a cell is forgotten
@@ -132,7 +137,7 @@ struct TerrainCell {
     int32_t x = 0, y = 0, z = 0;
     uint8_t material = 0;
 };
-// A column of removed cells, cleared with one box fill: cells (x, y0..y1, z), all of one material.
+// A column of removed cells (x, y0..y1, z), all of one material; each cell is cleared with its own box fill.
 struct TerrainRun {
     int32_t x = 0, z = 0, y0 = 0, y1 = 0;
     uint8_t material = 0;

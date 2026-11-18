@@ -285,9 +285,9 @@ struct TerrainFake {
     uint32_t damaged_each = 4, removed_each = 3;
     float removed_stone_each = 3;
     TerrainFake() {
-        facts[67] = {true, 4, 400, 5, {}};
+        facts[67] = {true, 3, 5, 5, {}};  // Stone: Hard, 5 (the game's terrain health scale)
         facts[67].item_guid[0] = 0x43;
-        facts[5] = {true, 0, 50, 10, {}};
+        facts[5] = {true, 0, 2, 10, {}};
         facts[5].item_guid[0] = 0x05;
     }
     void add_to(BlockEngine& e) {
@@ -325,7 +325,7 @@ TEST_CASE("block service: EMF_BREAK_TERRAIN runs the terrain pass for every sphe
     CHECK(t.spheres[0].r == 1);  // never shrunk: the pass judges each cell itself
     CHECK(f.spheres.size() == 3);
     CHECK(f.spheres[0].r == doctest::Approx(0.5f));
-    CHECK(t.stone_entries[0] == doctest::Approx(8.0f));  // 400 / 50 (VeryHard, the default damage)
+    CHECK(t.stone_entries[0] == doctest::Approx(1250.0f / 60));  // 5 x 250 / 60 (Hard, the default damage)
     REQUIRE(g_answers.size() == 1);
     CHECK(g_answers[0].r.status == EMF_BREAK_DONE);
     CHECK(g_answers[0].r.damaged == 3 * (3 + 4));  // the kernel's and the terrain pass's
