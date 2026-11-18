@@ -85,6 +85,13 @@ class Fixture(unittest.TestCase):
 
 
 class BuildTests(Fixture):
+    def test_the_rest_pose_can_be_the_standing_reference(self):
+        """reference_clip "rest": the creature was made in the game skeleton's rest pose (from pictures of the game
+        body), so motions are taken relative to that pose, not to a clip's first frame."""
+        want = oc.build(self.cfg, hierarchy())["clips"]        # the fixture's standing clip is the rest pose
+        got = oc.build(dict(self.cfg, reference_clip="rest"), hierarchy())["clips"]
+        self.assertEqual([c["clip"] for c in got], [c["clip"] for c in want])
+
     def test_the_bind_pose_stands_where_the_sidecar_says(self):
         built = oc.build(self.cfg, hierarchy())
         bind = built["bind"]

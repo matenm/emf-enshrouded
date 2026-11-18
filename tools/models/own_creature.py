@@ -6,7 +6,8 @@ The creature's pack entry has "own_proportions":
                    into the creature's shape
   skeleton_guid    the skeleton copy's GUID (fixed forever, like the model's)
   reference_clip   a game clip whose first frame is the game creature standing (its idle): motions are taken
-                   relative to it and put onto the creature standing in its own shape
+                   relative to it and put onto the creature standing in its own shape; or "rest": the game skeleton's
+                   rest pose, for a creature made in that pose (a model from pictures of the game body)
   clips            a glob of the game clips to retarget (EML dumps of keen::JointAnimation, named <owner>_<guid>.json):
                    every clip the graph can play
   graph            the game creature's animation graph GUID; graph_guid: its copy's GUID
@@ -59,7 +60,7 @@ def build(cfg, hier):
     # leaning, aiming) turn bones about the axes they expect; the motion does not depend on the frames (retarget
     # works in the world)
     bind = osk.rest_from_world(rest, parents, [osk.blender_to_game(j["own"]) for j in joints])
-    ref = ja.sample(load_clip(cfg["reference_clip"]), 0, rest)
+    ref = rest if cfg["reference_clip"] == "rest" else ja.sample(load_clip(cfg["reference_clip"]), 0, rest)
     clips = []
     for path in sorted(glob.glob(cfg["clips"])):
         clip = load_clip(path)

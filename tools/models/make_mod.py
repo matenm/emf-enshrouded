@@ -35,7 +35,7 @@ pack.json:
         "own_proportions": {                          # optional: a skeleton of its own (own_creature.py), with
           "sidecar": "panther_own.json",              #   blender/fit_to_game_skeleton.py --own-proportions's sidecar
           "skeleton_guid": "...",                     #   the skeleton copy's GUID (FIXED forever)
-          "reference_clip": "<clips>/sabretooth_<guid>.json",  # a game clip whose first frame stands (the idle)
+          "reference_clip": "<clips>/sabretooth_<guid>.json",  # a game clip whose first frame stands (the idle), or "rest"
           "clips": "<clips>/sabretooth_*.json",       #   every game clip the graph plays (EML dumps <owner>_<guid>.json)
           "graph": "<guid>", "graph_guid": "..."      #   the game's animation graph and its copy's GUID
         },
@@ -1160,7 +1160,8 @@ def main():
         if c.get("own_proportions"):
             op = dict(c["own_proportions"])
             for k in ("sidecar", "reference_clip", "clips"):
-                op[k] = path(op[k])
+                if not (k == "reference_clip" and op[k] == "rest"):
+                    op[k] = path(op[k])
             built = own_creature.build(op, rm.load_record(path(c["hierarchy"])))
             write_own(os.path.join(out, "src"), c["name"], built)
             print("%s: own skeleton %s, %d clips retargeted" % (c["name"], op["skeleton_guid"], len(built["clips"])))
