@@ -112,8 +112,11 @@ constexpr size_t kPathQueryBytes = 0x110;
 // With a creature (v48) its profile goes in at the offsets the game's own program writes it (node rules for the path
 // and the target, the 20 costs, the highest steps, its start search radii where larger than EMF's), with path_used's
 // values and the same room for the target.
-void fill_path_query(uint8_t q[kPathQueryBytes], const EmfPathQuery& in, uint32_t owner,
-                     const PathCreature* as = nullptr);
+void fill_path_query(uint8_t q[kPathQueryBytes], const EmfPathQuery& in, uint32_t owner, const PathCreature* as);
+
+// The owner path_find gives a query: its owner, else the creature it plans as (it does not avoid itself), else 0 (the
+// caller then takes the first player).
+uint32_t path_default_owner(const EmfPathQuery& q);
 
 // The game's PathfindingResult and the number of points -> EMF_PATH_*.
 uint32_t path_status(uint32_t game_result, size_t points);
@@ -130,7 +133,7 @@ public:
     // Checks and queues a query (owner: an entity the game ties it to; as: a creature's settings to plan with, copied).
     // Its id (> 0), or 0 and *why. Any thread.
     uint32_t request(const EmfPathQuery& q, uint32_t owner, EmfPathCallback cb, void* user, uint64_t now_ms,
-                     std::string* why, const PathCreature* as = nullptr);
+                     std::string* why, const PathCreature* as);
     // Ends a query as EMF_PATH_CANCELLED at the next step. False for an unknown or finished id. Any thread.
     bool cancel(uint32_t id);
     // Inside EMF's program on the server world: sends waiting queries, reads answers; returns the finished ones.

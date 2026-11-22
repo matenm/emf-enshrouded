@@ -1784,6 +1784,7 @@ TEST_CASE("builtin commands (v37): path checks its words; with the feature off i
     f.center.enqueue("path 3740 845 1440 as 0");
     f.center.enqueue("path 3740 845 1440 doors as 60");    // from entity 60's position, planned as it
     f.center.enqueue("path 3740 845 1440 as 999");         // no such entity: no position
+    f.center.enqueue("path 3740 845 1440 jumps doors closest 9000 as 60");  // every word at once
     f.run(rw.iw.w);
     size_t usage = 0, refused = 0;
     for (const auto& l : g_bout) {
@@ -1792,7 +1793,7 @@ TEST_CASE("builtin commands (v37): path checks its words; with the feature off i
         refused += l.find("path not asked") != std::string::npos;
     }
     CHECK(usage == 7u);
-    CHECK(refused == 4u);
+    CHECK(refused == 5u);
     CHECK(bsaid("path not asked (see the log: path_find refused"));
     CHECK(bsaid("path: entity 999 has no position in this world"));
 }

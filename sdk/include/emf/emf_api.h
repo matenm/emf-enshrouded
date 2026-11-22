@@ -765,9 +765,9 @@ typedef struct EmfPathQuery {
        type. Calm walking: an enemy in the game's Guard state or a fight adds its extended moves (jumps), and a roaming
        one its road costs; add jumps with `moves` to plan for that. On top: this query's from, to, closest and
        max_nodes; `moves` is added; max_jump_up/down, width and height as given (width and height 0 = the creature's).
-       With the door move the room across is 0 unless width is given (any room loses the door). Refused when the
-       entity has no DynamicPathFinder or PathWalker (not a creature the game plans paths for). owner 0 = this
-       creature. 0 = off. */
+       With the door move the room across is 0 unless width is given (any room loses the door). Only from a world
+       callback on the server world passed to path_find. Refused when the entity has no DynamicPathFinder or
+       PathWalker (not a creature the game plans paths for). owner 0 = this creature. 0 = off. */
     uint32_t as_entity;
 } EmfPathQuery;
 typedef struct EmfPathPoint {
@@ -1618,7 +1618,8 @@ typedef struct EmfApi {
      * EMF already open, or the feature is off on this game build. The grid exists where the world is loaded (near
      * players); a query elsewhere ends NO_START, NO_TARGET or OTHER (no answer in 10 s). Each query is a search in the
      * game's own jobs, shared with every walking creature: do not ask again every step (the game's own enemies ask
-     * at most every 0.5 s). Any thread. */
+     * at most every 0.5 s). Any thread; with q->as_entity (v48) only from a world callback (on_tick, run_on_world,
+     * on_event) on the server world passed to it, where the creature's templates are read. */
     uint32_t (*path_find)(EmfWorld* world, const EmfPathQuery* q, EmfPathCallback cb, void* user);
     /* Ends a query: its callback still comes, with EMF_PATH_CANCELLED. False for an unknown or answered id. */
     bool (*path_cancel)(uint32_t id);

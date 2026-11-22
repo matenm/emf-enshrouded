@@ -1543,7 +1543,7 @@ void cmd_path(EmfWorld* w, int argc, const char* const* argv, void* u) {
     EmfPathQuery q{};
     q.size = sizeof q;
     const std::vector<std::string> words = emf::coordinate_words({argv + 1, argv + argc});
-    bool ok = words.size() >= 3 && words.size() <= 8;
+    bool ok = words.size() >= 3 && words.size() <= 9;
     for (size_t i = 0; ok && i < 3; ++i) {
         char* end = nullptr;
         q.to[i] = std::strtof(words[i].c_str(), &end);

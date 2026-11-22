@@ -110,10 +110,11 @@ std::string path_creature_of(uint32_t entity, const PathComponentFn& get, const 
     uint64_t size = 0;
     if (!get || !get(g::DynamicPathFinder::kHash, &size))
         return who + " has no DynamicPathFinder (not a creature the game plans paths for, or not in the server world)";
+    if (!tpl) return who + ": template data cannot be read on this game build";
     PathCreatureParts p;
     auto one = [&](uint32_t hash, const void** ptr, size_t* n) {
         uint64_t s = 0;
-        *ptr = tpl ? tpl(hash, &s) : nullptr;
+        *ptr = tpl(hash, &s);
         *n = *ptr ? static_cast<size_t>(s) : 0;
     };
     one(g::PathWalker::kHash, &p.walker, &p.walker_size);
@@ -184,6 +185,8 @@ void fill_path_query(uint8_t q[kPathQueryBytes], const EmfPathQuery& in, uint32_
     put_u32(0x60, get_u32(0x60) | (1u << 19));
 }
 
+uint32_t path_default_owner(const EmfPathQuery& q) { return q.owner ? q.owner : q.as_entity; }
+
 std::string path_answer_text(uint32_t id, const EmfPathResult& r, const EmfPathPoint* points) {
     const std::string head = "path " + std::to_string(id) + ": ";
     switch (r.status) {
@@ -230,7 +233,7 @@ std::string path_used_text(uint32_t id, const EmfPathResult& r) {
         jumps = "; jumps up " + height(r.jump_up) + ", down " + height(r.jump_down);
     }
     char room[64];
-    std::snprintf(room, sizeof room, "; room %.1f m across, %.1f m up", r.width, r.height);
+    std::snprintf(room, sizeof room, "; room %.1f m all round, %.1f m up", r.width, r.height);
     return "path " + std::to_string(id) + ": planned with " + moves + jumps + room;
 }
 

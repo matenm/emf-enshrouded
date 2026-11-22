@@ -1,6 +1,7 @@
 // path_find (API v37): the emf_path program over fake game calls (create, result, destroy, defaults).
 #include <doctest.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <functional>
@@ -11,7 +12,9 @@
 #include "common/offsets.h"
 #include "core/api.h"
 #include "core/api_sizes.h"
+#include "core/dispatcher.h"
 #include "core/path_glue.h"
+#include "emf/generated/components.hpp"
 #include "fake_path_grid.h"
 #include "fake_world.h"
 
@@ -32,7 +35,9 @@ std::map<uint32_t, std::vector<GamePoint>> g_found;
 std::map<uint32_t, std::vector<uint32_t>> g_door_ids;  // the game's door entity per point (out +0x10 / +0x18)
 bool g_get_faults = false;
 
+std::vector<std::vector<uint8_t>> g_query_bytes;  // every created query as the game got it
 uint32_t* f_create(void*, uint32_t* id, const void* q) {
+    g_query_bytes.emplace_back(static_cast<const uint8_t*>(q), static_cast<const uint8_t*>(q) + kPathQueryBytes);
     uint32_t owner = 0;
     float tx = 0;
     std::memcpy(&owner, q, 4);
@@ -85,6 +90,7 @@ struct Rig {
         void* cb = cmdbuf;
         std::memcpy(ctx.job + 0x08, &cb, 8);
         g_next_id = 0;
+        g_query_bytes.clear();
         g_owners.clear();
         g_destroyed.clear();
         g_targets.clear();
@@ -125,7 +131,7 @@ TEST_CASE("path glue: the emf_path program sends the query, reads the game's ans
     CHECK(r.spec.name == std::string(kPathProgramName));
     CHECK(r.spec.world_kind == EMF_WORLD_SERVER);
     REQUIRE(path_service() != nullptr);
-    const uint32_t id = path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr);
+    const uint32_t id = path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr, nullptr);
     REQUIRE(id != 0);
     r.step();
     REQUIRE(g_owners.size() == 1u);
@@ -142,11 +148,11 @@ TEST_CASE("path glue: the emf_path program sends the query, reads the game's ans
 
 TEST_CASE("path glue: an owner that is gone ends the query cancelled; a fault in a game call turns the feature off") {
     Rig r;
-    const uint32_t a = path_service()->request(query(12), 9, on_path, nullptr, 1000, nullptr);  // 9 has no transform
+    const uint32_t a = path_service()->request(query(12), 9, on_path, nullptr, 1000, nullptr, nullptr);  // 9 has no transform
     r.step();
     REQUIRE(g_answers.size() == 1u);
     CHECK(g_answers[0] == std::to_string(a) + ":7:0:0");  // EMF_PATH_CANCELLED
-    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr);
+    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr, nullptr);
     r.step();
     g_get_faults = true;
     r.step();
@@ -175,6 +181,91 @@ TEST_CASE("api path_find (v37): queued on a server world; refused on a client wo
     set_core_state(nullptr);
 }
 
+TEST_CASE("path glue (v48): a creature's profile reaches the game's query") {
+    Rig r;
+    PathCreature c;
+    c.forbidden = 388;
+    c.up = 4;
+    c.cost[3] = 4.0f;
+    REQUIRE(path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr, &c) != 0u);
+    REQUIRE(path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr, nullptr) != 0u);
+    r.step();
+    REQUIRE(g_query_bytes.size() == 2u);
+    auto u32 = [](const std::vector<uint8_t>& b, size_t o) { uint32_t v; std::memcpy(&v, b.data() + o, 4); return v; };
+    auto f32 = [](const std::vector<uint8_t>& b, size_t o) { float v; std::memcpy(&v, b.data() + o, 4); return v; };
+    CHECK(u32(g_query_bytes[0], 0x60) == (388u | (1u << 19)));
+    CHECK(u32(g_query_bytes[0], 0x104) == 4u);
+    CHECK(u32(g_query_bytes[0], 0x10c) == 4u);
+    CHECK(f32(g_query_bytes[0], 0x6c + 3 * 4) == 4.0f);
+    CHECK(u32(g_query_bytes[1], 0x60) == (1u << 19));  // the plain query: the game's defaults (here 0) and EMF's rule
+    CHECK(u32(g_query_bytes[1], 0x104) == 0u);
+}
+
+namespace {
+// Runs fn as a server world callback (as_entity is refused anywhere else).
+struct InCallback {
+    std::function<void(EmfWorld*)> fn;
+};
+void run_in_callback(EmfWorld* w, std::function<void(EmfWorld*)> fn) {
+    Dispatcher d;
+    InCallback c{std::move(fn)};
+    d.post(EMF_WORLD_SERVER, [](EmfWorld* world, void* u) { static_cast<InCallback*>(u)->fn(world); }, &c);
+    d.run(w, EMF_WORLD_SERVER, [](const std::string&) {});
+}
+bool g_has_finder = false, g_has_walker = false;
+void* as_gc(void* out, void*, uint32_t hash, uint32_t entity) {
+    static uint8_t finder[272];
+    auto o = static_cast<uint64_t*>(out);
+    o[0] = 0;
+    o[1] = 0;
+    if (hash == emf::gen::ecs::DynamicPathFinder::kHash && entity == 7 && g_has_finder) {
+        o[0] = reinterpret_cast<uint64_t>(finder);
+        o[1] = sizeof finder;
+    }
+    return out;
+}
+void* as_tpl(uint8_t*, uint32_t hash, uint32_t entity) {
+    static emf::gen::ecs::PathWalker walker{};
+    return hash == emf::gen::ecs::PathWalker::kHash && entity == 7 && g_has_walker ? &walker : nullptr;
+}
+}  // namespace
+
+TEST_CASE("api path_find (v48): as_entity only from a world callback on the server world; its refusals reach the log") {
+    Rig r;
+    CoreState state;
+    std::vector<std::string> lines;
+    state.log_line = [&](const std::string& l) { lines.push_back(l); };
+    state.get_component = as_gc;
+    state.get_template_component = as_tpl;
+    set_core_state(&state);
+    g_has_finder = g_has_walker = false;
+    auto said = [&](const std::string& part) {
+        return std::any_of(lines.begin(), lines.end(), [&](const std::string& l) { return l.find(part) != std::string::npos; });
+    };
+    EmfWorld* server = reinterpret_cast<EmfWorld*>(r.world.p());
+    EmfPathQuery q = query(12);
+    q.as_entity = 7;
+    CHECK(api_table()->path_find(server, &q, on_path, nullptr) == 0u);  // not inside a world callback
+    CHECK(said("path_find refused: as_entity: call it from a world callback (on_tick, run_on_world, on_event) on the "
+               "server world passed to it"));
+    uint32_t id = 1;
+    run_in_callback(server, [&](EmfWorld* w) { id = api_table()->path_find(w, &q, on_path, nullptr); });
+    CHECK(id == 0u);
+    CHECK(said("path_find refused: as_entity 7 has no DynamicPathFinder"));
+    g_has_finder = true;
+    run_in_callback(server, [&](EmfWorld* w) { id = api_table()->path_find(w, &q, on_path, nullptr); });
+    CHECK(id == 0u);
+    CHECK(said("path_find refused: as_entity 7 has no PathWalker template"));
+    state.get_template_component = nullptr;  // a build where template data cannot be read
+    run_in_callback(server, [&](EmfWorld* w) { id = api_table()->path_find(w, &q, on_path, nullptr); });
+    CHECK(id == 0u);
+    CHECK(said("path_find refused: as_entity 7: template data cannot be read on this game build"));
+    q.as_entity = 0;  // without it, any thread as before
+    q.owner = 7;
+    CHECK(api_table()->path_find(server, &q, on_path, nullptr) != 0u);
+    set_core_state(nullptr);
+}
+
 TEST_CASE("api table (v37): path_find and path_cancel are there") {
     const EmfApi* api = api_table();
     CHECK(api->version >= 37u);  // the newest version is checked by its own test (test_doors.cpp: v38)
@@ -185,7 +276,7 @@ TEST_CASE("api table (v37): path_find and path_cancel are there") {
 
 TEST_CASE("path glue: when the emf_path program has not run for 5 s, open queries are answered (cancelled)") {
     Rig r;
-    const uint32_t id = path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr);
+    const uint32_t id = path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr, nullptr);
     path_server_tick(2000);  // the program never ran in this world: give it time
     CHECK(g_answers.empty());
     for (uint64_t t = 0; t + 2 < kPathWatchdogSteps; ++t) path_server_tick(2000 + kPathWatchdogMs + t);
@@ -219,8 +310,8 @@ uint32_t* f_create_maybe_fault(void* cb, uint32_t* id, const void* q) {
 
 TEST_CASE("path glue (review I1): a callback that faults does not cost the other answers of that step") {
     Rig r;
-    path_service()->request(query(12), 7, on_path_faults, nullptr, 1000, nullptr);
-    const uint32_t b = path_service()->request(query(14), 7, on_path, nullptr, 1000, nullptr);
+    path_service()->request(query(12), 7, on_path_faults, nullptr, 1000, nullptr, nullptr);
+    const uint32_t b = path_service()->request(query(14), 7, on_path, nullptr, 1000, nullptr, nullptr);
     r.step();
     g_found[1] = {{12, 50, 0, 0, {}}};
     g_found[2] = {{14, 50, 0, 0, {}}};
@@ -240,7 +331,7 @@ TEST_CASE("path glue (review I2): a fault in a game call stops that step; the op
     d.after_step = [](std::function<void(EmfWorld*)> fn) { fn(nullptr); };
     d.now_ms = [] { return uint64_t(1000); };
     r.spec = path_setup(d);
-    for (int i = 0; i < 3; ++i) path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr);
+    for (int i = 0; i < 3; ++i) path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr, nullptr);
     g_create_faults = true;
     g_create_calls = 0;
     r.step();
@@ -252,7 +343,7 @@ TEST_CASE("path glue (review I2): a fault in a game call stops that step; the op
 
 TEST_CASE("path glue (review): one long step is not a stalled program; steps without a run are") {
     Rig r;
-    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr);
+    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr, nullptr);
     r.step();                                  // ran (the clock says 1000)
     path_server_tick(1000 + kPathWatchdogMs + 5000);  // one step that took long
     CHECK(g_answers.empty());
@@ -263,7 +354,7 @@ TEST_CASE("path glue (review): one long step is not a stalled program; steps wit
 TEST_CASE("path glue (review M1): no command buffer: the program does not count as running") {
     Rig r;
     std::memset(r.ctx.job + 0x08, 0, 8);
-    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr);
+    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr, nullptr);
     for (uint64_t t = 0; t <= kPathWatchdogSteps; ++t) {  // the program is called every step, but cannot work
         r.step();
         path_server_tick(t ? 1000 + kPathWatchdogMs + t : 1000);
@@ -310,7 +401,7 @@ TEST_CASE("path glue (review M3): a destroy the game refused is tried again next
     d.after_step = [](std::function<void(EmfWorld*)> fn) { fn(nullptr); };
     d.now_ms = [] { return uint64_t(1000); };
     r.spec = path_setup(d);
-    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr);
+    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr, nullptr);
     r.step();
     g_found[1] = {{12, 50, 0, 0, {}}};
     g_destroy_refusals = 1;
@@ -323,7 +414,7 @@ TEST_CASE("path glue (review M3): a destroy the game refused is tried again next
 
 TEST_CASE("path glue (review M3): queries the watchdog ends are destroyed in the game when the program runs again") {
     Rig r;
-    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr);
+    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr, nullptr);
     r.step();  // created (game id 1)
     REQUIRE(g_owners.size() == 1u);
     path_server_tick(1000);
@@ -336,7 +427,7 @@ TEST_CASE("path glue (review M3): queries the watchdog ends are destroyed in the
 
 TEST_CASE("path glue (review M3): a new world forgets the old world's game records (nothing to destroy there)") {
     Rig r;
-    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr);
+    path_service()->request(query(12), 7, on_path, nullptr, 1000, nullptr, nullptr);
     r.step();
     path_world_reset();
     r.step();
@@ -358,7 +449,7 @@ void on_path_doors(EmfWorld*, uint32_t, const EmfPathResult* r, const EmfPathPoi
 
 TEST_CASE("path glue (0.6.11): the door entity of each point comes with the answer (EmfPathResult.doors)") {
     Rig r;
-    REQUIRE(path_service()->request(query(12), 7, on_path_doors, nullptr, 1000, nullptr) != 0u);
+    REQUIRE(path_service()->request(query(12), 7, on_path_doors, nullptr, 1000, nullptr, nullptr) != 0u);
     r.step();
     g_found[1] = {{4, 50, 0, 0, {}}, {8, 50, 0, 5, {}}, {12, 50, 0, 0, {}}};
     g_door_ids[1] = {0, 812, 0};
@@ -366,14 +457,14 @@ TEST_CASE("path glue (0.6.11): the door entity of each point comes with the answ
     CHECK_FALSE(g_cb_doors_null);
     CHECK(g_cb_doors == std::vector<uint32_t>{0, 812, 0});
 
-    REQUIRE(path_service()->request(query(12), 7, on_path_doors, nullptr, 1000, nullptr) != 0u);
+    REQUIRE(path_service()->request(query(12), 7, on_path_doors, nullptr, 1000, nullptr, nullptr) != 0u);
     r.step();
     g_found[2] = {{4, 50, 0, 0, {}}, {12, 50, 0, 0, {}}};
     g_door_ids[2] = {0, 0};  // no door point
     r.step();
     CHECK(g_cb_doors_null);
 
-    REQUIRE(path_service()->request(query(12), 7, on_path_doors, nullptr, 1000, nullptr) != 0u);
+    REQUIRE(path_service()->request(query(12), 7, on_path_doors, nullptr, 1000, nullptr, nullptr) != 0u);
     r.step();
     g_found[3] = {{4, 50, 0, 5, {}}, {12, 50, 0, 0, {}}};
     g_door_ids[3] = {812};  // not one per point: not trusted
@@ -445,7 +536,7 @@ TEST_CASE("path glue (path.door): at most 16 wait; the watchdog answers them whe
 
 TEST_CASE("path glue (0.6.11 review M1): a door id on a point that is not a door point is not handed on") {
     Rig r;
-    REQUIRE(path_service()->request(query(12), 7, on_path_doors, nullptr, 1000, nullptr) != 0u);
+    REQUIRE(path_service()->request(query(12), 7, on_path_doors, nullptr, 1000, nullptr, nullptr) != 0u);
     r.step();
     g_found[1] = {{4, 50, 0, 0, {}}, {8, 50, 0, 5, {}}, {12, 50, 0, 2, {}}};
     g_door_ids[1] = {33, 812, 34};  // an old array the game did not clear: only the door point counts

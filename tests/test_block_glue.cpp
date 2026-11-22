@@ -1056,8 +1056,8 @@ TEST_CASE("api table (v47): find_wall_ex appended; EMF_FIND_TERRAIN reaches the 
     Fixture f;
     terrain_scene();
     const EmfApi* api = api_table();
-    CHECK(api->version == 47u);
-    CHECK(api->size == kApiV47Size);
+    CHECK(api->version >= 47u);  // the newest version is checked by its own test (v48: test_path_service.cpp)
+    CHECK(api->size >= kApiV47Size);
     CHECK(offsetof(EmfApi, find_wall_ex) == kApiV46Size);
     REQUIRE(api->find_wall_ex != nullptr);
     CHECK(api->spawn_facing != nullptr);  // v47 also turns a spawn (spawn_facing)

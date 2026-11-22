@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "core/api.h"
 #include "core/api_sizes.h"
 #include "core/path_service.h"
 #include "emf/emf_api.h"
@@ -72,7 +73,7 @@ TEST_CASE("path service: a query is created on the next step, polled until done,
     PathService s;
     FakeEngine fe;
     std::string why;
-    const uint32_t id = s.request(query(), 7, cb_noop, nullptr, 1000, &why);
+    const uint32_t id = s.request(query(), 7, cb_noop, nullptr, 1000, &why, nullptr);
     REQUIRE(id != 0);
     CHECK(s.open() == 1u);
     CHECK(s.step(fe.engine(), 1010).empty());  // created, no answer yet
@@ -100,7 +101,7 @@ TEST_CASE("path service: FOUND that stops short of the target (the closest-node 
     FakeEngine fe;
     EmfPathQuery q = query(40, 0);
     q.closest = 1;
-    REQUIRE(s.request(q, 7, cb_noop, nullptr, 0, nullptr));
+    REQUIRE(s.request(q, 7, cb_noop, nullptr, 0, nullptr, nullptr));
     s.step(fe.engine(), 10);
     fe.finish(fe.created[0], 1, {{5, 50, 0, 0}, {20, 50, 0, 0}});  // ends at a wall 20 m short
     const auto done = s.step(fe.engine(), 20);
@@ -129,31 +130,31 @@ TEST_CASE("path service: refused at once: a small size, bad numbers, too many no
     std::string why;
     EmfPathQuery q = query();
     q.size = 8;
-    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why) == 0u);
+    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why, nullptr) == 0u);
     q = query();
     q.to[1] = std::numeric_limits<float>::quiet_NaN();
-    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why) == 0u);
+    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why, nullptr) == 0u);
     CHECK(why.find("numbers") != std::string::npos);
     q = query(1e7f, 0);
-    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why) == 0u);
+    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why, nullptr) == 0u);
     q = query(150, 150);  // 212 m: the game answers nothing over 200 m without searching
-    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why) == 0u);
+    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why, nullptr) == 0u);
     CHECK(why.find("200 m") != std::string::npos);
-    CHECK(s.request(query(140, 140), 7, cb_noop, nullptr, 0, &why) != 0u);  // 198 m
+    CHECK(s.request(query(140, 140), 7, cb_noop, nullptr, 0, &why, nullptr) != 0u);  // 198 m
     q = query();
     q.max_nodes = 20001;
-    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why) == 0u);
+    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why, nullptr) == 0u);
     q = query();
     q.width = -1;
-    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why) == 0u);
+    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why, nullptr) == 0u);
     q = query();
     q.moves = 0x8000;
-    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why) == 0u);
-    CHECK(s.request(query(), 0, cb_noop, nullptr, 0, &why) == 0u);  // no owner
+    CHECK(s.request(q, 7, cb_noop, nullptr, 0, &why, nullptr) == 0u);
+    CHECK(s.request(query(), 0, cb_noop, nullptr, 0, &why, nullptr) == 0u);  // no owner
     CHECK(why.find("owner") != std::string::npos);
     PathService full;
-    for (size_t i = 0; i < kMaxOpenPaths; ++i) REQUIRE(full.request(query(), 7, cb_noop, nullptr, 0, &why) != 0u);
-    CHECK(full.request(query(), 7, cb_noop, nullptr, 0, &why) == 0u);
+    for (size_t i = 0; i < kMaxOpenPaths; ++i) REQUIRE(full.request(query(), 7, cb_noop, nullptr, 0, &why, nullptr) != 0u);
+    CHECK(full.request(query(), 7, cb_noop, nullptr, 0, &why, nullptr) == 0u);
     CHECK(why.find("32") != std::string::npos);
 }
 
@@ -161,7 +162,7 @@ TEST_CASE("path service: at most 8 new queries a step; each id once") {
     PathService s;
     FakeEngine fe;
     std::vector<uint32_t> ids;
-    for (int i = 0; i < 12; ++i) ids.push_back(s.request(query(), 7, cb_noop, nullptr, 0, nullptr));
+    for (int i = 0; i < 12; ++i) ids.push_back(s.request(query(), 7, cb_noop, nullptr, 0, nullptr, nullptr));
     for (size_t i = 1; i < ids.size(); ++i) CHECK(ids[i] != ids[i - 1]);
     s.step(fe.engine(), 10);
     CHECK(fe.created.size() == kPathCreatesPerStep);
@@ -172,7 +173,7 @@ TEST_CASE("path service: at most 8 new queries a step; each id once") {
 TEST_CASE("path service: cancel before and after the game has it; the owner gone; no answer in 10 s") {
     PathService s;
     FakeEngine fe;
-    const uint32_t a = s.request(query(), 7, cb_noop, nullptr, 0, nullptr);
+    const uint32_t a = s.request(query(), 7, cb_noop, nullptr, 0, nullptr, nullptr);
     CHECK(s.cancel(a));
     auto done = s.step(fe.engine(), 10);
     REQUIRE(done.size() == 1u);
@@ -180,7 +181,7 @@ TEST_CASE("path service: cancel before and after the game has it; the owner gone
     CHECK(fe.created.empty());  // never sent
     CHECK_FALSE(s.cancel(a));   // gone
 
-    const uint32_t b = s.request(query(), 7, cb_noop, nullptr, 20, nullptr);
+    const uint32_t b = s.request(query(), 7, cb_noop, nullptr, 20, nullptr, nullptr);
     s.step(fe.engine(), 30);
     CHECK(s.cancel(b));
     done = s.step(fe.engine(), 40);
@@ -188,7 +189,7 @@ TEST_CASE("path service: cancel before and after the game has it; the owner gone
     CHECK(done[0].result.status == EMF_PATH_CANCELLED);
     CHECK(fe.destroyed == fe.created);
 
-    const uint32_t c = s.request(query(), 9, cb_noop, nullptr, 50, nullptr);
+    const uint32_t c = s.request(query(), 9, cb_noop, nullptr, 50, nullptr, nullptr);
     s.step(fe.engine(), 60);
     fe.gone.push_back(9);
     done = s.step(fe.engine(), 70);
@@ -196,7 +197,7 @@ TEST_CASE("path service: cancel before and after the game has it; the owner gone
     CHECK(done[0].id == c);
     CHECK(done[0].result.status == EMF_PATH_CANCELLED);
 
-    const uint32_t d = s.request(query(), 7, cb_noop, nullptr, 100, nullptr);
+    const uint32_t d = s.request(query(), 7, cb_noop, nullptr, 100, nullptr, nullptr);
     s.step(fe.engine(), 110);
     CHECK(s.step(fe.engine(), 100 + kPathTimeoutMs - 1).empty());
     done = s.step(fe.engine(), 100 + kPathTimeoutMs + 20);
@@ -209,8 +210,8 @@ TEST_CASE("path service: cancel before and after the game has it; the owner gone
 TEST_CASE("path service: a new server world ends every query as cancelled, without calling the old world's game") {
     PathService s;
     FakeEngine fe;
-    s.request(query(), 7, cb_noop, nullptr, 0, nullptr);
-    s.request(query(), 7, cb_noop, nullptr, 0, nullptr);
+    s.request(query(), 7, cb_noop, nullptr, 0, nullptr, nullptr);
+    s.request(query(), 7, cb_noop, nullptr, 0, nullptr, nullptr);
     s.step(fe.engine(), 10);
     const auto done = s.world_reset();
     CHECK(done.size() == 2u);
@@ -222,7 +223,7 @@ TEST_CASE("path service: a new server world ends every query as cancelled, witho
 TEST_CASE("path service: at most 512 points are kept; the count says how many were kept") {
     PathService s;
     FakeEngine fe;
-    REQUIRE(s.request(query(190, 0), 7, cb_noop, nullptr, 0, nullptr));
+    REQUIRE(s.request(query(190, 0), 7, cb_noop, nullptr, 0, nullptr, nullptr));
     s.step(fe.engine(), 10);
     std::vector<EmfPathPoint> pts;
     for (int i = 1; i <= 700; ++i) pts.push_back({float(i) * 190.0f / 700.0f, 50, 0, 0});
@@ -246,7 +247,7 @@ TEST_CASE("path query bytes: EMF's fields over the game's defaults, at the offse
     q.height = 2.0f;  // 4
     q.closest = 1;
     q.max_nodes = 0;  // EMF's default
-    fill_path_query(b, q, 77);
+    fill_path_query(b, q, 77, nullptr);
     auto u32 = [&](size_t o) { uint32_t v; std::memcpy(&v, b + o, 4); return v; };
     auto f32 = [&](size_t o) { float v; std::memcpy(&v, b + o, 4); return v; };
     auto u16 = [&](size_t o) { uint16_t v; std::memcpy(&v, b + o, 2); return v; };
@@ -268,10 +269,16 @@ TEST_CASE("path query bytes: EMF's fields over the game's defaults, at the offse
     CHECK(b[0x28] == 0xAB);      // priority: the game's default kept
     CHECK(b[0x2a] == 0xAB);      // unknown bytes kept
     CHECK(f32(0x6c) != 0.0f);    // the costs kept (0xABABABAB here)
+    CHECK(u32(0xf0) == 2u);      // start search radius across: the game's default, written as such
+    CHECK(u32(0xf8) == 4u);      // search radius across: likewise
+    CHECK(u32(0x60) == (0xABABABABu | (1u << 19)));  // the game's forbidden rules and EMF's closed-door rule
+    for (size_t o : {size_t{0x5c}, size_t{0x64}, size_t{0x68}, size_t{0xbc}, size_t{0xc0}, size_t{0xc4}, size_t{0xcc},
+                     size_t{0x108}, size_t{0x10c}})
+        CHECK(u32(o) == 0xABABABABu);  // no creature: its fields stay the game's
     q.closest = 0;
     q.max_nodes = 9000;
     q.width = 0;
-    fill_path_query(b, q, 77);
+    fill_path_query(b, q, 77, nullptr);
     CHECK(b[0x36] == 0);
     CHECK(u32(0x48) == 9000u);
     CHECK(u32(0x100) == 0u);
@@ -316,7 +323,7 @@ TEST_CASE("path answer text (0.6.11): a door point names its door entity") {
 TEST_CASE("path service (review M2): a cancel while the step talks to the game still ends the query cancelled") {
     PathService s;
     FakeEngine fe;
-    const uint32_t id = s.request(query(), 7, cb_noop, nullptr, 0, nullptr);
+    const uint32_t id = s.request(query(), 7, cb_noop, nullptr, 0, nullptr, nullptr);
     s.step(fe.engine(), 10);
     fe.finish(fe.created[0], 1, {{10, 50, 0, 0}});
     PathEngine e = fe.engine();
@@ -339,14 +346,14 @@ TEST_CASE("path query bytes (0.6.11): closed doors are forbidden for every move 
     const uint32_t game_rule = 1u << 3;  // a forbidden rule of the game's defaults stays
     std::memcpy(b + 0x60, &game_rule, 4);
     EmfPathQuery q = query(10, 4);
-    fill_path_query(b, q, 77);
+    fill_path_query(b, q, 77, nullptr);
     uint32_t forbidden = 0, required = 0;
     std::memcpy(&forbidden, b + 0x60, 4);
     std::memcpy(&required, b + 0x5c, 4);
     CHECK(forbidden == (game_rule | (1u << 19)));
     CHECK(required == 0u);
     q.moves = EMF_PATH_OPEN_DOOR;  // with the door move a closed door is still crossed (as a DOOR point)
-    fill_path_query(b, q, 77);
+    fill_path_query(b, q, 77, nullptr);
     std::memcpy(&forbidden, b + 0x60, 4);
     CHECK(forbidden == (game_rule | (1u << 19)));
 }
@@ -354,7 +361,7 @@ TEST_CASE("path query bytes (0.6.11): closed doors are forbidden for every move 
 TEST_CASE("path service (0.6.11): the door entities are kept with the points (at most 512); none when no point is a door") {
     PathService s;
     FakeEngine fe;
-    REQUIRE(s.request(query(10, 0), 7, cb_noop, nullptr, 0, nullptr));
+    REQUIRE(s.request(query(10, 0), 7, cb_noop, nullptr, 0, nullptr, nullptr));
     s.step(fe.engine(), 10);
     PathAnswer a;
     a.done = true;
@@ -372,7 +379,7 @@ TEST_CASE("path service (0.6.11): the door entities are kept with the points (at
     CHECK(v.doors == done[0].doors.data());
     CHECK(v.count == kMaxPathPoints);
 
-    REQUIRE(s.request(query(10, 0), 7, cb_noop, nullptr, 0, nullptr));
+    REQUIRE(s.request(query(10, 0), 7, cb_noop, nullptr, 0, nullptr, nullptr));
     s.step(fe.engine(), 30);
     a.points.assign(2, EmfPathPoint{1, 50, 0, 0});
     a.doors.assign(2, 0);  // a door array with no door in it
@@ -384,8 +391,8 @@ TEST_CASE("path service (0.6.11): the door entities are kept with the points (at
 }
 
 // ---- v48: planning as a given creature (#44) ----
-// The values below are a Vukah warrior's and brawler's as the game build 1287369 holds them (PathWalker radius 0 and
-// 0.5, height 2; node rules forbid tar, deadly fog and lava; default moves walk, the door move only with canOpenDoors).
+// Test values: a PathWalker like the Vukah brawler's (radius 0.5, height 2, forbidding tar, deadly fog and lava: 388),
+// a made-up required rule and PathFinder, and an enemy template that can open doors (the game's Vukah cannot).
 namespace {
 namespace g = emf::gen::ecs;
 g::PathWalker walker_template(float radius = 0.5f, float height = 2.0f) {
@@ -511,6 +518,43 @@ TEST_CASE("path creature (v48): its walking profile from its templates (PathWalk
     bad = p.parts();
     bad.walker = nullptr;
     CHECK_FALSE(read_path_creature(bad, &e));
+    PathCreatureParts other = p.parts(false, false);
+    other.wildlife = &wild;
+    other.wildlife_size = sizeof wild - 4;
+    CHECK_FALSE(read_path_creature(other, &e));
+    other = p.parts(false, false);
+    other.npc = &npc;
+    other.npc_size = sizeof npc - 4;
+    CHECK_FALSE(read_path_creature(other, &e));
+    const g::Animal animal{};
+    other = p.parts(false, false);
+    other.animal = &animal;
+    other.animal_size = sizeof animal - 4;
+    CHECK_FALSE(read_path_creature(other, &e));
+    other.animal_size = sizeof animal;
+    CHECK(read_path_creature(other, &e));
+}
+
+TEST_CASE("path query bytes (v48): a creature's start search radii only where larger than EMF's (2 across, 4 up)") {
+    uint8_t b[kPathQueryBytes] = {};
+    PathCreature c = creature();
+    c.start_search[0] = 1;
+    c.start_search[1] = 2;
+    fill_path_query(b, query(), 77, &c);
+    uint32_t across = 0, up = 0;
+    std::memcpy(&across, b + 0xf0, 4);
+    std::memcpy(&up, b + 0xf4, 4);
+    CHECK(across == 2u);
+    CHECK(up == 4u);
+}
+
+TEST_CASE("path default owner (v48): the query's owner, else the creature it plans as, else 0 (then the first player)") {
+    EmfPathQuery q = query();
+    CHECK(path_default_owner(q) == 0u);
+    q.as_entity = 812;
+    CHECK(path_default_owner(q) == 812u);
+    q.owner = 7;
+    CHECK(path_default_owner(q) == 7u);
 }
 
 TEST_CASE("path query bytes (v48): as a creature, its walking fields at the game's offsets, the mod's query on top") {
@@ -616,6 +660,8 @@ TEST_CASE("path creature of (v48): an entity's templates by hash; refused withou
     CHECK(path_creature_of(812, get, tpl, &c) ==
           "as_entity 812 has no DynamicPathFinder (not a creature the game plans paths for, or not in the server world)");
     has_finder_component = true;
+    CHECK(path_creature_of(812, get, PathComponentFn{}, &c) ==
+          "as_entity 812: template data cannot be read on this game build");
     walker_size = 88;
     CHECK(path_creature_of(812, get, tpl, &c) ==
           "as_entity 812: its path templates have another layout on this game build (EMF needs an update)");
@@ -628,13 +674,14 @@ TEST_CASE("path used text (v48): the console's second line, what the search plan
     r.jump_up = 2;  // no jump move: the heights are not shown
     r.jump_down = 3;
     r.height = 2.0f;
-    CHECK(path_used_text(7, r) == "path 7: planned with walk, door; room 0.0 m across, 2.0 m up");
+    CHECK(path_used_text(7, r) == "path 7: planned with walk, door; room 0.0 m all round, 2.0 m up");
     r.moves = EMF_PATH_WALK | EMF_PATH_JUMP_UP | EMF_PATH_JUMP_DOWN;
     r.jump_up = 0;
     r.width = 0.5f;
     r.height = 0;
     CHECK(path_used_text(7, r) ==
-          "path 7: planned with walk, jump up, jump down; jumps up any height, down at most 3 m; room 0.5 m across, 0.0 m up");
+          "path 7: planned with walk, jump up, jump down; jumps up any height, down at most 3 m; room 0.5 m all round, "
+          "0.0 m up");
     r.size = kPathResultV42Size;  // an older result: nothing to say
     CHECK(path_used_text(7, r) == "");
 }
@@ -671,7 +718,7 @@ TEST_CASE("path service (v48): a creature's profile goes to the game with the qu
     };
     const PathCreature c = creature();
     REQUIRE(s.request(query(), 7, cb_noop, nullptr, 0, nullptr, &c));
-    REQUIRE(s.request(query(), 7, cb_noop, nullptr, 0, nullptr));
+    REQUIRE(s.request(query(), 7, cb_noop, nullptr, 0, nullptr, nullptr));
     s.step(e, 10);
     REQUIRE(with_creature.size() == 2u);
     CHECK(with_creature[0]);
@@ -687,4 +734,17 @@ TEST_CASE("path service (v48): a creature's profile goes to the game with the qu
     CHECK(done[0].result.height == 2.0f);  // 4 half metres
     CHECK(done[1].result.moves == EMF_PATH_WALK);  // also on a query without a creature, and on no path
     CHECK(done[1].result.height == 0.0f);
+}
+
+TEST_CASE("api table (v48): version 48 (0.6.20: EmfPathQuery.as_entity, the result's used values); v48 did not grow the table") {
+    const EmfApi* api = api_table();
+    CHECK(api->version == 48u);
+    CHECK(EMF_API_VERSION == 48);
+    CHECK(kApiV48Size == kApiV47Size);
+    CHECK(api->size == kApiV48Size);
+    CHECK(api->path_find != nullptr);
+    CHECK(kPathQueryV37Size == 52u);
+    CHECK(sizeof(EmfPathQuery) == 56u);
+    CHECK(kPathResultV42Size == 32u);
+    CHECK(sizeof(EmfPathResult) == 48u);
 }

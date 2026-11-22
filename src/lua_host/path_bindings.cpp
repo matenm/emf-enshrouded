@@ -1,4 +1,4 @@
-// Lua 1.29 paths on the game's path grid (API v37; 1.35: points[i].door, API v42): emf.path_find(world, from, to [, opts], fn) and emf.path_cancel(id).
+// Lua 1.29 paths on the game's path grid (API v37; 1.35: points[i].door, API v42; 1.41: as, result.used, API v48): emf.path_find(world, from, to [, opts], fn) and emf.path_cancel(id).
 // The answer comes once, after a server step or more, to fn(world, result, points); a script paused or reloaded in
 // between hears nothing.
 #include <cstddef>
@@ -143,7 +143,7 @@ void path_cb(EmfWorld* w, uint32_t id, const EmfPathResult* r, const EmfPathPoin
 }  // namespace
 
 // emf.path_find(world, from, to [, {jumps, doors, swim, closest, width, height, max_jump_up, max_jump_down, nodes,
-// owner}], fn): the query id, or nil when refused (the reason is in the log).
+// owner, as}], fn): the query id, or nil when refused (the reason is in the log).
 int l_path_find(lua_State* L) {
     Script* s = script_of(L);
     EmfWorld* w = lua_world_arg(L, 1);

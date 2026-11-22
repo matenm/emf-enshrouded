@@ -1030,21 +1030,22 @@ uint32_t api_path_find(EmfWorld* w, const EmfPathQuery* q, EmfPathCallback cb, v
     std::string why = path_query_check(copy);  // the cheap refusals before the owner lookup
     if (why.empty() && paths->open() >= kMaxOpenPaths) why = "32 path queries are open already (wait for answers)";
     if (!why.empty()) return refuse(why);
-    // v48: plan as this creature (its settings as the game's own queries for it hold them now)
+    // v48: plan as this creature, its walking profile from its templates (read here: only inside a world callback)
     PathCreature as{};
     if (copy.as_entity) {
-        const EmfApi* t = api_table();
+        if (w != dispatching_world())
+            return refuse("as_entity: call it from a world callback (on_tick, run_on_world, on_event) on the server world "
+                          "passed to it");
         const uint32_t e = copy.as_entity;
+        PathComponentFn tpl;  // none on a build without the template lookup
+        if (g_state && g_state->get_template_component)
+            tpl = [&](uint32_t hash, uint64_t* size) -> const void* { return api_get_template_component(w, hash, e, size); };
         why = path_creature_of(
-            e, [&](uint32_t hash, uint64_t* size) -> const void* { return t->get_component(w, hash, e, size); },
-            [&](uint32_t hash, uint64_t* size) -> const void* {
-                return t->get_template_component ? t->get_template_component(w, hash, e, size) : nullptr;
-            },
+            e, [&](uint32_t hash, uint64_t* size) -> const void* { return api_get_component(w, hash, e, size); }, tpl,
             &as);
         if (!why.empty()) return refuse(why);
     }
-    uint32_t owner = copy.owner;
-    if (!owner) owner = copy.as_entity;  // the creature: it does not avoid itself
+    uint32_t owner = path_default_owner(copy);
     if (!owner) owner = api_local_player();  // the host's own player: no scan
     if (!owner)
         for (const auto& p : read_players(api_table(), w))
