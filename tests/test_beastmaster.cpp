@@ -898,8 +898,50 @@ TEST_CASE("beastmaster (1.20): a beast's own fight against a pacified creature i
     armed(b, 1234);
     b.look(1, 0, 10.5, 0, 0);  // the player aims right at the pacified Vukah and sends the beasts
     CHECK(b.reply("beastmaster.attack") == "Your beasts attack (1).");
-    b.seconds(1);
+    fighting(b, 1234, 71);
+    b.r.fake.tick += 1;  // one step, between the order's writes (once a second): its target is not cleared
+    b.host->tick(kServer);
     CHECK(ordered(b, 1234) == 71u);
+    CHECK(still_fighting(b, 1234));
+}
+
+// Review: a hunting order in aggressive mode is an order too; the beast's own pick of a pacified Vukah beside it must
+// still be cleared, and a hunt whose target becomes pacified ends.
+TEST_CASE("beastmaster (1.20): a hunting beast's own fight against a pacified creature is cleared; a hunt on one that becomes pacified ends") {
+    BeastRig b;
+    wolf_out(b);
+    creature(b, 70, 0, 12, kSkeletonFoe);
+    creature(b, 71, 3, 3, kVukahFoe);
+    pacify(b, 71, true);
+    armed(b, 1234);
+    b.reply("beastmaster.mode aggressive");
+    b.seconds(2);
+    REQUIRE(ordered(b, 1234) == 70u);  // it hunts the skeleton
+    auto& a = component<ecs::DynamicAggro>(b.r.fake, 1234);
+    a.allowTargetSwitches = false;
+    a.targets[1].state = ecs::AggroTargetState::Alarmed;  // its senses also took the pacified Vukah
+    a.targets[1].aggro = 80.0f;
+    a.targets[1].entityId.id = 71;
+    b.r.fake.tick += 1;
+    b.host->tick(kServer);
+    const auto& now = now_of<ecs::DynamicAggro>(b, 1234);
+    CHECK(now.targets[1].aggro == 0.0f);  // cleared
+    CHECK(now.targets[1].state == ecs::AggroTargetState::Unknown);
+    CHECK(ordered(b, 1234) == 70u);       // the hunt goes on
+    pacify(b, 70, true);                  // its quarry is pacified too: the hunt ends at the next check
+    b.seconds(1);
+    CHECK_FALSE(held(b, 1234));
+}
+
+TEST_CASE("beastmaster (1.20): the pacified clearing leaves a defending beast's AI state alone when it cleared nothing") {
+    BeastRig b;
+    wolf_out(b);
+    armed(b, 1234);
+    b.seconds(1);
+    component<ecs::DynamicEnemy01BehaviorState>(b.r.fake, 1234).state = emf::gen::enemy01::State::Combat;
+    b.r.fake.tick += 1;
+    b.host->tick(kServer);
+    CHECK(now_of<ecs::DynamicEnemy01BehaviorState>(b, 1234).state == emf::gen::enemy01::State::Combat);
 }
 
 TEST_CASE("beastmaster: passive beasts still go where Attack sends them, for 20 s") {

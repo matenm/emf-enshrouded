@@ -33,7 +33,8 @@ page says who applies them). Without them everything else works and those beasts
    stable), of any kinds: with two slots, two wolves.
 4. **Fight together:** they defend you on their own. **Attack** (wheel) or `/beastmaster attack` sends every beast that is
    out at once: at the creature you look at (an animal too), up to 40 m away; looking at no creature, at the nearest
-   monster in the direction you look (within 30 degrees); else at the creature that hit you in the last 10 s. They go
+   monster in the direction you look (within 30 degrees; never one the game keeps peaceful toward you); else at the
+   creature that hit you in the last 10 s. They go
    for it for 20 s or until it falls. When a beast's hit leaves a foe at 25 % health or less, you land the killing blow, so the XP and loot are
    yours.
 5. **They stay close.** A beast that chases something more than 45 m from you drops the chase and runs back; one more
@@ -46,7 +47,8 @@ page says who applies them). Without them everything else works and those beasts
    - **Aggressive:** they also go after hostile creatures within 25 m of you (never wildlife, farm animals, bosses or
      players).
    - In every mode they leave alone creatures the game keeps peaceful toward you, such as the Vukah after the game's own
-     Beastmaster skill (1.20.0): until you attack one, or send your beasts at it with Attack.
+     Beastmaster skill (1.20.0). A creature you hit loses its peace and is a foe again; to send your beasts at a
+     peaceful one, look right at it and use Attack.
 7. **A beast that falls** rests for 60 seconds, then comes back beside you by itself, free (the line at the bottom left
    and `/beastmaster list` show "rests 0:40, then comes back"). It keeps its active slot meanwhile: **Dismiss** it (the
    wheel shows "Dismiss Wolf (rests 0:40)") to leave it at home and call another. With **A fallen beast comes back by

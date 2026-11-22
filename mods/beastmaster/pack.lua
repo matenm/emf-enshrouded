@@ -86,6 +86,7 @@ function P:reset()
 	self.refused = {}    -- beast -> checks in a row the game refused to bring it back
 	self.sent = {}       -- entity id -> until when Attack's order holds (a passive beast fights it until then)
 	self.orders = {}     -- entity id -> the creature Attack sent it at (written as its pick until the order ends)
+	self.hunts = {}      -- entity id -> true while its order is aggressive mode's hunt (not the player's Attack)
 	self.recall = {}     -- entity id -> until when a beast that dropped a chase fights nothing
 	self.base = {}       -- entity id -> {damage, wrote}: its template's damage multiplier, and the one written
 	self.fought = {}     -- entity id -> when it last hit or was hit (it heals HEAL_AFTER_S after that)
@@ -152,40 +153,47 @@ end
 -- `only` true: only its fights against the player side (players and their allies), as for a beast just tamed (it may
 -- still fight a monster that bites it: seen, a wild wolf killed a tamed one kept from fighting back).
 -- `only` "pacified": only its fights against creatures the game keeps pacified (its own senses pick them: the game
--- leaves a pacified creature's foes alone only from the pacified side).
-local function calm(world, id, only)
+-- leaves a pacified creature's foes alone only from the pacified side), never `spare` (the creature an order sent it at).
+local function calm(world, id, only, spare)
 	local function clears(e)
 		if not only then return true end
 		if not e or e == 0 then return false end
-		if only == "pacified" then return M.pacified(world, e) end
+		if only == "pacified" then return e ~= spare and M.pacified(world, e) end
 		if world:account(e) then return true end
 		local f = world:get("Faction", e)
 		return f ~= nil and PLAYER_SIDE[f.faction] == true
 	end
+	local cleared = false
 	local a = world:get("DynamicAggro", id)
-	if a and a.targets then
-		for i = 1, #a.targets do
-			local t = a.targets[i]
+	local at = a and a.targets
+	if at then
+		for i = 1, #at do
+			local t = at[i]
 			if (t.state ~= 0 or t.aggro ~= 0) and clears(t.entityId) then
 				t.state = 0
 				t.aggro = 0
+				cleared = true
 			end
 		end
 	end
 	local s = world:get("SelectedTargets", id)
-	if s and s.targets then
-		for i = 1, #s.targets do
-			local t = s.targets[i]
+	local st = s and s.targets
+	if st then
+		for i = 1, #st do
+			local t = st[i]
 			if t.targetEntityId ~= 0 and clears(t.targetEntityId) then
 				t.targetEntityId = 0
 				t.targetRootEntityId = 0
+				cleared = true
 			end
 		end
 	end
 	-- a beast left in the game's Combat state with nothing to fight stands there (seen: a tamed wolf stood 15 m from
-	-- its owner); from Idle the game has it guard its owner again (seen: it came at once)
+	-- its owner); from Idle the game has it guard its owner again (seen: it came at once). The pacified clearing, which
+	-- runs every step, does this only when it took something away.
+	if only == "pacified" and not cleared then return end
 	local ai = world:get("DynamicEnemy01BehaviorState", id)
-	local fights = s and s.targets and s.targets[1] and s.targets[1].targetEntityId ~= 0
+	local fights = st and st[1] and st[1].targetEntityId ~= 0
 	if ai and ai.state == AI_COMBAT and not fights then ai.state = AI_IDLE end
 end
 
@@ -249,6 +257,7 @@ end
 -- goes.
 function P:fresh(id)
 	self.base[id], self.sent[id], self.recall[id], self.fought[id], self.orders[id] = nil, nil, nil, nil, nil
+	self.hunts[id] = nil
 	self.walked[id] = nil
 	self.speeds[id], self.called[id] = nil, nil
 	self.fight:forget(id)
@@ -466,6 +475,7 @@ function P:dismiss(world, account, beast)
 	if beast.entity then
 		self.ids[beast.entity] = nil
 		self.sent[beast.entity], self.recall[beast.entity], self.base[beast.entity], self.orders[beast.entity] = nil, nil, nil, nil
+		self.hunts[beast.entity] = nil
 		self.fought[beast.entity] = nil
 	end
 	beast.entity = nil
@@ -523,6 +533,7 @@ end
 -- early, its target dead or friendly or the chase dropped, does not leave the rest of SENT_S to fight anything).
 function P:end_order(world, id)
 	self.sent[id] = nil
+	self.hunts[id] = nil
 	if not self.orders[id] then return end
 	self.orders[id] = nil
 	local a = world:position(id) and world:get("DynamicAggro", id)
@@ -539,6 +550,7 @@ function P:attack(world, account, target, hunting)
 		if b.out and b.entity and ours(world, b.entity) and not (hunting and self.orders[b.entity]) then
 			self.sent[b.entity] = now + SENT_S
 			self.orders[b.entity] = target
+			self.hunts[b.entity] = hunting or nil
 			order(world, b.entity, target)
 			n = n + 1
 		end
@@ -547,11 +559,12 @@ function P:attack(world, account, target, hunting)
 end
 
 -- Each check: an order holds while its time runs and its target may be fought (alive, and not turned friendly: a
--- creature being tamed becomes an ally at once).
+-- creature being tamed becomes an ally at once); a hunt also ends when the game pacifies its quarry (the player's own
+-- Attack on a pacified creature holds).
 function P:keep_order(world, id, now)
 	local target = self.orders[id]
 	if not target then return end
-	if now >= (self.sent[id] or 0) or not M.fightable(world, target) then
+	if now >= (self.sent[id] or 0) or not M.fightable(world, target) or (self.hunts[id] and M.pacified(world, target)) then
 		self:end_order(world, id)
 	else
 		order(world, id, target)
@@ -673,6 +686,7 @@ function P:on_died(id, world)
 	self.threat:forget(id)
 	self.idle:forget(id)
 	self.sent[id], self.recall[id], self.base[id], self.fought[id], self.orders[id] = nil, nil, nil, nil, nil
+	self.hunts[id] = nil
 	local e = self.ids[id]
 	if not e then return end
 	self.ids[id] = nil
@@ -784,13 +798,13 @@ function P:step(world)
 		end
 	end
 	-- every step: passive beasts (unless Attack sent them) and beasts coming back from a chase fight nothing; the others
-	-- nothing the game keeps pacified, unless the player's Attack sent them at it
+	-- nothing the game keeps pacified, but for the creature an order sent them at
 	for id, e in pairs(self.ids) do
 		local passive = self.env.mode and self.env.mode(e.account) == "passive" and now >= (self.sent[id] or 0)
 		if passive or now < (self.recall[id] or 0) then
 			calm(world, id)
-		elseif now >= (self.sent[id] or 0) then
-			calm(world, id, "pacified")
+		else
+			calm(world, id, "pacified", self.orders[id])
 		end
 		if self.speeds[id] then self:set_speed(world, id, e.beast) end
 	end

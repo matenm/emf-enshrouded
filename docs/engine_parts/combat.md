@@ -64,6 +64,12 @@ No reflected type holds a faction-relation table. The rules live in small leaf f
 - Returns true if isFriend(a, b) is true. Also returns true when a is not player side, b is Player or AutomatedPlayer, and `aState->isPacified` (+1) is set. So a pacified NPC counts as a friend of players.
 - Callers: `call_factions_for_help`, `enemy_sensor`, `friend_sensor`, `guard_interactions`, `enemy01`, `server_player_ranged_weapon_sticky_aim`.
 - Confidence: High for the logic, Medium that the third argument is PacifiedState (it matches the field layout and `call_factions_for_help` reads PacifiedState).
+- The test is one-sided: only the pacified creature's own side is spared. A player-side creature (PlayerAlly 11) still
+  counts a pacified Vukah as an enemy and attacks it. Seen in a local test world (build 1287369): a Vukah warrior has
+  `canBePacified` set; with `isPacified` set (pacifiedBy the player, pacifyEndTime far ahead) it stood 2 m from the
+  player for a minute and never targeted them; a player's hit made the game set `isPacified` false and
+  `wasPacifyAborted` (+2) true, and it fought. A player-ally wolf whose own targets were not cleared went for the
+  pacified Vukah within seconds.
 
 **isPlayerSideFaction(f)**
 - Address 0x140e8b200, `8D 41 F9 A8 FA 75 08 80 F9 0C 74 03` (verified).
