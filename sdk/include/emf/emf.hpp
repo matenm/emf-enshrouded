@@ -1133,6 +1133,9 @@ inline std::optional<EmfBlockInfo> find_wall(World w, const float from[3], const
     if (!api()->find_wall_ex(w.raw(), from, to, flags, &b)) return std::nullopt;
     return b;
 }
+// v48 (0.6.20, the version only): EmfPathQuery.as_entity (plan as a given creature) and the result's moves, jump_up,
+// jump_down, width and height (what the search planned with); check result->size too. An older core ignores as_entity.
+inline bool has_v48() { return has_v47() && api()->version >= 48; }
 // v25: E prompts (offer_add, offer_remove); v26: pictures in windows (offer_active ends it); v27: mod messages
 inline bool has_v25() { return api() && api()->size >= offsetof(EmfApi, offer_remove) + sizeof(api()->offer_remove); }
 inline bool has_v26() { return api() && api()->size >= offsetof(EmfApi, offer_active) + sizeof(api()->offer_active); }

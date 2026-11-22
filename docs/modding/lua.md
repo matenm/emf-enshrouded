@@ -105,6 +105,7 @@ version the additions need (empty: the v20 the `lua` mod needs is enough). Range
 | 1.38 | the world's own blocks (ruins) spared: a block's `world`, the break option `world` | v45 |
 | 1.39 | villager moves (`emf.villager_move`, `emf.villager_move_cancel`, `emf.villager_moving`) | v46 |
 | 1.40 | terrain a player placed: the break option `terrain`, `emf.find_wall`'s `{terrain = true}`, a terrain block's `world`; `emf.spawn`'s `{yaw = degrees}`; a marker's `bar` | v47 |
+| 1.41 | `emf.path_find`'s `as = entity` (plan as that creature walks) and `result.used` | v48 |
 
 ## What happens when a script fails
 
@@ -653,6 +654,9 @@ The answer comes once, after a server step or more, to `fn(world, result, points
 - `result.length`: metres from `from` along the points; `result.count`: the points (at most 512);
 - `points`: a list of `{x, y, z, move}`; `move` is 0 walk, 2 jump up, 3 jump down, 4 jump across, 5 a door. A door
   point also has `door`, the door's entity (1.35, EMF API v42): the door this path opens there.
+- `result.used` (1.41, EMF API v48; nil from an older core): what the search planned with, after `as` and your options:
+  `{moves, jumps, doors, swim, max_jump_up, max_jump_down, width, height}` (`moves` the `EMF_PATH_*` bits; `jumps`,
+  `doors`, `swim` true when it had them; jump heights 0 = no limit; `width` and `height` in metres, half-metre steps).
 
 `emf.path_cancel(id)` returns true when the query was open. The callback still comes, with `"cancelled"`. A script that
 is paused or reloaded before the answer hears nothing. Bad option values, or a position without three numbers, are Lua
@@ -667,7 +671,8 @@ errors.
 | `width`, `height` | the room the unit needs, in metres (0 to 64; default: the game's). `width` works as a radius: 0.5 needs 0.5 m free all round, 1.5 a clear 3 m circle (an open gate rarely has that). The grid keeps at most about 2 m across and 3.5 m up, so more finds no start. Jumps ignore both in flight. Try 0.5 and 2 for a humanoid, 1 and 3 for a big one. With `doors = true` pass only `height`: a modder saw any width take the door point away (the spots next to a gate have little room) |
 | `max_jump_up`, `max_jump_down` | metres (0 to 255; 0 = no limit) |
 | `nodes` | how many nodes the search may spend (0 to 20000; default 2000) |
-| `owner` | an entity the query belongs to (default: the first player) |
+| `owner` | an entity the query belongs to (default: the first player; with `as`, that creature) |
+| `as` | (1.41) an entity id: plan as that creature walks when calm, from its templates: its room (the game's own, from its `PathWalker`: a Vukah warrior is a point 2 m tall, the brawler 0.5 m all round, whatever its body), its node rules (a Vukah never crosses tar, deadly fog or lava), its default moves (walk for the game's Vukah and wolves; the door move for an enemy that can open doors) and its costs per ground type. Your options go on top: `jumps`, `doors`, `swim` are added, `max_jump_up`/`max_jump_down` as given, `width` and `height` replace its room. With `doors = true` the room across is 0 unless you give `width` (any room loses the door point). An enemy sent somewhere (the game's Guard state: EMF's move orders, a raid's march) or in a fight also jumps (a warrior up, down and across, the brawler and wolves down and across): add `jumps` with small `max_jump_up`/`max_jump_down` (a modder's raiders walk jumps of at most 1 m) to plan for that. Refused (nil, the reason in the log) for an entity that is not a creature the game plans paths for. An older core would ignore it and plan as a player, so on a core older than API v48 it is an error |
 
 Use `closest = true` and check `reaches`. A short path can mean blocked or ran out: without `closest`, `"no_path"` means
 the target is shut off for these moves, while `"too_long"` (all `nodes` spent) and `"no_memory"` (the game's fixed

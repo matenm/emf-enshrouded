@@ -71,6 +71,8 @@ constexpr uint32_t kApiV45Size = kApiV44Size;  // v45: the version only (EmfBloc
 constexpr uint32_t kBlockInfoV45Size = EMF_FIELD_END(EmfBlockInfo, world);
 constexpr uint32_t kApiV46Size = EMF_FIELD_END(EmfApi, villager_moving);
 constexpr uint32_t kApiV47Size = EMF_FIELD_END(EmfApi, spawn_facing);
+constexpr uint32_t kApiV48Size = kApiV47Size;  // v48 (0.6.20): the version only (EmfPathQuery.as_entity, the result's used values)
+constexpr uint32_t kPathResultV42Size = EMF_FIELD_END(EmfPathResult, doors);  // before v48's used values
 constexpr uint32_t kUiWidgetV24Size = EMF_FIELD_END(EmfUiWidget, pad);  // 56: a v24/v25 mod's widget_size
 
 // The x64 layouts mods are built with. A field that moves breaks every built mod; appending one changes sizeof only:
@@ -186,12 +188,16 @@ static_assert(kMoveOrderV40Size == 128 && sizeof(EmfMoveOrder) == 136 && offseto
 static_assert(kEnemyOrderV39Size == 120 && sizeof(EmfEnemyOrder) == 120 && offsetof(EmfEnemyOrder, seconds) == 16 &&
                   offsetof(EmfEnemyOrder, damage) == 20 && offsetof(EmfEnemyOrder, why) == 24,
               "EmfEnemyOrder layout (v39)");
-static_assert(kPathQueryV37Size == 52 && sizeof(EmfPathQuery) == 52 && offsetof(EmfPathQuery, moves) == 32 &&
-                  offsetof(EmfPathQuery, width) == 36 && offsetof(EmfPathQuery, max_nodes) == 48,
-              "EmfPathQuery layout (v37)");
+static_assert(kPathQueryV37Size == 52 && offsetof(EmfPathQuery, moves) == 32 && offsetof(EmfPathQuery, width) == 36 &&
+                  offsetof(EmfPathQuery, max_nodes) == 48 && offsetof(EmfPathQuery, as_entity) == 52 &&
+                  sizeof(EmfPathQuery) == 56,
+              "EmfPathQuery layout (v37; v48 as_entity)");
 static_assert(sizeof(EmfPathPoint) == 16 && kPathResultV37Size == 20 && offsetof(EmfPathResult, count) == 12 &&
-                  offsetof(EmfPathResult, doors) == 24 && sizeof(EmfPathResult) == 32,
-              "EmfPathPoint / EmfPathResult layout (v37; v42 doors)");
+                  offsetof(EmfPathResult, doors) == 24 && kPathResultV42Size == 32 &&
+                  offsetof(EmfPathResult, moves) == 32 && offsetof(EmfPathResult, jump_up) == 34 &&
+                  offsetof(EmfPathResult, width) == 36 && offsetof(EmfPathResult, height) == 40 &&
+                  sizeof(EmfPathResult) == 48,
+              "EmfPathPoint / EmfPathResult layout (v37; v42 doors; v48 the used values)");
 static_assert(kRemoveBuildingV36Size == 144 && sizeof(EmfRemoveBuilding) == 144 && offsetof(EmfRemoveBuilding, refunded) == 20 &&
                   offsetof(EmfRemoveBuilding, why) == 24,
               "EmfRemoveBuilding layout (v36)");

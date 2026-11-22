@@ -1162,6 +1162,7 @@ Refused (0, logged once per 10 s):
 - bad numbers;
 - `from` and `to` more than 200 m apart (the game does not search farther);
 - no owner (`owner` 0 means the first player, and none is there);
+- `as_entity` (API v48) is not a creature the game plans paths for (no `DynamicPathFinder`);
 - 32 EMF queries already open;
 - the feature is off on this build.
 
@@ -1176,6 +1177,7 @@ Refused (0, logged once per 10 s):
 | `width`, `height` | the room the unit needs, in metres; 0 = the game's default. `width` works as a radius (the game doubles it into half metres of free room all round, as it does with a creature's `PathWalker.horizontalRadius`); the grid keeps at most about 2 m across and 3.5 m up, so more finds no start node. Jump flights are checked against fixed room, not these |
 | `closest` | 1: fall back to the closest reachable point |
 | `max_nodes` | 0 = 2000, at most 20000 |
+| `as_entity` | API v48 (0.6.20; `emf::has_v48()`: an older core ignores it): plan as this creature walks. See "v48" below |
 
 `EmfPathResult`:
 
@@ -1186,6 +1188,7 @@ Refused (0, logged once per 10 s):
 | `count` | the points passed (at most 512 are kept) |
 | `length` | metres from `from` along the points |
 | `doors` | API v42 (0.6.11; read it when `size` covers it, `emf::has_v42()`): per point, the door entity the path goes through there (a point with `move` 5), else 0; `count` entries; NULL when no point is a door (or the game gave no usable list). Valid during the callback only. The game's own record of the door for that point |
+| `moves`, `jump_up`, `jump_down`, `width`, `height` | API v48 (0.6.20; read them when `size` covers them): what the search planned with, after `as_entity` and the query's own fields: the moves (`EMF_PATH_*`), the highest jumps (0 = no limit), the room across (as the query's `width`) and up, in half-metre steps. Why a path differs shows here |
 
 Each `EmfPathPoint` has `x`, `y`, `z` and `move`: 0 walk, 2 jump up, 3 jump down, 4 jump across, 5 a door.
 
@@ -1506,6 +1509,49 @@ whatever happened to it since (dug into, smoothed, refilled). A cell whose shipp
   read old natural ground there as a player's (the ruins have the same caveat).
 - Console: `break ... terrain`; `blocks` finds terrain a player placed too and says whose a terrain cell is.
 
+## v48: planning a path as a given creature
+
+The version only (no new function): `EmfPathQuery.as_entity` and the result's `moves`, `jump_up`, `jump_down`,
+`width`, `height`. C++: `emf::has_v48()`; an older core ignores `as_entity` (it plans as a player would), so check it.
+Lua 1.41: `as = entity` in `emf.path_find`'s options and `result.used`.
+
+`as_entity` plans as that creature walks when calm, from its templates (the same for every creature of its kind, not
+what it does this second):
+
+- **Room:** its `PathWalker` radius and height, as the game turns them into half metres (truncated): a Vukah warrior
+  paths as a point with 2 m up, the much wider Vukah brawler with 0.5 m all round. The game plans with this, not with
+  the body you see.
+- **Node rules:** its `PathWalker` rules (a Vukah never paths over tar, deadly fog or lava), for the target too.
+- **Moves:** its behaviour template's default moves: walk for the game's Vukah and wolves. An enemy that can open
+  doors (`openDoorSetup.canOpenDoors`) gets `EMF_PATH_OPEN_DOOR`. Villagers (`ActiveNpcState`) and creatures with the
+  `Animal` template have no moves in their templates: walk (a villager really opens doors and drops down 1 m: add
+  `EMF_PATH_OPEN_DOOR` and `EMF_PATH_JUMP_DOWN` with `max_jump_down` 1).
+- **Costs:** its behaviour's default costs per ground type (the Vukah's are all 1).
+- **Steps:** its `PathFinder` template's highest steps (0 = the game's), and its start search radius where larger than
+  EMF's.
+- Not taken: anything about its current target (keep distance, leash, free-path checks).
+
+On top: the query's `from`, `to`, `closest` and `max_nodes`; `moves` is added; `max_jump_up` and `max_jump_down` as
+given; `width` and `height` replace the creature's room when not 0. With the door move the room across is 0 unless
+`width` is given: any room loses the door point (the spots next to a gate have none). `owner` 0 is the creature itself.
+Refused (logged) when the entity has no `DynamicPathFinder` or no `PathWalker` template.
+
+Why not the creature's own query settings (`DynamicPathFinder`): the game rewrites them for each query it makes, several
+times a second. Seen on a Vukah warrior: calm, walk only; roaming, its road costs (road 0.3, tar and mud 4); in the
+game's Guard state (EMF's move orders, a raid's march) walk plus its extended moves (jump up, down and across) with the
+road costs; in a fight, walk, and every few steps its jump move as well when the target looks out of reach (the
+brawler has no fight jump). The extended moves are in its `Enemy01BehaviorState` template
+(`movementSetup.extendedMoveTypes`: the warrior 0x1c, the brawler and the wolf 0x18). To plan for a march with jumps,
+add them with `moves` (a modder's raid tests: raiders walk paths with jumps of at most 1 m up and down; with
+`EMF_PATH_OPEN_DOOR` pass no jumps and `height` 2).
+
+Seen live (a Vukah warrior, planned with `as_entity`, then sent there with EMF's move order): its track followed the
+planned line within about 1.3 m on open ground.
+
+The result's `moves`, `jump_up`, `jump_down`, `width` and `height` say what the search planned with, after
+`as_entity` and the query's own fields (on every v48 result, also without `as_entity`). Console: `path <x> <y> <z> ...
+as <entity>` plans from that creature's position as it, and prints a second line with what it planned with.
+
 ## SDK headers (header-only C++, no ABI)
 
 | Header | What |
@@ -1533,7 +1579,7 @@ every mod under a name, as in EMF.exe; a load applies at the next start), `hud.l
 for the server world's jobs and each mod), `goto [#k] <x> <y> <z> [ground]` / `goto [#k] <entity> [ground]`
 (v20: teleports you, or the k-th player, there or beside that entity; the result follows a few steps later). Coordinates for `goto`, `path`, `spawn ... at` and Teleports' `tp.pos` can be written many ways: `3 4 5`, `3, 4,5`, `(3, 4, 5)`, `[3 4 5]`, `<3> <4> <5>`, `3;4;5`, or a pasted `pos` line (`player 1 at (3.0, 4.0, 5.0) m`). For mod makers: `emf::coordinate_words(words)` in `emf.hpp` turns such words into plain numbers, `entities`, `near [radius]`, `inv <entity>`, `health <entity> [percent 1-100]` (read, or set to that share of the maximum; refused while it reads 0: dead, or a spawn not set up yet), `god [entity|me] [on|off]` (v31: the entity, you by default, keeps at least 1 health from hits, falls, the shroud, the cold and drowning, through one hit rule; `god` alone lists who has it; it ends with `off`, when a player leaves, when the entity is gone, and when a new world starts; refused while health reads 0), `ai <entity>` (the enemy01 state, the guarded entity, the combat target, the aggro entries and the faction),
 `inspect <entity>`, `tpl <entity> <component> [bytes] [offset]`, `tplset <entity> <component> <offset> <type> <value>`,
-`stack <item> <max>`, `destroy <entity>`, `remove <entity> [me|drop|<player>] [force]` (v36: removes a placed object like a pick-up; `me` (or `player`) gives the item back to whoever typed the command; `drop` leaves its item on the ground, a player number puts it in that player's inventory, `force` also removes a non-empty container: its stacks drop at its spot, and the reply counts them and says when one could not be dropped), `path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000]` (v37: a path from you to that spot on the game's path grid; prints `path N: asked ...`, then the answer: found or why not, whether it reaches or stops short, the points, the metres, where it ends, and the jumps and doors; `doors` (0.6.11) lets it open doors, and each door point names its door entity), `path.door <entity>` (0.6.11, host: what the game's path grid knows about a door, after a step: whether it is in the grid's door table ("not in the path grid's door table (N doors registered)" if not), open or closed there (kind 1 or 2; 3 is a moving object), its box in metres, the door row (the box's lowest 1 m node layer: a closed door's ClosedDoor nodes), and for the node in the row's middle whether its cell is built, its node type (19 ClosedDoor), ground or not, and its room across and up; "not available on this game build" where EMF does not know the grid's layout), `blocks [origin] [at <x> <y> <z>]` and `break [radius 0.25-3.5] [instant] [drops] [world] [terrain] [height <m>] [at <x> <y> <z>]` (v44: the player-built block where you look or at a point; break the blocks there, never the world's own ground; v47: `terrain` also the terrain blocks a player placed; admins from the chat; v45: `origin` says whether the block is the world's own, a ruin as shipped, and breaks spare those), `door <entity> [open|close|lock|unlock] [front|back]` (v38: without a word it prints the state: "closed", "open, locked", "driven by a switch" or "not a door"; `items door` lists door items and `spawn <guid>` puts one down for a test), `chat.players` (v19: the players of the world you host or of the
+`stack <item> <max>`, `destroy <entity>`, `remove <entity> [me|drop|<player>] [force]` (v36: removes a placed object like a pick-up; `me` (or `player`) gives the item back to whoever typed the command; `drop` leaves its item on the ground, a player number puts it in that player's inventory, `force` also removes a non-empty container: its stacks drop at its spot, and the reply counts them and says when one could not be dropped), `path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000] [as <entity>]` (v37: a path from you to that spot on the game's path grid; prints `path N: asked ...`, then the answer: found or why not, whether it reaches or stops short, the points, the metres, where it ends, and the jumps and doors; `doors` (0.6.11) lets it open doors, and each door point names its door entity; `as` (0.6.20) plans from that creature's position as it walks (v48), and a second line says what it planned with: moves, jump heights, room), `path.door <entity>` (0.6.11, host: what the game's path grid knows about a door, after a step: whether it is in the grid's door table ("not in the path grid's door table (N doors registered)" if not), open or closed there (kind 1 or 2; 3 is a moving object), its box in metres, the door row (the box's lowest 1 m node layer: a closed door's ClosedDoor nodes), and for the node in the row's middle whether its cell is built, its node type (19 ClosedDoor), ground or not, and its room across and up; "not available on this game build" where EMF does not know the grid's layout), `blocks [origin] [at <x> <y> <z>]` and `break [radius 0.25-3.5] [instant] [drops] [world] [terrain] [height <m>] [at <x> <y> <z>]` (v44: the player-built block where you look or at a point; break the blocks there, never the world's own ground; v47: `terrain` also the terrain blocks a player placed; admins from the chat; v45: `origin` says whether the block is the world's own, a ruin as shipped, and breaks spare those), `door <entity> [open|close|lock|unlock] [front|back]` (v38: without a word it prints the state: "closed", "open, locked", "driven by a switch" or "not a door"; `items door` lists door items and `spawn <guid>` puts one down for a test), `chat.players` (v19: the players of the world you host or of the
 dedicated server, with their account hashes for `[chat] admins`, their connection and name), `world.get [setting]`,
 `world.set <setting> <value> [persist]`, `world.reset [setting|all] [persist]`, `world.list`, `world.export` (v21: the
 running world's settings, [world_settings.md](world_settings.md)). Commands go into the in-game console (the key under Esc), the optional

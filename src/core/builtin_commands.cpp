@@ -1527,20 +1527,23 @@ void cmd_destroy(EmfWorld* w, int argc, const char* const* argv, void* u) {
     }
 }
 
-// path <x> <y> <z> [jumps] [doors] [closest] (v37; doors 0.6.11): a path from you; the answer comes after a step or more.
+// path <x> <y> <z> [jumps] [doors] [closest] [nodes] [as <entity>] (v37; doors 0.6.11; as 0.6.20): a path from you, or
+// with `as` from that creature planned as it walks; the answer comes after a step or more, with what it planned with.
 struct LatePath {
     ReplyFn reply;
 };
 void path_done(EmfWorld*, uint32_t id, const EmfPathResult* r, const EmfPathPoint* points, void* user) {
     const std::unique_ptr<LatePath> late(static_cast<LatePath*>(user));
-    if (late->reply && r) late->reply(path_answer_text(id, *r, points));
+    if (!late->reply || !r) return;
+    late->reply(path_answer_text(id, *r, points));
+    if (const std::string used = path_used_text(id, *r); !used.empty()) late->reply(used);
 }
 void cmd_path(EmfWorld* w, int argc, const char* const* argv, void* u) {
     auto& c = ctx_of(u);
     EmfPathQuery q{};
     q.size = sizeof q;
     const std::vector<std::string> words = emf::coordinate_words({argv + 1, argv + argc});
-    bool ok = words.size() >= 3 && words.size() <= 6;
+    bool ok = words.size() >= 3 && words.size() <= 8;
     for (size_t i = 0; ok && i < 3; ++i) {
         char* end = nullptr;
         q.to[i] = std::strtof(words[i].c_str(), &end);
@@ -1552,21 +1555,29 @@ void cmd_path(EmfWorld* w, int argc, const char* const* argv, void* u) {
         if (a == "jumps") q.moves |= EMF_PATH_JUMP_UP | EMF_PATH_JUMP_DOWN | EMF_PATH_JUMP_ACROSS;
         else if (a == "doors") q.moves |= EMF_PATH_OPEN_DOOR;
         else if (a == "closest") q.closest = 1;
+        else if (a == "as" && !q.as_entity && i + 1 < words.size())
+            ok = parse_uint(words[++i].c_str(), 0xffffffffu, &q.as_entity) && q.as_entity;
         else if (!q.max_nodes && parse_uint(a.c_str(), kPathMaxNodes, &nodes) && nodes) q.max_nodes = nodes;
         else ok = false;
     }
     if (!ok) {
-        command_reply_line("usage: path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000]");
+        command_reply_line("usage: path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000] [as <entity>]");
         return;
     }
     const uint32_t player = c.player ? c.player() : 0;
     double at[3] = {};
-    if (!player || !player_pos(c, w, player, at)) {
+    if (q.as_entity) {  // from the creature, owned by it (path_find's default)
+        if (!player_pos(c, w, q.as_entity, at)) {
+            command_reply_line(fmt("path: entity %u has no position in this world", q.as_entity));
+            return;
+        }
+    } else if (!player || !player_pos(c, w, player, at)) {
         command_reply_line("path: you have no position in this world");
         return;
+    } else {
+        q.owner = player;
     }
     for (int i = 0; i < 3; ++i) q.from[i] = static_cast<float>(at[i]);
-    q.owner = player;
     auto* late = new LatePath{current_reply()};
     const uint32_t id = c.api->path_find ? c.api->path_find(w, &q, path_done, late) : 0;
     if (!id) {
@@ -1737,7 +1748,7 @@ bool add_builtin_commands(BuiltinContext& ctx) {
         {"stack", "<item name> <max 1-65535>: change an item's stack size until the game restarts (host)", cmd_stack},
         {"door", "<entity> [open|close|lock|unlock] [front|back]: a door's state, or open, close or lock it (host)",
          cmd_door},
-        {"path", "<x> <y> <z> [jumps] [doors] [closest] [nodes]: a path from you on the game's path grid; a door point names its door (it moves nothing; host)",
+        {"path", "<x> <y> <z> [jumps] [doors] [closest] [nodes] [as <entity>]: a path from you on the game's path grid (as: from that creature, planned as it walks); a door point names its door (it moves nothing; host)",
          cmd_path},
         {"path.door", "<entity>: what the game's path grid knows about a door: whether it is in the grid's door table, "
                       "open or closed there, its box and door row, and the node in the row's middle (type, ground, "

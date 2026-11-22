@@ -1030,7 +1030,21 @@ uint32_t api_path_find(EmfWorld* w, const EmfPathQuery* q, EmfPathCallback cb, v
     std::string why = path_query_check(copy);  // the cheap refusals before the owner lookup
     if (why.empty() && paths->open() >= kMaxOpenPaths) why = "32 path queries are open already (wait for answers)";
     if (!why.empty()) return refuse(why);
+    // v48: plan as this creature (its settings as the game's own queries for it hold them now)
+    PathCreature as{};
+    if (copy.as_entity) {
+        const EmfApi* t = api_table();
+        const uint32_t e = copy.as_entity;
+        why = path_creature_of(
+            e, [&](uint32_t hash, uint64_t* size) -> const void* { return t->get_component(w, hash, e, size); },
+            [&](uint32_t hash, uint64_t* size) -> const void* {
+                return t->get_template_component ? t->get_template_component(w, hash, e, size) : nullptr;
+            },
+            &as);
+        if (!why.empty()) return refuse(why);
+    }
     uint32_t owner = copy.owner;
+    if (!owner) owner = copy.as_entity;  // the creature: it does not avoid itself
     if (!owner) owner = api_local_player();  // the host's own player: no scan
     if (!owner)
         for (const auto& p : read_players(api_table(), w))
@@ -1038,7 +1052,7 @@ uint32_t api_path_find(EmfWorld* w, const EmfPathQuery* q, EmfPathCallback cb, v
                 owner = p.entity;
                 break;
             }
-    const uint32_t id = paths->request(copy, owner, cb, user, now(), &why);
+    const uint32_t id = paths->request(copy, owner, cb, user, now(), &why, copy.as_entity ? &as : nullptr);
     return id ? id : refuse(why);
 }
 

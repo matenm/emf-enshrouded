@@ -114,3 +114,59 @@ TEST_CASE("lua 1.35: a door point carries its door entity (points[i].door); none
     r.fake.paths[1].cb(kServer, 2, &old, pts, r.fake.paths[1].user);
     CHECK(logged("door nil nil"));
 }
+
+TEST_CASE("lua 1.41: as = entity plans as that creature; result.used says what the search planned with") {
+    Rig r(L"lua_path_as");
+    add_script(r.dir, "pa",
+               "emf.command('go', '', function(w)\n"
+               "  emf.path_find(w, {1, 50, 2}, {30, 51, 4}, {as = 812, jumps = true}, function(w2, res, pts)\n"
+               "    local u = res.used\n"
+               "    emf.log('used ' .. u.moves .. ' ' .. tostring(u.jumps) .. ' ' .. tostring(u.doors) .. ' ' ..\n"
+               "      tostring(u.swim) .. ' ' .. u.max_jump_up .. ' ' .. u.max_jump_down .. ' ' ..\n"
+               "      string.format('%.1f %.1f', u.width, u.height))\n"
+               "  end)\n"
+               "  local ok = pcall(emf.path_find, w, {1, 50, 2}, {30, 51, 4}, {as = -1}, function() end)\n"
+               "  emf.log('negative ' .. tostring(ok))\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("pa.go");
+    CHECK(logged("negative false"));
+    REQUIRE(r.fake.paths.size() == 1u);
+    CHECK(r.fake.paths[0].q.as_entity == 812u);
+    EmfPathResult res{};
+    res.size = sizeof res;
+    res.status = EMF_PATH_FOUND;
+    res.count = 1;
+    res.moves = EMF_PATH_WALK | EMF_PATH_OPEN_DOOR;
+    res.jump_up = 2;
+    res.jump_down = 3;
+    res.width = 0.5f;
+    res.height = 2.0f;
+    const EmfPathPoint pts[1] = {{30, 51, 4, 0}};
+    r.fake.paths[0].cb(kServer, 1, &res, pts, r.fake.paths[0].user);
+    CHECK(logged("used 33 false true false 2 3 0.5 2.0"));
+}
+
+TEST_CASE("lua 1.41: as on a core older than v48 is an error (it would plan as a player); a v47 result has no used") {
+    Rig r(L"lua_path_as_old");
+    r.api.version = 47;
+    add_script(r.dir, "po",
+               "emf.command('go', '', function(w)\n"
+               "  local ok, err = pcall(emf.path_find, w, {1, 50, 2}, {30, 51, 4}, {as = 812}, function() end)\n"
+               "  emf.log('old ' .. tostring(ok) .. ' ' .. tostring(err))\n"
+               "  emf.path_find(w, {1, 50, 2}, {30, 51, 4}, function(w2, res) emf.log('used ' .. tostring(res.used)) end)\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("po.go");
+    CHECK(logged("old false"));
+    CHECK(logged("as needs EMF 0.6.20 or newer (core API v48)"));
+    REQUIRE(r.fake.paths.size() == 1u);
+    EmfPathResult res{};
+    res.size = offsetof(EmfPathResult, moves);  // a v42-v47 result
+    res.status = EMF_PATH_NO_PATH;
+    res.moves = 1;  // past its size: must not be read
+    r.fake.paths[0].cb(kServer, 1, &res, nullptr, r.fake.paths[0].user);
+    CHECK(logged("used nil"));
+}

@@ -188,14 +188,14 @@ void path_program(void* ctx, void*) {
         else if (!ok) destroy_later(id, owner);  // still full: next step
     }
     PathEngine e;
-    e.create = [&](const EmfPathQuery& q, uint32_t owner) -> uint64_t {
+    e.create = [&](const EmfPathQuery& q, uint32_t owner, const PathCreature* as) -> uint64_t {
         if (!g_on.load()) return 0;  // a game call faulted earlier in this step: no more calls
         alignas(16) uint8_t bytes[kPathQueryBytes] = {};
         if (!call_defaults(f.defaults, bytes)) {
             fault("query defaults");
             return 0;
         }
-        fill_path_query(bytes, q, owner);
+        fill_path_query(bytes, q, owner, as);
         uint32_t id = 0;
         if (!call_create(f.create, cb, bytes, &id)) {
             fault("create path query");

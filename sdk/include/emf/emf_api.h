@@ -1,4 +1,4 @@
-/* EMF (Enshrouded Modding Framework) C API, version 47 (see EMF_API_VERSION).
+/* EMF (Enshrouded Modding Framework) C API, version 48 (see EMF_API_VERSION).
  *
  * A mod is a DLL in <game>/emf/mods/ that exports:
  *     extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api);
@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define EMF_API_VERSION 47
+#define EMF_API_VERSION 48
 
 /* World kinds (the byte at the entity storage + 8: world+0xE15DC8 on build 1273043, world+0xE179C8 on 1283531). */
 #define EMF_WORLD_SERVER 0
@@ -759,6 +759,16 @@ typedef struct EmfPathQuery {
     uint8_t closest;      /* 1 = fall back to the closest reachable point (the game's march does this) */
     uint8_t pad[3];
     uint32_t max_nodes;   /* 0 = 2000; at most 20000 (the game's own default is 500) */
+    /* API v48 (0.6.20; an older core ignores it: check emf::has_v48()): plan as this creature walks, from its
+       templates: the room and node rules of its PathWalker (the game's own rule), its PathFinder's highest steps, and
+       its behaviour's default moves (an enemy that can open doors: the door move too) and default costs per ground
+       type. Calm walking: an enemy in the game's Guard state or a fight adds its extended moves (jumps), and a roaming
+       one its road costs; add jumps with `moves` to plan for that. On top: this query's from, to, closest and
+       max_nodes; `moves` is added; max_jump_up/down, width and height as given (width and height 0 = the creature's).
+       With the door move the room across is 0 unless width is given (any room loses the door). Refused when the
+       entity has no DynamicPathFinder or PathWalker (not a creature the game plans paths for). owner 0 = this
+       creature. 0 = off. */
+    uint32_t as_entity;
 } EmfPathQuery;
 typedef struct EmfPathPoint {
     float x, y, z;
@@ -775,6 +785,13 @@ typedef struct EmfPathResult {
        point with move 5), else 0; `count` entries. NULL when no point is a door (or the game gave no usable list).
        Valid during the callback only. */
     const uint32_t* doors;
+    /* API v48 (0.6.20; read them only when `size` covers them): what the search planned with, after as_entity and this
+       query's own fields: why a path differs shows here. */
+    uint16_t moves;     /* EMF_PATH_* */
+    uint8_t jump_up;    /* metres; 0 = no limit */
+    uint8_t jump_down;
+    float width;        /* the room across, as the query's width (half-metre steps); 0 = none */
+    float height;       /* the room up, metres (half-metre steps); 0 = none */
 } EmfPathResult;
 typedef void (*EmfPathCallback)(EmfWorld* world, uint32_t id, const EmfPathResult* result, const EmfPathPoint* points,
                                 void* user);

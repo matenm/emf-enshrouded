@@ -1,6 +1,7 @@
 // path_find (API v37): the queries' life in EMF's path service, over a fake engine (the game's create / poll / destroy).
 #include <doctest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -11,6 +12,7 @@
 #include "core/api_sizes.h"
 #include "core/path_service.h"
 #include "emf/emf_api.h"
+#include "emf/generated/components.hpp"
 
 using namespace emf::core;
 
@@ -24,7 +26,7 @@ struct FakeEngine {
     std::vector<uint32_t> gone;  // entities that no longer exist
     PathEngine engine() {
         PathEngine e;
-        e.create = [this](const EmfPathQuery& q, uint32_t owner) {
+        e.create = [this](const EmfPathQuery& q, uint32_t owner, const PathCreature*) {
             queries.push_back(q);
             owners.push_back(owner);
             created.push_back(next);
@@ -379,4 +381,310 @@ TEST_CASE("path service (0.6.11): the door entities are kept with the points (at
     REQUIRE(done.size() == 1u);
     CHECK(done[0].doors.empty());
     CHECK(done[0].view().doors == nullptr);
+}
+
+// ---- v48: planning as a given creature (#44) ----
+// The values below are a Vukah warrior's and brawler's as the game build 1287369 holds them (PathWalker radius 0 and
+// 0.5, height 2; node rules forbid tar, deadly fog and lava; default moves walk, the door move only with canOpenDoors).
+namespace {
+namespace g = emf::gen::ecs;
+g::PathWalker walker_template(float radius = 0.5f, float height = 2.0f) {
+    g::PathWalker w{};
+    w.horizontalRadius = radius;
+    w.height = height;
+    w.pathNodeRequirements.requiredTypes = 0x1;
+    w.pathNodeRequirements.forbiddenTypes = 388;
+    return w;
+}
+g::PathFinder finder_template() {
+    g::PathFinder t{};
+    t.horizontalStartSearchRadius.halfMeters = 3;
+    t.verticalStartSearchRadius.halfMeters = 6;
+    t.settings.maxHeightDifferenceSettings.terrain = 0.75f;
+    t.settings.maxHeightDifferenceSettings.building = 0.5f;
+    t.settings.maxHeightDifferenceSettings.collider = 0.25f;
+    return t;
+}
+// 17 factors 1.0, 1.1, ... 2.6 in their order
+void fill_factors(g::PathNodeCostFactors* f) {
+    float* c = &f->none;
+    for (int i = 0; i < 17; ++i) c[i] = 1.0f + 0.1f * static_cast<float>(i);
+}
+g::Enemy01BehaviorState enemy_template(bool doors) {
+    g::Enemy01BehaviorState e{};
+    e.movementSetup.defaultMoveTypes = EMF_PATH_WALK;
+    e.movementSetup.extendedMoveTypes = 0x1c;  // its jumps in Guard and fights: not taken
+    e.openDoorSetup.canOpenDoors = doors;
+    fill_factors(&e.pathNodeSetup.defaultCostFactors);
+    e.pathNodeSetup.roamingCostFactors.road = 0.3f;  // not taken
+    return e;
+}
+struct Parts {
+    g::PathWalker walker = walker_template();
+    g::PathFinder finder = finder_template();
+    g::Enemy01BehaviorState enemy = enemy_template(true);
+    PathCreatureParts parts(bool with_finder = true, bool with_enemy = true) const {
+        PathCreatureParts p;
+        p.walker = &walker;
+        p.walker_size = sizeof walker;
+        if (with_finder) {
+            p.finder = &finder;
+            p.finder_size = sizeof finder;
+        }
+        if (with_enemy) {
+            p.enemy = &enemy;
+            p.enemy_size = sizeof enemy;
+        }
+        return p;
+    }
+};
+PathCreature creature() {
+    static const Parts parts;
+    PathCreature c;
+    REQUIRE(read_path_creature(parts.parts(), &c));
+    return c;
+}
+}  // namespace
+
+TEST_CASE("path creature (v48): its walking profile from its templates (PathWalker, PathFinder, its behaviour)") {
+    const PathCreature c = creature();
+    CHECK(c.moves == (EMF_PATH_WALK | EMF_PATH_OPEN_DOOR));  // default moves, the door move with canOpenDoors
+    CHECK(c.across == 1u);  // the game's trunc(radius x 2) half metres
+    CHECK(c.up == 4u);
+    CHECK(c.required == 0x1u);
+    CHECK(c.forbidden == 388u);
+    CHECK(c.has_finder);
+    CHECK(c.start_search[0] == 3u);
+    CHECK(c.start_search[1] == 6u);
+    CHECK(c.height_diff[0] == 0.75f);
+    CHECK(c.height_diff[1] == 0.5f);
+    CHECK(c.height_diff[2] == 0.25f);
+    // the query's 20 costs per PathNodeType from the 17 default factors (none twice, noNpcMovement three times), as the
+    // game's own program spreads them
+    const float want[20] = {1.0f, 1.0f, 1.4f, 1.5f, 1.6f, 1.7f, 1.8f, 1.9f, 2.0f, 1.1f,
+                            1.2f, 1.3f, 2.1f, 2.1f, 2.1f, 2.2f, 2.4f, 2.5f, 2.6f, 2.3f};
+    for (int i = 0; i < 20; ++i) CHECK(c.cost[i] == doctest::Approx(want[i]));
+
+    Parts p;
+    p.walker = walker_template(0.4f, 1.9f);  // truncated, as the game does: 0 and 3
+    p.enemy = enemy_template(false);
+    PathCreature d;
+    REQUIRE(read_path_creature(p.parts(), &d));
+    CHECK(d.moves == EMF_PATH_WALK);
+    CHECK(d.across == 0u);
+    CHECK(d.up == 3u);
+
+    PathCreature e;  // no behaviour template the profile knows, no PathFinder: walk, costs 1.0, the game's steps
+    REQUIRE(read_path_creature(p.parts(false, false), &e));
+    CHECK(e.moves == EMF_PATH_WALK);
+    CHECK_FALSE(e.has_finder);
+    for (float x : e.cost) CHECK(x == 1.0f);
+
+    g::Wildlife wild{};  // wildlife: its default moves and costs
+    wild.movementSetup.defaultMoveTypes = EMF_PATH_WALK | EMF_PATH_SWIM;
+    fill_factors(&wild.pathNodeSetup.defaultCostFactors);
+    PathCreatureParts wp = p.parts(false, false);
+    wp.wildlife = &wild;
+    wp.wildlife_size = sizeof wild;
+    REQUIRE(read_path_creature(wp, &e));
+    CHECK(e.moves == (EMF_PATH_WALK | EMF_PATH_SWIM));
+    CHECK(e.cost[3] == doctest::Approx(1.5f));
+
+    g::ActiveNpcState npc{};  // a villager: its template has no moves (walk), its default costs
+    fill_factors(&npc.pathNodeSetup.defaultCostFactors);
+    PathCreatureParts np = p.parts(false, false);
+    np.npc = &npc;
+    np.npc_size = sizeof npc;
+    REQUIRE(read_path_creature(np, &e));
+    CHECK(e.moves == EMF_PATH_WALK);
+    CHECK(e.cost[9] == doctest::Approx(1.1f));
+
+    PathCreatureParts bad = p.parts();  // another layout, or no PathWalker: refused
+    bad.walker_size -= 4;
+    CHECK_FALSE(read_path_creature(bad, &e));
+    bad = p.parts();
+    bad.enemy_size -= 4;
+    CHECK_FALSE(read_path_creature(bad, &e));
+    bad = p.parts();
+    bad.finder_size -= 4;
+    CHECK_FALSE(read_path_creature(bad, &e));
+    bad = p.parts();
+    bad.walker = nullptr;
+    CHECK_FALSE(read_path_creature(bad, &e));
+}
+
+TEST_CASE("path query bytes (v48): as a creature, its walking fields at the game's offsets, the mod's query on top") {
+    uint8_t b[kPathQueryBytes];
+    for (auto& x : b) x = 0xAB;  // the game's defaults
+    const PathCreature c = creature();
+    EmfPathQuery q = query(10, 4);
+    q.closest = 1;
+    q.max_nodes = 5000;
+    fill_path_query(b, q, 77, &c);
+    auto u32 = [&](size_t o) { uint32_t v; std::memcpy(&v, b + o, 4); return v; };
+    auto f32 = [&](size_t o) { float v; std::memcpy(&v, b + o, 4); return v; };
+    auto u16 = [&](size_t o) { uint16_t v; std::memcpy(&v, b + o, 2); return v; };
+    CHECK(u32(0x00) == 77u);  // the owner, from, to, closest and nodes stay the mod's
+    CHECK(f32(0x1c) == 10.0f);
+    CHECK(b[0x36] == 2);
+    CHECK(u32(0x48) == 5000u);
+    CHECK(u16(0x54) == (EMF_PATH_WALK | EMF_PATH_OPEN_DOOR));
+    CHECK(b[0x56] == 0);  // no jump heights from the creature
+    CHECK(b[0x57] == 0);
+    CHECK(u32(0x5c) == 0x1u);
+    CHECK(u32(0x60) == (388u | (1u << 19)));  // EMF's closed-door rule stays
+    CHECK(u32(0x64) == 0x1u);                 // the target follows the path's rules
+    CHECK(u32(0x68) == 388u);
+    for (int i = 0; i < 20; ++i) CHECK(f32(0x6c + 4 * i) == c.cost[i]);
+    CHECK(f32(0xbc) == 0.75f);
+    CHECK(f32(0xc0) == 0.5f);
+    CHECK(f32(0xc4) == 0.25f);
+    CHECK(u32(0xf0) == 3u);  // start search radii: EMF's own (2 across, 4 up), or the creature's where larger
+    CHECK(u32(0xf4) == 6u);
+    CHECK(u32(0xf8) == 4u);  // search radii: EMF's
+    CHECK(u32(0xfc) == 4u);
+    CHECK(u32(0x100) == 0u);  // room across: none with the door move (a door node has no room; doors would vanish)
+    CHECK(u32(0x104) == 4u);
+    CHECK(u32(0x108) == 0u);  // the target's room: the path's
+    CHECK(u32(0x10c) == 4u);
+    CHECK(b[0x28] == 0xAB);   // a target's fields are left: priority, keep distance, leash, free-path checks, options
+    CHECK(u32(0x58) == 0xABABABABu);
+    CHECK(u32(0xe8) == 0xABABABABu);
+    CHECK(b[0xc8] == 0xAB);
+    CHECK(b[0xcc] == 0xAB);
+
+    PathCreature walker = c;  // a creature without the door move keeps its room across
+    walker.moves = EMF_PATH_WALK;
+    fill_path_query(b, q, 77, &walker);
+    CHECK(u32(0x100) == 1u);
+    CHECK(u32(0x108) == 1u);
+
+    q.moves = EMF_PATH_JUMP_UP;  // the mod's moves are added; its jump heights, width and height win when given
+    q.max_jump_up = 1;
+    q.width = 0.5f;
+    q.height = 1.0f;
+    fill_path_query(b, q, 77, &c);
+    CHECK(u16(0x54) == (EMF_PATH_WALK | EMF_PATH_OPEN_DOOR | EMF_PATH_JUMP_UP));
+    CHECK(b[0x56] == 1);
+    CHECK(u32(0x100) == 1u);  // asked for: also with the door move
+    CHECK(u32(0x104) == 2u);
+    CHECK(u32(0x108) == 1u);
+    CHECK(u32(0x10c) == 2u);
+}
+
+TEST_CASE("path creature of (v48): an entity's templates by hash; refused without a DynamicPathFinder or a PathWalker") {
+    const Parts parts;
+    const g::Wildlife wild{};
+    bool has_finder_component = true, has_walker = true;
+    uint64_t walker_size = sizeof parts.walker;
+    std::vector<uint32_t> asked;
+    const PathComponentFn get = [&](uint32_t hash, uint64_t* size) -> const void* {
+        CHECK(hash == g::DynamicPathFinder::kHash);
+        *size = 272;
+        static const uint8_t finder[272] = {};
+        return has_finder_component ? finder : nullptr;
+    };
+    const PathComponentFn tpl = [&](uint32_t hash, uint64_t* size) -> const void* {
+        asked.push_back(hash);
+        if (hash == g::PathWalker::kHash) {
+            *size = walker_size;
+            return has_walker ? &parts.walker : nullptr;
+        }
+        if (hash == g::PathFinder::kHash) {
+            *size = sizeof parts.finder;
+            return &parts.finder;
+        }
+        if (hash == g::Enemy01BehaviorState::kHash) {
+            *size = sizeof parts.enemy;
+            return &parts.enemy;
+        }
+        return nullptr;  // no wildlife, villager or animal template
+    };
+    PathCreature c;
+    CHECK(path_creature_of(812, get, tpl, &c) == "");
+    CHECK(c.moves == (EMF_PATH_WALK | EMF_PATH_OPEN_DOOR));
+    CHECK(c.across == 1u);
+    CHECK(c.has_finder);
+    CHECK(std::find(asked.begin(), asked.end(), g::Wildlife::kHash) != asked.end());
+    CHECK(std::find(asked.begin(), asked.end(), g::ActiveNpcState::kHash) != asked.end());
+    CHECK(std::find(asked.begin(), asked.end(), g::Animal::kHash) != asked.end());
+    has_walker = false;
+    CHECK(path_creature_of(812, get, tpl, &c) ==
+          "as_entity 812 has no PathWalker template (not a creature that walks by the path grid)");
+    has_walker = true;
+    has_finder_component = false;
+    CHECK(path_creature_of(812, get, tpl, &c) ==
+          "as_entity 812 has no DynamicPathFinder (not a creature the game plans paths for, or not in the server world)");
+    has_finder_component = true;
+    walker_size = 88;
+    CHECK(path_creature_of(812, get, tpl, &c) ==
+          "as_entity 812: its path templates have another layout on this game build (EMF needs an update)");
+}
+
+TEST_CASE("path used text (v48): the console's second line, what the search planned with") {
+    EmfPathResult r{};
+    r.size = sizeof r;
+    r.moves = EMF_PATH_WALK | EMF_PATH_OPEN_DOOR;
+    r.jump_up = 2;  // no jump move: the heights are not shown
+    r.jump_down = 3;
+    r.height = 2.0f;
+    CHECK(path_used_text(7, r) == "path 7: planned with walk, door; room 0.0 m across, 2.0 m up");
+    r.moves = EMF_PATH_WALK | EMF_PATH_JUMP_UP | EMF_PATH_JUMP_DOWN;
+    r.jump_up = 0;
+    r.width = 0.5f;
+    r.height = 0;
+    CHECK(path_used_text(7, r) ==
+          "path 7: planned with walk, jump up, jump down; jumps up any height, down at most 3 m; room 0.5 m across, 0.0 m up");
+    r.size = kPathResultV42Size;  // an older result: nothing to say
+    CHECK(path_used_text(7, r) == "");
+}
+
+TEST_CASE("path used (v48): the moves, jumps and room a query plans with, as the result reports them") {
+    EmfPathQuery q = query();
+    q.moves = EMF_PATH_JUMP_DOWN;
+    q.max_jump_down = 5;
+    q.width = 0.3f;  // rounded up to half metres, as the query holds it
+    q.height = 2.0f;
+    PathUsed u = path_used(q, nullptr);
+    CHECK(u.moves == (EMF_PATH_WALK | EMF_PATH_JUMP_DOWN));
+    CHECK(u.jump_up == 0);
+    CHECK(u.jump_down == 5);
+    CHECK(u.across == 1u);
+    CHECK(u.up == 4u);
+    const PathCreature c = creature();
+    u = path_used(query(), &c);
+    CHECK(u.moves == (EMF_PATH_WALK | EMF_PATH_OPEN_DOOR));
+    CHECK(u.jump_up == 0);
+    CHECK(u.across == 0u);  // the door move: no room across
+    CHECK(u.up == 4u);
+}
+
+TEST_CASE("path service (v48): a creature's profile goes to the game with the query, the result says what was used") {
+    PathService s;
+    FakeEngine fe;
+    std::vector<bool> with_creature;
+    PathEngine e = fe.engine();
+    const auto create = e.create;
+    e.create = [&](const EmfPathQuery& q, uint32_t owner, const PathCreature* as) {
+        with_creature.push_back(as && as->up == 4u);
+        return create(q, owner, as);
+    };
+    const PathCreature c = creature();
+    REQUIRE(s.request(query(), 7, cb_noop, nullptr, 0, nullptr, &c));
+    REQUIRE(s.request(query(), 7, cb_noop, nullptr, 0, nullptr));
+    s.step(e, 10);
+    REQUIRE(with_creature.size() == 2u);
+    CHECK(with_creature[0]);
+    CHECK_FALSE(with_creature[1]);
+    fe.finish(fe.created[0], 1, {{10, 50, 0, 0}});
+    fe.finish(fe.created[1], 2, {});
+    const auto done = s.step(e, 20);
+    REQUIRE(done.size() == 2u);
+    CHECK(done[0].result.size == sizeof(EmfPathResult));
+    CHECK(done[0].result.moves == (EMF_PATH_WALK | EMF_PATH_OPEN_DOOR));
+    CHECK(done[0].result.jump_up == 0);
+    CHECK(done[0].result.width == 0.0f);
+    CHECK(done[0].result.height == 2.0f);  // 4 half metres
+    CHECK(done[1].result.moves == EMF_PATH_WALK);  // also on a query without a creature, and on no path
+    CHECK(done[1].result.height == 0.0f);
 }

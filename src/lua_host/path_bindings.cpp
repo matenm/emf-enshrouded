@@ -106,6 +106,28 @@ void path_cb_body(EmfWorld* w, uint32_t, const EmfPathResult* r, const EmfPathPo
         }
         lua_rawseti(L, -2, static_cast<lua_Integer>(i) + 1);
     }
+    if (r->size >= offsetof(EmfPathResult, height) + sizeof(r->height)) {  // 1.41 (API v48): what it planned with
+        lua_pushvalue(L, -2);                                               // the result table
+        lua_createtable(L, 0, 8);
+        lua_pushinteger(L, r->moves);
+        lua_setfield(L, -2, "moves");
+        lua_pushboolean(L, (r->moves & (EMF_PATH_JUMP_UP | EMF_PATH_JUMP_DOWN | EMF_PATH_JUMP_ACROSS)) != 0);
+        lua_setfield(L, -2, "jumps");
+        lua_pushboolean(L, (r->moves & EMF_PATH_OPEN_DOOR) != 0);
+        lua_setfield(L, -2, "doors");
+        lua_pushboolean(L, (r->moves & EMF_PATH_SWIM) != 0);
+        lua_setfield(L, -2, "swim");
+        lua_pushinteger(L, r->jump_up);
+        lua_setfield(L, -2, "max_jump_up");
+        lua_pushinteger(L, r->jump_down);
+        lua_setfield(L, -2, "max_jump_down");
+        lua_pushnumber(L, r->width);
+        lua_setfield(L, -2, "width");
+        lua_pushnumber(L, r->height);
+        lua_setfield(L, -2, "height");
+        lua_setfield(L, -2, "used");
+        lua_pop(L, 1);
+    }
     call_lua(*s, 3);
     ++s->generation;
     if (s->L) luaL_unref(s->L, LUA_REGISTRYINDEX, slot->ref);
@@ -142,9 +164,12 @@ int l_path_find(lua_State* L) {
         q.max_jump_down = static_cast<uint8_t>(opt_number(L, 4, "max_jump_down", 0, 0, 255));
         q.max_nodes = static_cast<uint32_t>(opt_number(L, 4, "nodes", 0, 0, 20000));
         q.owner = static_cast<uint32_t>(opt_number(L, 4, "owner", 0, 0, 4294967295.0));
+        q.as_entity = static_cast<uint32_t>(opt_number(L, 4, "as", 0, 0, 4294967295.0));  // 1.41 (API v48)
     }
     luaL_checktype(L, fn_index, LUA_TFUNCTION);
     const EmfApi* a = s->host->api;
+    if (q.as_entity && a && a->version < 48)  // an older core ignores it: it would plan as a player
+        luaL_error(L, "emf.path_find: as needs EMF 0.6.20 or newer (core API v48)");
     if (!has_v37(a)) {
         lua_pushnil(L);
         return 1;

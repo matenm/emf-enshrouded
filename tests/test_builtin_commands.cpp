@@ -1770,6 +1770,7 @@ TEST_CASE("remove (review, not judged): the same object twice in one step pays i
 TEST_CASE("builtin commands (v37): path checks its words; with the feature off it says why") {
     BFixture f;
     path_stop();
+    f.state.get_component = rm_gc;  // entities 60-65 have positions
     RemoveWorld rw;
     f.center.enqueue("path 1 2");
     f.center.enqueue("path 1 2 x");
@@ -1778,15 +1779,22 @@ TEST_CASE("builtin commands (v37): path checks its words; with the feature off i
     f.center.enqueue("path 3740 845 1440 closest 0");
     f.center.enqueue("path 3740 845 1440 9000 closest");   // a node count: fine
     f.center.enqueue("path 3740 845 1440 doors jumps");    // 0.6.11: doors
+    f.center.enqueue("path 3740 845 1440 as");             // 0.6.20: as <entity>
+    f.center.enqueue("path 3740 845 1440 as x");
+    f.center.enqueue("path 3740 845 1440 as 0");
+    f.center.enqueue("path 3740 845 1440 doors as 60");    // from entity 60's position, planned as it
+    f.center.enqueue("path 3740 845 1440 as 999");         // no such entity: no position
     f.run(rw.iw.w);
     size_t usage = 0, refused = 0;
     for (const auto& l : g_bout) {
-        usage += l.find("usage: path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000]") != std::string::npos;
+        usage += l.find("usage: path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000] [as <entity>]") !=
+                 std::string::npos;
         refused += l.find("path not asked") != std::string::npos;
     }
-    CHECK(usage == 4u);
-    CHECK(refused == 3u);
+    CHECK(usage == 7u);
+    CHECK(refused == 4u);
     CHECK(bsaid("path not asked (see the log: path_find refused"));
+    CHECK(bsaid("path: entity 999 has no position in this world"));
 }
 
 TEST_CASE("builtin commands (path.door): checks its words; asks emf_path, or says the feature is not available") {
