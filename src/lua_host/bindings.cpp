@@ -863,9 +863,10 @@ int l_move(lua_State* L) {
 
 std::vector<uint8_t> component_data(lua_State* L, const reflect::Type& t, const char* name, int data_index);
 
-// emf.spawn(world, guid, x, y, z [, components]) (components: lua 1.12): components = {Name = {field = value}, ...}
-// are spawned with the entity (spawn_ex, at most 15; never CurrentTransform: x, y, z give it). A component the game
-// reads when the entity is made (ScaleComponent: the size it is drawn at) only works this way.
+// emf.spawn(world, guid, x, y, z [, components] [, {yaw = degrees}]) (components: lua 1.12; yaw: lua 1.40, API v47):
+// components = {Name = {field = value}, ...} are spawned with the entity (spawn_ex, at most 15; never CurrentTransform:
+// x, y, z give it). A component the game reads when the entity is made (ScaleComponent: the size it is drawn at) only
+// works this way, and so does a turn (yaw about the up axis, teleport's): a core older than v47 spawns it unturned.
 int l_spawn(lua_State* L) {
     Script* s = script_of(L);
     EmfWorld* w = world_arg(L, 1);
@@ -873,15 +874,35 @@ int l_spawn(lua_State* L) {
     uint8_t guid[16];
     if (!emf::parse_guid(text, guid)) return luaL_error(L, "%s is not a GUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)", text);
     const double x = luaL_checknumber(L, 3), y = luaL_checknumber(L, 4), z = luaL_checknumber(L, 5);
-    if (lua_isnoneornil(L, 6)) {
-        lua_pushinteger(L, s->host->api->spawn(w, guid, x, y, z));
+    float yaw = 0.0f;
+    bool turned = false;
+    if (!lua_isnoneornil(L, 7)) {
+        luaL_checktype(L, 7, LUA_TTABLE);
+        lua_pushnil(L);
+        while (lua_next(L, 7)) {
+            const char* key = lua_type(L, -2) == LUA_TSTRING ? lua_tostring(L, -2) : "";
+            if (std::strcmp(key, "yaw") != 0) return luaL_error(L, "emf.spawn: unknown option '%s' (yaw)", key);
+            if (lua_type(L, -1) != LUA_TNUMBER) return luaL_error(L, "emf.spawn: yaw must be a number of degrees");
+            yaw = static_cast<float>(lua_tonumber(L, -1));
+            turned = true;
+            lua_pop(L, 1);
+        }
+    }
+    const EmfApi* api = s->host->api;
+    const bool facing = turned && api->version >= 47 &&
+                        api->size >= offsetof(EmfApi, spawn_facing) + sizeof(api->spawn_facing) && api->spawn_facing;
+    if (lua_isnoneornil(L, 6) && !facing) {
+        lua_pushinteger(L, api->spawn(w, guid, x, y, z));
         return 1;
     }
-    luaL_checktype(L, 6, LUA_TTABLE);
     std::vector<std::vector<uint8_t>> data;
     std::vector<EmfComponentInit> inits;
-    lua_pushnil(L);
-    while (lua_next(L, 6)) {
+    const bool has_components = !lua_isnoneornil(L, 6);
+    if (has_components) {
+        luaL_checktype(L, 6, LUA_TTABLE);
+        lua_pushnil(L);
+    }
+    while (has_components && lua_next(L, 6)) {
         if (lua_type(L, -2) != LUA_TSTRING) return luaL_error(L, "emf.spawn: the components' keys are component names");
         const char* name = lua_tostring(L, -2);
         const reflect::Type* t = find_type(name);
@@ -904,6 +925,10 @@ int l_spawn(lua_State* L) {
     }
     for (size_t i = 0; i < inits.size(); ++i) inits[i].data = data[i].data();
     const EmfApi* a = s->host->api;
+    if (facing) {
+        lua_pushinteger(L, a->spawn_facing(w, guid, x, y, z, yaw, inits.data(), static_cast<uint32_t>(inits.size())));
+        return 1;
+    }
     if (!a->spawn_ex) {
         lua_pushinteger(L, 0);
         return 1;

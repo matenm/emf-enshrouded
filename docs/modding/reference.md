@@ -1491,6 +1491,11 @@ whatever happened to it since (dug into, smoothed, refilled). A cell whose shipp
   v47); `hardness` and `health` its terrain material's. `damage` stays -1.
 - C++: `emf::has_v47()`, `emf::find_wall(w, from, to, EMF_FIND_TERRAIN)` (an older core: building blocks only). Lua
   1.40: `terrain = true` in `emf.break_blocks`' options and in `emf.find_wall`'s fourth argument.
+- `uint32_t spawn_facing(world, guid, x, y, z, float yaw_deg, const EmfComponentInit* inits, uint32_t count)`
+  (appended): `spawn_ex` turned `yaw_deg` about the up axis (teleport's yaw) in the spawn's own transform. A door, a gate
+  or an invisible target a creature must face is turned this way: writing its transform after the spawn turns what is
+  drawn, not what the game reads (a modder's raid test: the Vukah never attacked a target turned afterwards).
+  C++: `emf::spawn_facing(w, guid, x, y, z, yaw)`; Lua 1.40: `emf.spawn(..., components, {yaw = degrees})`.
 - Good to know: ground a player raised where there was air (placed dirt, a flattened terrace built up) counts as
   placed, so a break at its foot can dent it. A world saved before a game update that changed the shipped terrain may
   read old natural ground there as a player's (the ruins have the same caveat).

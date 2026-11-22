@@ -1,6 +1,7 @@
 #include <doctest.h>
 
 #include <cstring>
+#include <limits>
 
 #include "core/spawn.h"
 #include "fake_world.h"
@@ -211,4 +212,26 @@ TEST_CASE("give_pickup refuses count 0, more than 65535 and an item without id")
     CHECK(why.find("65535") != std::string::npos);
     ItemRecord none;
     CHECK(give_pickup(capture_spawn, server_world().p(), none, 1, 0, 0, 0, &why) == 0u);
+}
+
+// API v47 spawn_facing (Divusinski: a raid's invisible door target must face the raider; turning it after the spawn by
+// writing its transform left it untouchable): the yaw goes into the spawn's own CurrentTransform, as teleport's.
+TEST_CASE("spawn_entity_ex: a yaw turns the spawn transform about the up axis (teleport's convention); 0 is no turn") {
+    std::string why;
+    REQUIRE(spawn_entity_ex(capture_spawn, server_world().p(), kGuid, 1, 2, 3, nullptr, 0, &why, 90.0f) == 7001u);
+    REQUIRE(g_comps.size() == 1);
+    WorldTransformData xf{};
+    std::memcpy(&xf, g_comps[0].bytes.data(), sizeof xf);
+    CHECK(xf.qx == 0.0f);
+    CHECK(xf.qy == doctest::Approx(0.70710678f));
+    CHECK(xf.qz == 0.0f);
+    CHECK(xf.qw == doctest::Approx(0.70710678f));
+    CHECK(xf.sx == 1.0f);
+    REQUIRE(spawn_entity_ex(capture_spawn, server_world().p(), kGuid, 1, 2, 3, nullptr, 0, &why) == 7001u);
+    std::memcpy(&xf, g_comps[0].bytes.data(), sizeof xf);
+    CHECK(xf.qy == 0.0f);
+    CHECK(xf.qw == 1.0f);
+    CHECK(spawn_entity_ex(capture_spawn, server_world().p(), kGuid, 1, 2, 3, nullptr, 0, &why,
+                          std::numeric_limits<float>::quiet_NaN()) == 0u);
+    CHECK(why.find("yaw") != std::string::npos);
 }

@@ -33,12 +33,18 @@ bool guarded_destroy(DestroyEntityFn fn, void* storage, uint32_t id) {
 
 bool is_server(uint8_t* world) { return WorldView(world).kind() == 0; }
 
-WorldTransformData transform_at(double x, double y, double z) {
+// yaw_deg about the up axis, as teleport's (yaw_quaternion): 0 = no turn
+WorldTransformData transform_at(double x, double y, double z, float yaw_deg = 0.0f) {
     WorldTransformData xf{};
     xf.x = meters_to_fixed(x);
     xf.y = meters_to_fixed(y);
     xf.z = meters_to_fixed(z);
     xf.qw = 1.0f;
+    if (yaw_deg != 0.0f) {
+        const double half = static_cast<double>(yaw_deg) * 3.14159265358979323846 / 360.0;
+        xf.qy = static_cast<float>(std::sin(half));
+        xf.qw = static_cast<float>(std::cos(half));
+    }
     xf.sx = xf.sy = xf.sz = 1.0f;
     return xf;
 }
@@ -65,9 +71,13 @@ uint32_t spawn_entity(SpawnWrapperFn fn, uint8_t* world, const uint8_t guid[16],
 }
 
 uint32_t spawn_entity_ex(SpawnWrapperFn fn, uint8_t* world, const uint8_t guid[16], double x, double y, double z,
-                         const SpawnComponent* extra, size_t count, std::string* why) {
+                         const SpawnComponent* extra, size_t count, std::string* why, float yaw_deg) {
     if (!fn || !world || !guid) {
         set_why(why, "missing spawn function, world or template GUID");
+        return 0;
+    }
+    if (!std::isfinite(yaw_deg)) {
+        set_why(why, "the yaw is not a finite number");
         return 0;
     }
     if (!is_server(world)) {
@@ -92,7 +102,7 @@ uint32_t spawn_entity_ex(SpawnWrapperFn fn, uint8_t* world, const uint8_t guid[1
             return 0;
         }
     }
-    const WorldTransformData xf = transform_at(x, y, z);
+    const WorldTransformData xf = transform_at(x, y, z, yaw_deg);
     std::vector<SpawnComponent> comps;
     comps.push_back({off::kHashCurrentTransform, 0, &xf, sizeof(xf)});
     for (size_t i = 0; i < count; ++i) comps.push_back(extra[i]);

@@ -1060,6 +1060,7 @@ TEST_CASE("api table (v47): find_wall_ex appended; EMF_FIND_TERRAIN reaches the 
     CHECK(api->size == kApiV47Size);
     CHECK(offsetof(EmfApi, find_wall_ex) == kApiV46Size);
     REQUIRE(api->find_wall_ex != nullptr);
+    CHECK(api->spawn_facing != nullptr);  // v47 also turns a spawn (spawn_facing)
     const float from[3] = {8.1f, 20.2f, 29.8f}, to[3] = {12.1f, 20.2f, 29.8f};
     EmfBlockInfo out{};
     out.size = sizeof out;

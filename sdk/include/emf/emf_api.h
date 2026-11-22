@@ -1699,6 +1699,12 @@ typedef struct EmfApi {
      * ground there; one whose shipped state is not known is passed over); other terrain is passed over as by
      * find_wall. Flags 0: find_wall. False for unknown flags (logged once) and for find_wall's reasons. */
     bool (*find_wall_ex)(EmfWorld* world, const float from[3], const float to[3], uint32_t flags, EmfBlockInfo* out);
+    /* spawn_ex, turned yaw_deg about the up axis (teleport's yaw: 0 = the template's own facing) in the spawn's own
+     * transform. A door, a gate or a target that must face a creature is turned this way: writing its transform after
+     * the spawn moves what is drawn but not what the game reads. 0 when spawn_ex would be, or for a yaw that is no
+     * finite number. */
+    uint32_t (*spawn_facing)(EmfWorld* world, const uint8_t template_guid[16], double x, double y, double z,
+                             float yaw_deg, const EmfComponentInit* inits, uint32_t count);
 } EmfApi;
 
 #define EMF_ITEM_NAME_GAME_TEXT 1u /* v29 item_name: the player's language even where EMF's screens cannot draw it */

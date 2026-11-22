@@ -40,9 +40,10 @@ bool destroy_entity(DestroyEntityFn fn, uint8_t* world, uint32_t entity);
 
 constexpr size_t kMaxExtraSpawnComponents = 15;
 // Like spawn_entity, plus up to 15 extra spawn components after the CurrentTransform (each with data and a size;
-// a second CurrentTransform is refused). Returns 0 and sets *why when refused or when the game did not spawn.
+// a second CurrentTransform is refused). yaw_deg (API v47 spawn_facing) turns the spawn's own transform about the up
+// axis, as teleport's yaw. Returns 0 and sets *why when refused or when the game did not spawn.
 uint32_t spawn_entity_ex(SpawnWrapperFn fn, uint8_t* world, const uint8_t guid[16], double x, double y, double z,
-                         const SpawnComponent* extra, size_t count, std::string* why);
+                         const SpawnComponent* extra, size_t count, std::string* why, float yaw_deg = 0.0f);
 
 // keen::ecs::PickupItem (28 B, hash 0x08775a90): the item a loose pickup gives.
 struct PickupItemData {

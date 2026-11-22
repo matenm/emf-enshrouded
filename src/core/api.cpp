@@ -780,24 +780,37 @@ uint32_t api_give_item(EmfWorld* w, uint32_t player, uint32_t item_id, uint32_t 
     return id;
 }
 
-uint32_t api_spawn_ex(EmfWorld* w, const uint8_t guid[16], double x, double y, double z, const EmfComponentInit* inits,
-                      uint32_t count) {
-    if (!world_call_allowed(w, "spawn_ex")) return 0;
+namespace {
+uint32_t spawn_with(const char* what, EmfWorld* w, const uint8_t guid[16], double x, double y, double z,
+                    const EmfComponentInit* inits, uint32_t count, float yaw_deg) {
+    if (!world_call_allowed(w, what)) return 0;
     auto fn = reinterpret_cast<SpawnWrapperFn>(api_resolve("SpawnWrapper"));
     if (!fn) {
-        core_log("spawn_ex refused: the SpawnWrapper signature is not usable on this game build");
+        core_log(std::string(what) + " refused: the SpawnWrapper signature is not usable on this game build");
         return 0;
     }
     if (count > kMaxExtraSpawnComponents || (count && !inits)) {
-        core_log("spawn_ex refused: at most 15 extra components");
+        core_log(std::string(what) + " refused: at most 15 extra components");
         return 0;
     }
     std::vector<SpawnComponent> comps;
     for (uint32_t i = 0; i < count; ++i) comps.push_back({inits[i].hash, 0, inits[i].data, inits[i].size});
     std::string why;
-    const uint32_t id = spawn_entity_ex(fn, raw(w), guid, x, y, z, comps.data(), comps.size(), &why);
-    if (!id) core_log("spawn_ex refused: " + why);
+    const uint32_t id = spawn_entity_ex(fn, raw(w), guid, x, y, z, comps.data(), comps.size(), &why, yaw_deg);
+    if (!id) core_log(std::string(what) + " refused: " + why);
     return id;
+}
+}  // namespace
+
+uint32_t api_spawn_ex(EmfWorld* w, const uint8_t guid[16], double x, double y, double z, const EmfComponentInit* inits,
+                      uint32_t count) {
+    return spawn_with("spawn_ex", w, guid, x, y, z, inits, count, 0.0f);
+}
+
+// v47: spawn_ex turned about the up axis in the spawn's own transform.
+uint32_t api_spawn_facing(EmfWorld* w, const uint8_t guid[16], double x, double y, double z, float yaw_deg,
+                          const EmfComponentInit* inits, uint32_t count) {
+    return spawn_with("spawn_facing", w, guid, x, y, z, inits, count, yaw_deg);
 }
 
 bool api_register_command(const char* name, const char* help, EmfCommandCallback cb, void* user) {
@@ -2732,6 +2745,7 @@ const EmfApi kApi = {
     api_villager_move_cancel,
     api_villager_moving,
     api_find_wall_ex,  // v47
+    api_spawn_facing,
 };
 
 bool guarded_chat_call(EmfChatCallback cb, EmfWorld* w, uint64_t account, uint32_t entity, const char* text, void* user) {

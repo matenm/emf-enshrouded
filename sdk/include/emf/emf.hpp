@@ -1115,8 +1115,15 @@ inline std::optional<EmfBlockInfo> find_wall(World w, const float from[3], const
     if (!has_v44() || !api()->find_wall || !api()->find_wall(w.raw(), from, to, &b)) return std::nullopt;
     return b;
 }
-// v47: terrain a player placed (EMF_BREAK_TERRAIN, find_wall_ex, EmfBlockInfo.world for terrain)
-inline bool has_v47() { return api() && api()->size >= offsetof(EmfApi, find_wall_ex) + sizeof(api()->find_wall_ex); }
+// v47: terrain a player placed (EMF_BREAK_TERRAIN, find_wall_ex, EmfBlockInfo.world for terrain) and spawn_facing
+inline bool has_v47() { return api() && api()->size >= offsetof(EmfApi, spawn_facing) + sizeof(api()->spawn_facing); }
+// Spawns a template turned yaw_deg about the up axis (teleport's yaw), with up to 15 extra components (inits may be
+// null). A core older than v47: spawned unturned (spawn_ex). The new entity, or 0.
+inline uint32_t spawn_facing(World w, const uint8_t guid[16], double x, double y, double z, float yaw_deg,
+                             const EmfComponentInit* inits = nullptr, uint32_t count = 0) {
+    if (has_v47() && api()->spawn_facing) return api()->spawn_facing(w.raw(), guid, x, y, z, yaw_deg, inits, count);
+    return api()->spawn_ex ? api()->spawn_ex(w.raw(), guid, x, y, z, inits, count) : 0;
+}
 // find_wall with flags: EMF_FIND_TERRAIN also stops at terrain a player placed. A core older than v47: plain find_wall
 // (building blocks only).
 inline std::optional<EmfBlockInfo> find_wall(World w, const float from[3], const float to[3], uint32_t flags) {

@@ -50,6 +50,8 @@ struct Fake {
         uint8_t guid[16];
         double x, y, z;
         std::vector<std::pair<uint32_t, std::vector<uint8_t>>> extra;  // spawn_ex: (hash, data) of each component
+        float yaw = 0;       // spawn_facing's yaw
+        bool facing = false;  // spawned through spawn_facing
     };
     std::vector<Spawn> spawns;
     uint32_t next_spawn_id = 1234;  // spawn gives 1234, 1235, ...
@@ -383,6 +385,14 @@ uint32_t f_spawn_ex(EmfWorld* w, const uint8_t guid[16], double x, double y, dou
         const auto* p = static_cast<const uint8_t*>(c[i].data);
         g->spawns.back().extra.emplace_back(c[i].hash, std::vector<uint8_t>(p, p + c[i].size));
     }
+    return id;
+}
+uint32_t f_spawn_facing(EmfWorld* w, const uint8_t guid[16], double x, double y, double z, float yaw,
+                        const EmfComponentInit* c, uint32_t count) {
+    const uint32_t id = f_spawn_ex(w, guid, x, y, z, c, count);
+    if (!id) return 0;
+    g->spawns.back().yaw = yaw;
+    g->spawns.back().facing = true;
     return id;
 }
 bool f_destroy(EmfWorld*, uint32_t e) {
@@ -1156,6 +1166,7 @@ EmfApi fake_api() {
     a.take_items = f_take;
     a.spawn = f_spawn;
     a.spawn_ex = f_spawn_ex;
+    a.spawn_facing = f_spawn_facing;  // v47
     a.destroy = f_destroy;
     a.on_event = f_on_event;
     a.register_program_def = f_program_def;

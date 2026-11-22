@@ -1489,3 +1489,40 @@ TEST_CASE("lua 1.22: emf.tell and emf.broadcast with {system = true} send lines 
     CHECK(replied("bad false"));
     CHECK(replied("unknown option \"bogus\""));
 }
+
+TEST_CASE("lua 1.40: emf.spawn's options {yaw = degrees} spawn it turned (spawn_facing); an older core spawns it unturned") {
+    Rig r(L"spawnyaw");
+    add_script(r.dir, "sy",
+               "local function j(...) local t = {} for i = 1, select('#', ...) do t[#t + 1] = tostring((select(i, ...))) end return table.concat(t, ' ') end\n"
+               "local G = 'd5d05217-52dc-467a-9192-26b4f661d8d9'\n"
+               "emf.command('go', '', function(w)\n"
+               "  emf.reply(j(emf.spawn(w, G, 1, 2, 3, nil, {yaw = 90})))\n"
+               "  emf.reply(j(emf.spawn(w, G, 1, 2, 3, {ScaleComponent = {uniformScale = 0.2}}, {yaw = -45})))\n"
+               "  emf.reply(j(pcall(emf.spawn, w, G, 1, 2, 3, nil, {yaw = 'north'})))\n"
+               "  emf.reply(j(pcall(emf.spawn, w, G, 1, 2, 3, nil, {turn = 90})))\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("sy.go");
+    REQUIRE(r.fake.replies.size() == 4);
+    CHECK(r.fake.replies[0] == "1234");
+    CHECK(r.fake.replies[1] == "1235");
+    CHECK(r.fake.replies[2].find("false") == 0);
+    CHECK(r.fake.replies[2].find("yaw") != std::string::npos);
+    CHECK(r.fake.replies[3].find("false") == 0);
+    CHECK(r.fake.replies[3].find("turn") != std::string::npos);
+    REQUIRE(r.fake.spawns.size() == 2);
+    CHECK(r.fake.spawns[0].facing);
+    CHECK(r.fake.spawns[0].yaw == 90.0f);
+    CHECK(r.fake.spawns[0].extra.empty());
+    CHECK(r.fake.spawns[1].yaw == -45.0f);
+    REQUIRE(r.fake.spawns[1].extra.size() == 1u);
+    // a v46 core: no spawn_facing, the entity comes unturned (spawn_ex)
+    r.api.size = static_cast<uint32_t>(offsetof(EmfApi, spawn_facing));
+    r.api.version = 46;
+    r.fake.replies.clear();
+    r.fake.spawns.clear();
+    r.run_command("sy.go");
+    REQUIRE(r.fake.spawns.size() == 2);
+    CHECK_FALSE(r.fake.spawns[0].facing);
+}
