@@ -31,6 +31,7 @@ local SENT_S = 20       -- a passive beast that Attack sent at a creature fights
 local RECALL_S = 3      -- a beast that dropped a chase fights nothing this long while it comes back
 local HEAL_AFTER_S = 5  -- a beast heals between fights: this long after its last hit to or from it,
 local HEAL_SHARE = 0.05 -- this share of its maximum health a second
+local GONE_S = 10  -- s a removed beast's creature is remembered: a death event that comes later still makes it rest
 local KILL_HIT_S = 30   -- a foe a beast hit this long before it dies counts as its kill (a loyalty point)
 local STRAY_CHECKS = 3  -- a beast that guards someone else this many checks (seconds) in a row is not ours any more
 local REFUSALS = 3      -- a pack beast's call-back refused this many checks in a row: its pack is not in this game
@@ -87,6 +88,8 @@ function P:reset()
 	self.sent = {}       -- entity id -> until when Attack's order holds (a passive beast fights it until then)
 	self.orders = {}     -- entity id -> the creature Attack sent it at (written as its pick until the order ends)
 	self.hunts = {}      -- entity id -> true while its order is aggressive mode's hunt (not the player's Attack)
+	self.gone = {}       -- entity id -> {account, beast, until_s}: a beast whose creature the game removed lately
+	                     -- (its death event may still come: then it rests)
 	self.recall = {}     -- entity id -> until when a beast that dropped a chase fights nothing
 	self.base = {}       -- entity id -> {damage, wrote}: its template's damage multiplier, and the one written
 	self.fought = {}     -- entity id -> when it last hit or was hit (it heals HEAL_AFTER_S after that)
@@ -688,6 +691,11 @@ function P:on_died(id, world)
 	self.sent[id], self.recall[id], self.base[id], self.fought[id], self.orders[id] = nil, nil, nil, nil, nil
 	self.hunts[id] = nil
 	local e = self.ids[id]
+	local g = self.gone[id]
+	self.gone[id] = nil
+	if not e and g and not g.beast.entity and g.beast.out then
+		e = { account = g.account, beast = g.beast }  -- its creature was gone before the event came: it fell all the same
+	end
 	if not e then return end
 	self.ids[id] = nil
 	e.beast.entity = nil
@@ -787,6 +795,9 @@ function P:step(world)
 		self.next_save = now + 10
 		self.env.save()  -- the rest left survives a reload
 	end
+	for id, g in pairs(self.gone) do
+		if now >= g.until_s then self.gone[id] = nil end
+	end
 	for id, due in pairs(self.bodies) do
 		if due == true then
 			self.bodies[id] = now + 1
@@ -855,9 +866,12 @@ function P:step(world)
 				self:on_died(b.entity, world)
 			elseif b.out and b.entity then
 				if not ours(world, b.entity) then
-					-- gone, or the id names another entity now: never touched again. One that left the world on another mod's
-					-- move (it is not leashed then: a far move unloads it) stays out and comes back beside its owner
-					local lost = self.walked[b.entity] and not world:position(b.entity)
+					-- gone, or the id names another entity now: never touched again. One whose creature the game removed (left
+					-- far behind and unloaded: a long glide, a fast travel, another mod's move; or a death that took the body at
+					-- once, its death event still to come) stays out and comes back beside its owner; one whose id names
+					-- another creature now went home
+					local lost = not world:position(b.entity)
+					if lost then self.gone[b.entity] = { account = account, beast = b, until_s = now + GONE_S } end
 					self.walked[b.entity] = nil
 					self.ids[b.entity] = nil
 					b.entity = nil

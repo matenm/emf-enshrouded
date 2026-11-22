@@ -2333,12 +2333,41 @@ TEST_CASE("beastmaster: a beast that leaves the world on another mod's move stay
     REQUIRE(b.r.fake.spawns.size() == 2);
     CHECK(std::abs(b.r.fake.spawns[1].x - 2.0) < 0.01);  // beside its owner at (0, 10, 0)
     CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, out") != std::string::npos);
-    // without a move, a beast whose creature is gone counts as home (as before)
+}
+
+// Spirimtin (2026-11-22): "The wolf does not always come back when I glide. Sometimes I need to call it." A beast left
+// far behind (a long glide, a fast travel) is unloaded by the game: its creature is gone, and it went home.
+TEST_CASE("beastmaster (1.20): a beast whose creature the game removed (left far behind, unloaded) stays out and comes back beside its owner") {
+    BeastRig b;
+    wolf_out(b);
     b.seconds(1);
-    remove_entity(b.r.fake, 1235);
-    b.seconds(2);
-    CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, at home") != std::string::npos);
-    CHECK(b.r.fake.spawns.size() == 2);
+    remove_entity(b.r.fake, 1234);  // unloaded far behind its owner, no death
+    b.spawnable(1);
+    b.seconds(1);
+    CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, out") != std::string::npos);
+    b.seconds(1);
+    REQUIRE(b.r.fake.spawns.size() == 2);
+    CHECK(std::abs(b.r.fake.spawns[1].x - 2.0) < 0.01);  // beside its owner at (0, 10, 0)
+    CHECK(b.faction(1235) == kPlayerAlly);
+}
+
+// Spirimtin: "Sometimes when it dies it's not coming back after rest." A death that takes the body at once leaves no
+// dead creature for the check to see; the game's death event comes a step or two later.
+TEST_CASE("beastmaster (1.20): a beast whose body is gone before the death event arrives still rests and comes back after") {
+    BeastRig b({{"rest_s", "10"}});
+    wolf_out(b);
+    b.seconds(1);
+    remove_entity(b.r.fake, 1234);  // died, its body gone at once
+    b.spawnable(2);
+    b.seconds(1);                   // the check sees no creature: it stays out
+    deliver(b.r.fake, "EntityDiedEvent", died_event(1234));  // the game's event, late
+    b.seconds(1);
+    CHECK(b.noted("Wolf fell; it comes back in"));
+    CHECK(b.reply("beastmaster.list").find("then comes back") != std::string::npos);
+    CHECK(b.r.fake.spawns.size() == 1);  // not back before its rest
+    b.seconds(10);
+    REQUIRE(b.r.fake.spawns.size() == 2);
+    CHECK(b.noted("Wolf is back"));
 }
 
 TEST_CASE("beastmaster: an unknown bait name gives a note and the mod keeps running") {
