@@ -38,7 +38,8 @@ page says who applies them). Without them everything else works and those beasts
    for it for 20 s or until it falls. When a beast's hit leaves a foe at 25 % health or less, you land the killing blow, so the XP and loot are
    yours.
 5. **They stay close.** A beast that chases something more than 45 m from you drops the chase and runs back; one more
-   than 60 m away for 3 s, or 120 m away at once, comes back beside you.
+   than 60 m away for 3 s, or 120 m away at once, comes back beside you. One the game took out of the world behind you
+   (a long glide, a fast travel) comes back beside you by itself (1.20.0).
 6. **Modes**, for all your beasts at once: **Mode** on the wheel steps through them, or `/beastmaster mode <mode>`;
    the line at the bottom left shows it ("Beasts (passive): ...").
    - **Defending** (the first): they fight what attacks you or them, and what you send them at with Attack.
