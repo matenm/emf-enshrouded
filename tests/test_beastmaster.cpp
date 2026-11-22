@@ -2373,6 +2373,55 @@ TEST_CASE("beastmaster (1.20): a beast whose creature the game removed (left far
     CHECK(b.faction(1235) == kPlayerAlly);
 }
 
+// Review: the game gives ids out again. A creature that is not ours dying on the old id is no fall of ours, and its body
+// (its loot) is left alone.
+TEST_CASE("beastmaster (1.20): another creature dying on a gone beast's old id is no fall, and its body is not removed") {
+    BeastRig b;
+    wolf_out(b);
+    b.seconds(1);
+    remove_entity(b.r.fake, 1234);  // unloaded behind its owner
+    b.spawnable(1);
+    b.seconds(1);                   // the check: gone, it stays out
+    creature(b, 1234, 5, 5, kWildBeast);  // the id given to a wild beast, which dies at once
+    b.r.fake.attrs[{1234, EMF_ATTR_HEALTH}] = 0;
+    deliver(b.r.fake, "EntityDiedEvent", died_event(1234));
+    b.seconds(2);
+    CHECK_FALSE(b.noted("Wolf fell"));
+    CHECK_FALSE(contains(b.r.fake.destroyed, 1234));  // its loot stays
+    CHECK(b.r.fake.spawns.size() == 2);                // back without a rest
+    CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, out") != std::string::npos);
+}
+
+// Review: on a fast travel the new place loads many creatures at once; one may get the old id before the check looks.
+TEST_CASE("beastmaster (1.20): a beast whose id a new creature took before the check (its SpawnTime differs) comes back beside its owner") {
+    BeastRig b;
+    b.reply("beastmaster.give wolf");
+    next_beast(b, 1234);
+    REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+    b.seconds(2);  // its SpawnTime is read
+    component<ecs::SpawnTime>(b.r.fake, 1234).spawnTime.value = kSpawnNs + 5000000000LL;  // another creature now
+    component<ecs::Faction>(b.r.fake, 1234).faction = static_cast<emf::gen::FactionType>(kWildBeast);
+    b.spawnable(1);
+    b.seconds(2);
+    REQUIRE(b.r.fake.spawns.size() == 2);
+    CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, out") != std::string::npos);
+    CHECK(b.faction(1234) == kWildBeast);  // the stranger is left as it is
+}
+
+TEST_CASE("beastmaster (1.20): a beast the game takes out of the world again and again right after each call stays home") {
+    BeastRig b;
+    wolf_out(b);
+    for (uint32_t id = 1234; id < 1237; ++id) {
+        b.seconds(1);
+        remove_entity(b.r.fake, id);  // gone each time within seconds of its spawn
+        b.spawnable(1);
+        b.seconds(1);
+    }
+    b.seconds(2);
+    CHECK(b.noted("Wolf stays home: the game keeps taking it out of the world"));
+    CHECK(b.reply("beastmaster.list").find("Wolf - wolf, loyalty 1, at home") != std::string::npos);
+}
+
 // Spirimtin: "Sometimes when it dies it's not coming back after rest." A death that takes the body at once leaves no
 // dead creature for the check to see; the game's death event comes a step or two later.
 TEST_CASE("beastmaster (1.20): a beast whose body is gone before the death event arrives still rests and comes back after") {

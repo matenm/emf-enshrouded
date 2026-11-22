@@ -31,7 +31,9 @@ local SENT_S = 20       -- a passive beast that Attack sent at a creature fights
 local RECALL_S = 3      -- a beast that dropped a chase fights nothing this long while it comes back
 local HEAL_AFTER_S = 5  -- a beast heals between fights: this long after its last hit to or from it,
 local HEAL_SHARE = 0.05 -- this share of its maximum health a second
-local GONE_S = 10  -- s a removed beast's creature is remembered: a death event that comes later still makes it rest
+local GONE_S = 3   -- s a removed beast's creature is remembered: a death event that comes later still makes it rest
+local LOST_YOUNG_S = 5  -- a creature the game removes this soon after its spawn counts towards LOST_TRIES
+local LOST_TRIES = 3    -- removed this many times in a row that soon: the beast stays home (never an endless respawn)
 local KILL_HIT_S = 30   -- a foe a beast hit this long before it dies counts as its kill (a loyalty point)
 local STRAY_CHECKS = 3  -- a beast that guards someone else this many checks (seconds) in a row is not ours any more
 local REFUSALS = 3      -- a pack beast's call-back refused this many checks in a row: its pack is not in this game
@@ -89,6 +91,8 @@ function P:reset()
 	self.orders = {}     -- entity id -> the creature Attack sent it at (written as its pick until the order ends)
 	self.hunts = {}      -- entity id -> true while its order is aggressive mode's hunt (not the player's Attack)
 	self.gone = {}       -- entity id -> {account, beast, until_s}: a beast whose creature the game removed lately
+	self.stamp = {}      -- entity id -> the SpawnTime first read from our creature (the game gives ids out again)
+	self.losses = setmetatable({}, { __mode = "k" })  -- beast -> removals in a row within LOST_YOUNG_S of a spawn
 	                     -- (its death event may still come: then it rests)
 	self.recall = {}     -- entity id -> until when a beast that dropped a chase fights nothing
 	self.base = {}       -- entity id -> {damage, wrote}: its template's damage multiplier, and the one written
@@ -248,6 +252,9 @@ function P:spawn(world, owner, account, beast)
 	self:fresh(id)
 	self.fought[id] = self.env.now(world)
 	self.called[id] = self.env.now(world)
+	for gid, g in pairs(self.gone) do
+		if g.beast == beast then self.gone[gid] = nil end
+	end
 	self:strengthen(world, id, beast)
 	beast.entity = id
 	beast.out = true
@@ -263,6 +270,7 @@ function P:fresh(id)
 	self.hunts[id] = nil
 	self.walked[id] = nil
 	self.speeds[id], self.called[id] = nil, nil
+	self.stamp[id] = nil
 	self.fight:forget(id)
 end
 
@@ -710,17 +718,22 @@ function P:on_died(id, world)
 	local e = self.ids[id]
 	local g = self.gone[id]
 	self.gone[id] = nil
-	if not e and g and not g.beast.entity and g.beast.out then
-		e = { account = g.account, beast = g.beast }  -- its creature was gone before the event came: it fell all the same
+	local body = true
+	if not e and g and not g.beast.entity and g.beast.out and world and not world:position(id) then
+		-- its creature was gone before the event came: it fell all the same, and there is no body of ours (a creature on
+		-- the id now is another one: the game gives ids out again)
+		e = { account = g.account, beast = g.beast }
+		body = false
 	end
 	if not e then return end
 	self.ids[id] = nil
+	self.stamp[id] = nil
 	e.beast.entity = nil
 	-- with back_after_rest it stays out (and holds its slot) without a body, and comes back after its rest
 	e.beast.out = self.env.setting("back_after_rest") == true
 	e.beast.rest = self.env.setting("rest_s")
 	self.back[e.beast] = e.beast.out or nil
-	self.bodies[id] = true
+	if body then self.bodies[id] = true end
 	self.fallen[#self.fallen + 1] = e
 	self.env.save()
 end
@@ -766,6 +779,15 @@ function P:leash(world, owner, b, now)
 		b.entity = nil
 		if account then self:spawn(world, owner, account, b) end
 	end
+end
+
+-- Another creature is on beast entity `id` now: its SpawnTime is not the one first read from ours.
+function P:stranger(world, id)
+	local t = self.stamp[id]
+	if not t then return false end
+	local s = world:get("SpawnTime", id)
+	local now_t = s and s.spawnTime or 0
+	return now_t > 0 and now_t ~= t
 end
 
 -- account text -> player entity, for every player in the world
@@ -880,7 +902,8 @@ function P:step(world)
 		if owner then away, why = self.aside:check(world, account, owner, now, self:spots(account)) end
 		local stepped = false
 		for _, b in ipairs(beasts:list(account)) do
-			local cur = b.out and b.entity and world:position(b.entity) and emf.health(world, b.entity)
+			local stranger = b.out and b.entity and self:stranger(world, b.entity)
+			local cur = not stranger and b.out and b.entity and world:position(b.entity) and emf.health(world, b.entity)
 			local f = cur and cur <= 0 and self.ids[b.entity] and world:get("Faction", b.entity)
 			local fell = f and f.faction == PLAYER_ALLY
 			if fell then
@@ -888,15 +911,29 @@ function P:step(world)
 				-- owner hears it at the next check, before it can come back
 				self:on_died(b.entity, world)
 			elseif b.out and b.entity then
-				if not ours(world, b.entity) then
+				if stranger or not ours(world, b.entity) then
 					-- gone, or the id names another entity now: never touched again. One whose creature the game removed (left
 					-- far behind and unloaded: a long glide, a fast travel, another mod's move; or a death that took the body at
 					-- once, its death event still to come) stays out and comes back beside its owner; one whose id names
 					-- another creature now went home
-					local lost = not world:position(b.entity)
-					if lost then self.gone[b.entity] = { account = account, beast = b, until_s = now + GONE_S } end
+					local lost = stranger or not world:position(b.entity)
+					if lost and not stranger then
+						self.gone[b.entity] = { account = account, beast = b, until_s = now + GONE_S }
+					end
+					-- removed again and again right after its spawn: it stays home (never an endless respawn)
+					local young = lost and now - (self.called[b.entity] or -math.huge) < LOST_YOUNG_S
+					self.losses[b] = young and (self.losses[b] or 0) + 1 or nil
+					if (self.losses[b] or 0) >= LOST_TRIES then
+						self.losses[b] = nil
+						lost = false
+						if owner then
+							self.env.tell(world, owner, b.name .. " stays home: the game keeps taking it out of the world. Call it "
+								.. "again somewhere else.")
+						end
+					end
 					self.walked[b.entity] = nil
 					self.ids[b.entity] = nil
+					self.stamp[b.entity] = nil
 					b.entity = nil
 					if not lost then
 						b.out = false
@@ -908,6 +945,10 @@ function P:step(world)
 					b.entity = nil
 					stepped = stepped or away
 				else
+					if not self.stamp[b.entity] then
+						local st = world:get("SpawnTime", b.entity)
+						if st and st.spawnTime > 0 then self.stamp[b.entity] = st.spawnTime end
+					end
 					local ai = world:get("DynamicEnemy01BehaviorState", b.entity)
 					local guard = ai and ai.guardEntityId or 0
 					-- another mod walks it somewhere (EMF move orders, Lua 1.33): it guards the move's waypoint meanwhile; it is
