@@ -22,7 +22,7 @@ struct Spec {
 
 const char* const kKeys[] = {"x",    "y",    "z",          "entity", "height",   "text",       "icon",     "colour",
                              "shape", "world", "game_map", "game_icon", "edge_arrow", "distance", "max_distance",
-                             "minimap"};
+                             "minimap", "bar"};
 
 bool known_key(const char* k) {
     for (const char* x : kKeys)
@@ -65,7 +65,7 @@ Spec read_spec(lua_State* L, Script* s, const char* id, int t, const char* fn) {
         const char* k = lua_type(L, -2) == LUA_TSTRING ? lua_tostring(L, -2) : "";
         if (!known_key(k))
             luaL_error(L, "%s: unknown key '%s' (x, y, z, entity, height, text, icon, colour, shape, world, game_map, "
-                          "game_icon, edge_arrow, distance, max_distance, minimap)", fn, k);
+                          "game_icon, edge_arrow, distance, max_distance, minimap, bar)", fn, k);
         lua_pop(L, 1);
     }
     Spec sp;
@@ -106,6 +106,15 @@ Spec read_spec(lua_State* L, Script* s, const char* id, int t, const char* fn) {
     if (flag_field(L, t, "game_map", false)) m.flags |= EMF_MARKER_GAME_MAP;
     if (flag_field(L, t, "edge_arrow", false)) m.flags |= EMF_MARKER_EDGE_ARROW;
     if (flag_field(L, t, "minimap", false)) m.flags |= EMF_MARKER_MINIMAP;  // lua 1.27
+    lua_getfield(L, t, "bar");  // lua 1.40: a bar under the text, this share filled
+    const bool has_bar = !lua_isnil(L, -1);
+    lua_pop(L, 1);
+    if (has_bar) {
+        const double bar = number_field(L, t, "bar", fn, 0);
+        if (!(bar >= 0 && bar <= 1)) luaL_error(L, "%s: bar must be a number from 0 to 1", fn);
+        m.flags |= EMF_MARKER_BAR;
+        m.bar = static_cast<float>(bar);
+    }
     return sp;
 }
 

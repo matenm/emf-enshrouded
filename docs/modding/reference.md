@@ -1496,6 +1496,10 @@ whatever happened to it since (dug into, smoothed, refilled). A cell whose shipp
   or an invisible target a creature must face is turned this way: writing its transform after the spawn turns what is
   drawn, not what the game reads (a modder's raid test: the Vukah never attacked a target turned afterwards).
   C++: `emf::spawn_facing(w, guid, x, y, z, yaw)`; Lua 1.40: `emf.spawn(..., components, {yaw = degrees})`.
+- `EMF_MARKER_BAR` (0x20) and `EmfMarker.bar` (where `pad2` was; the struct's size is the same): a bar under the
+  marker's text with `bar` (0..1) of it filled, in the marker's colour, for a health bar. A bar outside 0..1 or not a
+  number is refused (`marker_set` false); a sent marker's bar goes to the players' games, and a game with an older core
+  draws the marker without it (its store leaves the flag out). Lua 1.40: the spec key `bar`.
 - Good to know: ground a player raised where there was air (placed dirt, a flattened terrace built up) counts as
   placed, so a break at its foot can dent it. A world saved before a game update that changed the shipped terrain may
   read old natural ground there as a player's (the ruins have the same caveat).

@@ -68,6 +68,7 @@ std::vector<MarkerLayout> layout_markers(const std::vector<Marker>& markers, con
         l.rgba = m.rgba;
         l.shape = m.shape;
         l.icon = m.icon;
+        if (m.flags & EMF_MARKER_BAR) l.bar = std::clamp(m.bar, 0.0f, 1.0f);
         out.push_back(std::move(l));
     }
     // the nearest get their text; then far ones first, so near ones are drawn on top
@@ -163,7 +164,10 @@ void draw_markers(ImDrawList* dl, const std::vector<MarkerLayout>& layouts, cons
         const float big = 22.0f * k, small = 18.0f * k;
         // the text goes under the shape; near the bottom of the screen above it
         const bool above = l.y > display_h * 0.85f;
-        float y = above ? l.y - r - (l.text.empty() ? 0 : big) - (l.dist.empty() ? 0 : small) - 2 * k : l.y + r + 2 * k;
+        const float bar_w = 56.0f * k, bar_h = 6.0f * k, bar_gap = 3.0f * k;
+        const float bar_room = l.bar >= 0 ? bar_h + bar_gap : 0;
+        float y = above ? l.y - r - (l.text.empty() ? 0 : big) - (l.dist.empty() ? 0 : small) - bar_room - 2 * k
+                        : l.y + r + 2 * k;
         const uint32_t text_rgba = with_alpha(look.colour, l.alpha);
         if (!l.text.empty()) {
             const ImVec2 sz = font->CalcTextSizeA(big, FLT_MAX, 0, l.text.c_str());
@@ -174,6 +178,13 @@ void draw_markers(ImDrawList* dl, const std::vector<MarkerLayout>& layouts, cons
             const ImVec2 sz = font->CalcTextSizeA(small, FLT_MAX, 0, l.dist.c_str());
             draw_look_text(dl, look, font, small, ImVec2(l.x - sz.x * 0.5f, y), with_alpha(text_rgba, 0.85f), l.dist.c_str(),
                            nullptr, 0);
+            y += small;
+        }
+        if (l.bar >= 0) {  // the bar under the text (a health bar): its share filled in the marker's colour
+            const ImVec2 a(l.x - bar_w * 0.5f, y + bar_gap), b(l.x + bar_w * 0.5f, y + bar_gap + bar_h);
+            dl->AddRectFilled(a, b, IM_COL32(0, 0, 0, static_cast<int>(150 * l.alpha)));
+            if (l.bar > 0) dl->AddRectFilled(a, ImVec2(a.x + bar_w * l.bar, b.y), fill);
+            dl->AddRect(a, b, edge, 0, 0, 1.0f * k);
         }
     }
 }

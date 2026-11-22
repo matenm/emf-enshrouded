@@ -150,3 +150,21 @@ TEST_CASE("lua 1.25: a reload takes the script's markers away, here and in the p
     CHECK(r.fake.markers_unsent[0].first == 7u);
     CHECK(r.fake.markers_unsent[0].second == "mr:b");
 }
+
+TEST_CASE("lua 1.40: a marker's bar = 0..1 sets EMF_MARKER_BAR and its share; outside 0..1 or not a number is an error") {
+    Rig r(L"marker_bar");
+    add_script(r.dir, "mbar",
+               "emf.marker('hp', {x = 1, y = 2, z = 3, text = 'Wolf', bar = 0.75})\n"
+               "local ok1 = pcall(emf.marker, 'b1', {x = 1, bar = 1.5})\n"
+               "local ok2 = pcall(emf.marker, 'b2', {x = 1, bar = 'full'})\n"
+               "local ok3 = pcall(emf.marker, 'b3', {x = 1, bar = -1})\n"
+               "emf.log('bar ' .. tostring(ok1) .. tostring(ok2) .. tostring(ok3))\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    REQUIRE(r.fake.markers.count("mbar:hp") == 1);
+    const auto& h = r.fake.markers["mbar:hp"];
+    CHECK((h.m.flags & EMF_MARKER_BAR) != 0u);
+    CHECK(h.m.bar == doctest::Approx(0.75f));
+    CHECK(logged("bar falsefalsefalse"));
+    CHECK(r.fake.markers.count("mbar:b1") == 0);
+}

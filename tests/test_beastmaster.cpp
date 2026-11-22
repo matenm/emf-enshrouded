@@ -6875,7 +6875,8 @@ TEST_CASE("beastmaster 1.16: beast markers on: the owner gets a marker over each
     CHECK(m->text == "Wolf");
     CHECK(m->m.entity == 1234u);
     CHECK(m->m.height == doctest::Approx(1.7f));
-    CHECK(m->m.flags == (EMF_MARKER_WORLD | EMF_MARKER_DISTANCE | EMF_MARKER_GAME_MAP | EMF_MARKER_EDGE_ARROW));
+    CHECK(m->m.flags ==
+          (EMF_MARKER_WORLD | EMF_MARKER_DISTANCE | EMF_MARKER_GAME_MAP | EMF_MARKER_EDGE_ARROW | EMF_MARKER_BAR));
     CHECK(sent_to(b.r.fake, 2, "beastmaster:beast.1234") == nullptr);  // only its owner
     const size_t n = b.r.fake.markers_sent.size();
     b.seconds(3);
@@ -6883,6 +6884,28 @@ TEST_CASE("beastmaster 1.16: beast markers on: the owner gets a marker over each
     b.reply("beastmaster.dismiss Wolf");
     b.seconds(2);
     CHECK(unsent_to(b.r.fake, 1, "beastmaster:beast.1234"));
+}
+
+TEST_CASE("beastmaster 1.19: a beast's marker has a health bar in 5 % steps, sent again when it moves a step") {
+    BeastRig b({{"beast_markers", "1"}});
+    b.reply("beastmaster.give wolf");
+    b.spawnable(1);
+    REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+    b.seconds(2);
+    const auto* m = sent_to(b.r.fake, 1, "beastmaster:beast.1234");
+    REQUIRE(m != nullptr);
+    REQUIRE((m->m.flags & EMF_MARKER_BAR) != 0u);
+    CHECK(m->m.bar == doctest::Approx(1.0f));
+    const int32_t max = b.r.fake.attrs[{1234u, EMF_ATTR_MAX_HEALTH}];
+    REQUIRE(max > 0);
+    b.r.fake.attrs[{1234u, EMF_ATTR_HEALTH}] = max * 42 / 100;
+    b.seconds(1);
+    m = sent_to(b.r.fake, 1, "beastmaster:beast.1234");
+    REQUIRE(m != nullptr);
+    CHECK(m->m.bar < 0.6f);  // 42 % (it may heal a step meanwhile)
+    CHECK(m->m.bar >= 0.4f);
+    const float steps = m->m.bar / 0.05f;
+    CHECK(steps == doctest::Approx(std::round(steps)));
 }
 
 // A beast with no position (not placed yet, or out of the world) was sent at (0, 0, 0): a marker at the world's origin.

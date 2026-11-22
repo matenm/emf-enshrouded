@@ -269,3 +269,41 @@ TEST_CASE("marker store (review C1): EMF_MARKER_MINIMAP is kept, for a local and
     REQUIRE(all.size() == 2u);
     for (const auto& k : all) CHECK((k.flags & EMF_MARKER_MINIMAP) != 0u);
 }
+
+TEST_CASE("marker store (v47): a bar (EMF_MARKER_BAR, 0..1) is kept; outside 0..1 or not a number refused; none without the flag") {
+    MarkerStore s;
+    EmfMarker m = mk("hp");
+    m.flags |= EMF_MARKER_BAR;
+    m.bar = 0.4f;
+    REQUIRE(s.set("mod", m, false) == MarkerStore::SetResult::Ok);
+    auto all = s.snapshot();
+    REQUIRE(all.size() == 1u);
+    CHECK((all[0].flags & EMF_MARKER_BAR) != 0u);
+    CHECK(all[0].bar == doctest::Approx(0.4f));
+    m.bar = 1.5f;
+    CHECK(s.set("mod", m, false) == MarkerStore::SetResult::BadNumbers);
+    m.bar = -0.1f;
+    CHECK(s.set("mod", m, false) == MarkerStore::SetResult::BadNumbers);
+    m.bar = std::nanf("");
+    CHECK(s.set("mod", m, false) == MarkerStore::SetResult::BadNumbers);
+    EmfMarker plain = mk("plain");
+    plain.bar = 7.0f;  // no flag: the value is not read
+    REQUIRE(s.set("mod", plain, false) == MarkerStore::SetResult::Ok);
+    for (const auto& k : s.snapshot())
+        if (k.id == "plain") CHECK((k.flags & EMF_MARKER_BAR) == 0u);
+}
+
+TEST_CASE("wire format (v47): a marker's bar goes along (\"b\"); a message without one has none; a bar given as no number is refused") {
+    EmfMarker a = mk("beast.1");
+    a.flags |= EMF_MARKER_BAR;
+    a.bar = 0.25f;
+    DecodedMarkers d;
+    REQUIRE(decode_markers(encode_markers("lua", {a}, {}), &d));
+    REQUIRE(d.markers.size() == 1);
+    CHECK((d.markers[0].marker.flags & EMF_MARKER_BAR) != 0u);
+    CHECK(d.markers[0].marker.bar == doctest::Approx(0.25f));
+    DecodedMarkers n;
+    REQUIRE(decode_markers(encode_markers("lua", {mk("b2")}, {}), &n));
+    CHECK(n.markers[0].marker.bar == 0.0f);
+    CHECK_FALSE(decode_markers(R"({"o":"lua","s":[{"i":"x","x":1,"y":2,"z":3,"f":33,"b":"full"}]})", &n));
+}

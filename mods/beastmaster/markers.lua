@@ -1,6 +1,6 @@
 -- Beast and stable markers (Beastmaster 1.16, EMF's markers: lua 1.25). Once a second, for every player in the world:
--- a marker over each of their beasts that is out (its name, the distance, an arrow at the screen's edge, and on the
--- map), and with stable markers the world's stables (they are everyone's): on the map, and in the world within 200 m.
+-- a marker over each of their beasts that is out (its name, the distance, its health as a bar (1.19, lua 1.40), an
+-- arrow at the screen's edge, and on the map), and with stable markers the world's stables (they are everyone's): on the map, and in the world within 200 m.
 -- The settings beast_markers and stable_markers are the host's or the server's; a player chooses for themselves with
 -- /beastmaster markers on|off and /beastmaster stable_markers on|off (kept in their player data). Only what changed is
 -- sent; what went (a beast dismissed, fallen or home, a stable taken down, a choice switched off) is taken off again.
@@ -13,6 +13,8 @@ local STABLE_NEAR_M = 200   -- stables show in the world within this distance (a
 local HEIGHT = 1.7          -- metres above a beast's position
 local TALL = { bear = 2.4, aurochs = 2.4 }
 local KEYS = { markers = "beast_markers", stable_markers = "stable_markers" }
+local BAR_STEP = 0.05       -- the health bar moves in 5 % steps (each step is a marker sent again)
+local bars = true           -- false on an older EMF, whose markers have no bar (Lua 1.40): sent without
 
 function M.new(env)
 	return setmetatable({ env = env, sent = {}, next_t = 0 }, K)
@@ -57,6 +59,23 @@ end
 
 local function round(v) return math.floor(v + 0.5) end
 
+-- The beast's health as a share of its maximum in BAR_STEP steps; nil when it is not known.
+local function health_share(world, id)
+	local cur, max = emf.health(world, id)
+	if not cur or not max or max <= 0 then return nil end
+	return round(math.max(0, math.min(1, cur / max)) / BAR_STEP) * BAR_STEP
+end
+
+-- Sends a marker; one with a bar goes again without it (for good) on an older EMF, which refuses the key.
+local function send(player, id, spec)
+	if spec.bar ~= nil and bars then
+		if pcall(emf.send_marker, player, id, spec) then return end
+		bars = false
+	end
+	spec.bar = nil
+	emf.send_marker(player, id, spec)
+end
+
 -- What a player should have: id -> {spec, sig} (sig: what makes it change).
 local function wanted(self, world, account, ids, stables)
 	local want = {}
@@ -65,9 +84,10 @@ local function wanted(self, world, account, ids, stables)
 			-- a beast with no position (not placed yet, or out of the world) gets none: it would show at the world's origin
 			local x, y, z = world:position(id)
 			if o.account == account and o.beast and x then
+				local bar = bars and health_share(world, id) or nil
 				local spec = { entity = id, x = x, y = y, z = z, height = TALL[o.beast.species] or HEIGHT,
-					text = o.beast.name, shape = "diamond", game_map = true, edge_arrow = true }
-				want["beast." .. id] = { spec = spec, sig = o.beast.name .. "@" .. id }
+					text = o.beast.name, shape = "diamond", game_map = true, edge_arrow = true, bar = bar }
+				want["beast." .. id] = { spec = spec, sig = o.beast.name .. "@" .. id .. "#" .. tostring(bar) }
 			end
 		end
 	end
@@ -109,7 +129,7 @@ function K:step(world, present, ids, stables)
 		local want = wanted(self, world, account, ids or {}, stables or {})
 		for id, w in pairs(want) do
 			if sent.ids[id] ~= w.sig then
-				emf.send_marker(player, id, w.spec)
+				send(player, id, w.spec)
 				sent.ids[id] = w.sig
 			end
 		end

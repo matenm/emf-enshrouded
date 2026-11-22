@@ -52,7 +52,8 @@ std::string marker_cut_utf8(std::string s, size_t n) {
 bool marker_numbers_ok(const EmfMarker& m) {
     return m.size >= sizeof(EmfMarker) && finite_within(m.x, kMarkerCoordMax) && finite_within(m.y, kMarkerCoordMax) &&
            finite_within(m.z, kMarkerCoordMax) && finite_within(m.height, 1000.0) &&
-           finite_within(m.max_distance, kMarkerCoordMax) && m.max_distance >= 0 && m.shape <= EMF_MARKER_NONE;
+           finite_within(m.max_distance, kMarkerCoordMax) && m.max_distance >= 0 && m.shape <= EMF_MARKER_NONE &&
+           (!(m.flags & EMF_MARKER_BAR) || (std::isfinite(m.bar) && m.bar >= 0 && m.bar <= 1));
 }
 
 // ---- MarkerStore ----
@@ -73,9 +74,10 @@ MarkerStore::SetResult MarkerStore::set(const std::string& owner, const EmfMarke
     k.rgba = m.rgba;
     k.shape = m.shape;
     k.flags = m.flags & (EMF_MARKER_WORLD | EMF_MARKER_GAME_MAP | EMF_MARKER_EDGE_ARROW | EMF_MARKER_DISTANCE |
-                         EMF_MARKER_MINIMAP);
+                         EMF_MARKER_MINIMAP | EMF_MARKER_BAR);
     k.max_distance = m.max_distance;
     k.game_icon = m.game_icon;
+    k.bar = (m.flags & EMF_MARKER_BAR) ? m.bar : 0.0f;
     std::lock_guard<std::mutex> lock(m_);
     Key key{received, owner, k.id};
     auto it = markers_.find(key);
@@ -255,6 +257,7 @@ std::string encode_markers(const std::string& owner, const std::vector<EmfMarker
         if (m.shape) o.num("k", m.shape);
         o.num("f", m.flags);
         if (m.game_icon) o.num("g", m.game_icon);
+        if (m.flags & EMF_MARKER_BAR) o.num("b", m.bar);
         s.push_back(o.text());
     }
     std::vector<std::string> r;
@@ -291,7 +294,7 @@ bool decode_markers(const std::string& text, DecodedMarkers* out) {
         for (const json::Value& v : s->arr) {
             if (!v.is(json::Value::Type::Object)) return false;
             // a place or size given as no number would read as 0 (the marker to the world's origin)
-            for (const char* k : {"x", "y", "z", "h", "d"})
+            for (const char* k : {"x", "y", "z", "h", "d", "b"})
                 if (const json::Value* f = v.get(k); f && !f->is(json::Value::Type::Number)) return false;
             DecodedMarker d;
             d.id = field_str(v.get("i"));
@@ -308,6 +311,7 @@ bool decode_markers(const std::string& text, DecodedMarkers* out) {
             m.shape = static_cast<uint8_t>(std::min<uint32_t>(field_u32(v.get("k")), 255));
             m.flags = field_u32(v.get("f"));
             m.game_icon = field_u32(v.get("g"));
+            m.bar = static_cast<float>(field_num(v.get("b")));
             out->markers.push_back(std::move(d));
         }
     }

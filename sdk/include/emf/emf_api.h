@@ -559,6 +559,8 @@ typedef void (*EmfBuffCallback)(EmfWorld* world, const EmfBuffEvent* ev, void* u
 #define EMF_MARKER_EDGE_ARROW 0x04u /* off screen or behind: an arrow at the screen's edge */
 #define EMF_MARKER_DISTANCE 0x08u   /* the distance under the text ("42 m") */
 #define EMF_MARKER_MINIMAP 0x10u    /* v35: a canvas's EMF_CANVAS_MARKERS command draws it (a minimap) */
+#define EMF_MARKER_BAR 0x20u        /* v47: a bar under the text, `bar` of it filled (a health bar); an older core
+                                       leaves the flag out (no bar) */
 #define EMF_MARKER_DIAMOND 0u       /* EmfMarker.shape, drawn when there is no icon */
 #define EMF_MARKER_CIRCLE 1u
 #define EMF_MARKER_SQUARE 2u
@@ -577,7 +579,7 @@ typedef struct EmfMarker {
     uint8_t shape;      /* EMF_MARKER_DIAMOND ... */
     uint8_t pad[3];
     uint32_t game_icon; /* EMF_MARKER_GAME_MAP: a game map icon type (marker_types) drawn by the game, 0 = EMF's shape */
-    uint32_t pad2;
+    float bar;          /* v47 (pad2 before): with EMF_MARKER_BAR the filled share of the bar under the text, 0..1 */
 } EmfMarker;
 #define EMF_MAP_TYPE_FAST_TRAVEL 0x01u /* EmfMapMarkerType.flags: a fast travel destination (shrines, altars) */
 #define EMF_MAP_TYPE_CUSTOM 0x02u      /* one of the types players place themselves */

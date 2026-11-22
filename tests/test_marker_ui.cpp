@@ -152,3 +152,14 @@ TEST_CASE("map markers show only while the map is open, its view is fresh and th
     MapView empty{};
     CHECK_FALSE(show_map_markers(false, s, empty, 1100));
 }
+
+TEST_CASE("marker layout (v47): a marker with a bar carries its share; one without has none (negative)") {
+    Marker hp = at("hp", 0, 0, 10, EMF_MARKER_WORLD | EMF_MARKER_BAR);
+    hp.bar = 0.6f;
+    const auto l = layout_markers({hp, at("plain", 0, 0, 12)}, cam_origin(), kPlayer, kDisplay);
+    REQUIRE(l.size() == 2);
+    for (const auto& m : l) {
+        if (m.text == "hp") CHECK(m.bar == doctest::Approx(0.6f));
+        if (m.text == "plain") CHECK(m.bar < 0);
+    }
+}

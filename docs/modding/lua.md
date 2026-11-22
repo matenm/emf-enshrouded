@@ -104,7 +104,7 @@ version the additions need (empty: the v20 the `lua` mod needs is enough). Range
 | 1.37 | `emf.break_blocks`, `emf.block_at`, `emf.find_wall` | v44 |
 | 1.38 | the world's own blocks (ruins) spared: a block's `world`, the break option `world` | v45 |
 | 1.39 | villager moves (`emf.villager_move`, `emf.villager_move_cancel`, `emf.villager_moving`) | v46 |
-| 1.40 | terrain a player placed: the break option `terrain`, `emf.find_wall`'s `{terrain = true}`, a terrain block's `world`; `emf.spawn`'s `{yaw = degrees}` | v47 |
+| 1.40 | terrain a player placed: the break option `terrain`, `emf.find_wall`'s `{terrain = true}`, a terrain block's `world`; `emf.spawn`'s `{yaw = degrees}`; a marker's `bar` | v47 |
 
 ## What happens when a script fails
 
@@ -524,6 +524,7 @@ emf.unsend_marker(player, "pet")
 | `edge_arrow` | an arrow at the screen's edge when it is behind you or off screen (default false) |
 | `max_distance` | fades out toward it and is hidden beyond (default: no limit; the map shows it anyway) |
 | `minimap` | (1.27) a canvas's `"markers"` item draws it (default false) |
+| `bar` | (1.40) a bar under the text with this share filled, 0 to 1, in the marker's colour (a health bar); a player's game with an older EMF shows none. An older Lua host refuses the key: `pcall` the call and send it again without `bar` |
 
 ## The map (1.26)
 

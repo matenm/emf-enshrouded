@@ -31,6 +31,7 @@ struct MarkerLayout {
     uint32_t rgba = 0;  // 0 = the HUD's accent colour
     uint8_t shape = EMF_MARKER_DIAMOND;
     uint32_t icon = 0;
+    float bar = -1;  // EMF_MARKER_BAR: the filled share of the bar under the text; negative: no bar
 };
 
 // The markers with EMF_MARKER_WORLD that show, far ones first. player: the local player's position (null: the

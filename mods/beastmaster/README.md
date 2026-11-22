@@ -295,7 +295,8 @@ game once without a key press; after that, only at a stable or within 5 s after 
 
 ## Markers
 
-With **Beast markers** on, every beast you have out shows its name and how far it is over its head, an arrow at the
+With **Beast markers** on, every beast you have out shows its name, how far it is and its health (a bar, with EMF
+0.6.19 or newer on your game) over its head, an arrow at the
 edge of the screen when it is behind you or off screen, and a marker on the map (M). With **Stable markers** on, the
 world's stables show on the map and, within 200 m, in the world. Both are **off** at the start.
 
