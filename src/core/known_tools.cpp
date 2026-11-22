@@ -328,11 +328,13 @@ void add_loader_started(GameFolderView& view, const FolderLook& look) {
 }
 
 const std::vector<std::string>& proxy_dll_names() {
-    // umpdc.dll and cfgmgr32.dll: the Greeneye loader's other names
-    static const std::vector<std::string> names = {"dinput8.dll", "dbghelp.dll",  "dbgcore.dll",
-                                                   "winmm.dll",   "powrprof.dll", "version.dll",
-                                                   "xinput1_4.dll", "dxgi.dll",   "umpdc.dll",
-                                                   "cfgmgr32.dll"};
+    // umpdc.dll and cfgmgr32.dll: the Greeneye loader's other names; d3d12.dll to hid.dll: other DLLs the game loads by
+    // name that Windows does not pin to System32 (as EMF.exe's installer, src/nexus/classify.cpp)
+    static const std::vector<std::string> names = {"dinput8.dll",  "dbghelp.dll",   "dbgcore.dll",  "winmm.dll",
+                                                   "powrprof.dll", "version.dll",   "xinput1_4.dll", "dxgi.dll",
+                                                   "umpdc.dll",    "cfgmgr32.dll",  "d3d12.dll",    "opengl32.dll",
+                                                   "dwmapi.dll",   "uxtheme.dll",   "wtsapi32.dll", "iphlpapi.dll",
+                                                   "hid.dll"};
     return names;
 }
 

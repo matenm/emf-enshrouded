@@ -18,7 +18,7 @@
 //   6. ReShade preset: a .ini with "reshade" in its name, or a reshade-shaders/ folder (with or without ReShade's
 //      own dxgi.dll).
 //   7. Another loader or proxy DLL at the root: dbghelp, dbgcore, winmm, powrprof, version, xinput1_4, dxgi, umpdc,
-//      cfgmgr32 (.dll). dbgcore.dll with a greeneye/ folder is the Greeneye Loader.
+//      cfgmgr32, d3d12, opengl32, dwmapi, uxtheme, wtsapi32, iphlpapi, hid (.dll). dbgcore.dll with a greeneye/ folder is the Greeneye Loader.
 //   8. Shroudtopia mod: shroudtopia.json, a DLL directly in mods/, or mods/<id>/ with a DLL in it.
 //   9. ShroudForge package: an EML mod folder with extended.mod.json in it.
 //  10. EML mod: a folder with mod.json and src/mod.lua: mods/<id>/, <id>/, or the root itself.

@@ -346,6 +346,12 @@ TEST_CASE("installed report: ModLoader Proxy as dinput8.dll starts EMF and Shrou
                        "listed but not found: gone.dll"});
 }
 
+TEST_CASE("known tools: the loader names EMF.exe installs are proxy names in the game folder view too") {
+    const auto& names = emf::core::proxy_dll_names();
+    for (const char* n : {"d3d12.dll", "opengl32.dll", "dwmapi.dll", "uxtheme.dll", "wtsapi32.dll", "iphlpapi.dll", "hid.dll"})
+        CHECK_MESSAGE(std::find(names.begin(), names.end(), n) != names.end(), n);
+}
+
 TEST_CASE("known tools: Greeneye's other file names are proxy names too") {
     const auto& names = emf::core::proxy_dll_names();
     for (const char* n : {"dinput8.dll", "dbghelp.dll", "dbgcore.dll", "winmm.dll", "umpdc.dll", "cfgmgr32.dll"})

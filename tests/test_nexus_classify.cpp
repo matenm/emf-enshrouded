@@ -191,6 +191,16 @@ TEST_CASE("classify real: DLL mods under other proxy names (powrprof.dll, xinput
     CHECK(x.proxy_dlls == Strings{"xinput1_4.dll"});
 }
 
+TEST_CASE("classify: more loader names the game loads from its folder (d3d12, opengl32, dwmapi, uxtheme, wtsapi32, iphlpapi, hid)") {
+    for (const char* name : {"d3d12.dll", "OpenGL32.dll", "dwmapi.dll", "uxtheme.dll", "wtsapi32.dll", "iphlpapi.dll", "hid.dll"}) {
+        const auto c = classify_archive(std::vector<NexusArchiveEntry>{{name, 400000}, {"readme.txt", 300}});
+        CHECK_MESSAGE(c.kind == ArchiveKind::ProxyDll, name);
+        REQUIRE_MESSAGE(c.proxy_dlls.size() == 1, name);
+    }
+    const auto other = classify_archive(std::vector<NexusArchiveEntry>{{"helper.dll", 400000}});  // a DLL under no loader name: not one
+    CHECK(other.kind != ArchiveKind::ProxyDll);
+}
+
 TEST_CASE("classify real: a Shroudtopia mod (mods/<id>/ with a DLL)") {
     const auto c = classify_archive(listing("contents_143_979.json"));
     CHECK(c.kind == ArchiveKind::ShroudtopiaMod);

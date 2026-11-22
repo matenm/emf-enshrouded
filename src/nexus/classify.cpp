@@ -8,8 +8,12 @@ namespace emf::nexus {
 namespace {
 
 // File names DLL mods use to get into the game (core::proxy_dll_names, kept the same).
-const char* const kProxyNames[] = {"dinput8.dll", "dbghelp.dll", "dbgcore.dll",   "winmm.dll", "powrprof.dll",
-                                   "version.dll", "xinput1_4.dll", "dxgi.dll",    "umpdc.dll", "cfgmgr32.dll"};
+// The DLLs the game loads by name and Windows does not pin to System32 (no KnownDLLs entry), so a loader under that name
+// in the game folder is loaded instead (the last seven are seen loaded by the running game).
+const char* const kProxyNames[] = {"dinput8.dll",  "dbghelp.dll", "dbgcore.dll",  "winmm.dll",    "powrprof.dll",
+                                   "version.dll",  "xinput1_4.dll", "dxgi.dll",   "umpdc.dll",    "cfgmgr32.dll",
+                                   "d3d12.dll",    "opengl32.dll", "dwmapi.dll",  "uxtheme.dll",  "wtsapi32.dll",
+                                   "iphlpapi.dll", "hid.dll"};
 // Folders of the game folder itself: never a wrapper.
 const char* const kGameFolders[] = {"emf", "mods", "greeneye", "shroudforge", "reshade-shaders", "aldrich-modmenu"};
 
