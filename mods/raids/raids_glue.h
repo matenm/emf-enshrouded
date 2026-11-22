@@ -188,10 +188,15 @@ inline bool player_near(const Vec3& p, const std::vector<Player>& players, doubl
     return false;
 }
 // A raider's stuck clock (60 s without 3 m of progress: removed) waits while its wall spot took damage lately, or while
-// a player is within 8 m: it is fighting, not stuck (a fight outside the altar's 12 m otherwise removes it mid-fight).
-inline constexpr double kFightNear = 8.0;
-inline bool stuck_clock_waits(bool wall_holding, const Vec3& p, const std::vector<Player>& players) {
-    return wall_holding || player_near(p, players, kFightNear);
+// it fights: it fought lately (FightClock) and a player is within 8 m across and 3 m up or down (a fight outside the
+// altar's 12 m otherwise removed it mid-fight; one in a pit under a player, or that cannot reach one, still goes).
+inline constexpr double kFightNear = 8.0, kFightRise = 3.0;
+inline bool stuck_clock_waits(bool wall_holding, bool fought_lately, const Vec3& p, const std::vector<Player>& players) {
+    if (wall_holding) return true;
+    if (!fought_lately) return false;
+    for (const auto& pl : players)
+        if (horizontal_distance(pl.pos, p) <= kFightNear && std::fabs(pl.pos.y - p.y) <= kFightRise) return true;
+    return false;
 }
 // One raider hit on a wall: the game's T4 pickaxe (EMF_BREAK_DEFAULT_DAMAGE) times scale, whole, 1 to 100000 (all
 // 0 would ask break_blocks for the full default).

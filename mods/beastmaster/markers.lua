@@ -66,10 +66,13 @@ local function health_share(world, id)
 	return round(math.max(0, math.min(1, cur / max)) / BAR_STEP) * BAR_STEP
 end
 
--- Sends a marker; one with a bar goes again without it (for good) on an older EMF, which refuses the key.
+-- Sends a marker; one with a bar goes again without it (for good) on an older EMF, which refuses the key. Any other
+-- error is raised as before.
 local function send(player, id, spec)
 	if spec.bar ~= nil and bars then
-		if pcall(emf.send_marker, player, id, spec) then return end
+		local ok, err = pcall(emf.send_marker, player, id, spec)
+		if ok then return end
+		if not tostring(err):find("bar", 1, true) then error(err, 0) end
 		bars = false
 	end
 	spec.bar = nil

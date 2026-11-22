@@ -168,3 +168,19 @@ TEST_CASE("lua 1.40: a marker's bar = 0..1 sets EMF_MARKER_BAR and its share; ou
     CHECK(logged("bar falsefalsefalse"));
     CHECK(r.fake.markers.count("mbar:b1") == 0);
 }
+
+TEST_CASE("lua 1.40 (review): a marker's bar on a core older than v47 is an error (so a pcall can send it without)") {
+    Rig r(L"marker_bar_old");
+    r.api.size = static_cast<uint32_t>(offsetof(EmfApi, find_wall_ex));
+    r.api.version = 46;
+    add_script(r.dir, "mold",
+               "local ok, err = pcall(emf.marker, 'hp', {x = 1, bar = 0.5})\n"
+               "emf.log('old ' .. tostring(ok) .. ' ' .. tostring(err))\n"
+               "emf.marker('plain', {x = 1})\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    CHECK(logged("old false"));
+    CHECK(logged("bar needs EMF 0.6.19"));
+    CHECK(r.fake.markers.count("mold:hp") == 0);
+    CHECK(r.fake.markers.count("mold:plain") == 1);
+}

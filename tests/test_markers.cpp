@@ -307,3 +307,11 @@ TEST_CASE("wire format (v47): a marker's bar goes along (\"b\"); a message witho
     CHECK(n.markers[0].marker.bar == 0.0f);
     CHECK_FALSE(decode_markers(R"({"o":"lua","s":[{"i":"x","x":1,"y":2,"z":3,"f":33,"b":"full"}]})", &n));
 }
+
+TEST_CASE("wire format (v47, review): the bar flag without a \"b\" (an older host passing a mod's raw flags) is dropped, not an empty bar") {
+    DecodedMarkers d;
+    REQUIRE(decode_markers(R"({"o":"lua","s":[{"i":"x","x":1,"y":2,"z":3,"f":33}]})", &d));
+    REQUIRE(d.markers.size() == 1);
+    CHECK((d.markers[0].marker.flags & EMF_MARKER_BAR) == 0u);
+    CHECK((d.markers[0].marker.flags & EMF_MARKER_WORLD) != 0u);
+}

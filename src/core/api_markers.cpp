@@ -47,7 +47,7 @@ const char* why_of(MarkerStore::SetResult r) {
         case MarkerStore::SetResult::BadId: return "a bad id (1-48 of A-Z a-z 0-9 _ . - :)";
         case MarkerStore::SetResult::BadNumbers:
             return "bad numbers (a size smaller than v33's EmfMarker, coordinates not finite or beyond 100 km, a bad "
-                   "height, max_distance or shape)";
+                   "height, max_distance or shape, or with EMF_MARKER_BAR a bar outside 0..1)";
         case MarkerStore::SetResult::OwnerFull: return "the mod has 256 markers already";
         case MarkerStore::SetResult::Full: return "this game has 1024 markers already";
         default: return "";

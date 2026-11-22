@@ -272,12 +272,15 @@ TEST_CASE("raids glue: a raider with a player within 4 m is fighting, not held u
     CHECK_FALSE(raids::player_near({0, 0, 0}, {}, 4.0));
 }
 
-TEST_CASE("raids glue (1.3.0): a raider's stuck clock waits while its wall takes damage or a player is within 8 m") {
+TEST_CASE("raids glue (1.3.0): a raider's stuck clock waits while its wall takes damage, or while it fights a player within 8 m on its level") {
     const std::vector<raids::Player> players = {{1, {10, 0, 10}, 5}};
-    CHECK(raids::stuck_clock_waits(false, {15, 0, 10}, players));        // 5 m: fighting, not stuck
-    CHECK_FALSE(raids::stuck_clock_waits(false, {19, 0, 10}, players));  // 9 m
-    CHECK(raids::stuck_clock_waits(true, {50, 0, 50}, players));         // its wall spot took damage lately
-    CHECK_FALSE(raids::stuck_clock_waits(false, {0, 0, 0}, {}));
+    CHECK(raids::stuck_clock_waits(false, true, {15, 0, 10}, players));         // 5 m, it fought lately
+    CHECK_FALSE(raids::stuck_clock_waits(false, false, {15, 0, 10}, players));  // near, but no fight: stuck counts
+    CHECK_FALSE(raids::stuck_clock_waits(false, true, {19, 0, 10}, players));   // 9 m
+    CHECK_FALSE(raids::stuck_clock_waits(false, true, {12, -6, 10}, players));  // in a pit under the player
+    CHECK(raids::stuck_clock_waits(false, true, {12, 2.5, 10}, players));       // a step up
+    CHECK(raids::stuck_clock_waits(true, false, {50, 0, 50}, players));         // its wall spot took damage lately
+    CHECK_FALSE(raids::stuck_clock_waits(false, true, {0, 0, 0}, {}));
 }
 
 namespace {

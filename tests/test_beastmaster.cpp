@@ -6908,6 +6908,20 @@ TEST_CASE("beastmaster 1.19: a beast's marker has a health bar in 5 % steps, sen
     CHECK(steps == doctest::Approx(std::round(steps)));
 }
 
+TEST_CASE("beastmaster 1.19 (review): on a core older than v47 the beast's marker goes without the bar, and keeps going") {
+    BeastRig b({{"beast_markers", "1"}});
+    b.r.api.size = static_cast<uint32_t>(offsetof(EmfApi, find_wall_ex));
+    b.r.api.version = 46;
+    b.reply("beastmaster.give wolf");
+    b.spawnable(1);
+    REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+    b.seconds(2);
+    const auto* m = sent_to(b.r.fake, 1, "beastmaster:beast.1234");
+    REQUIRE(m != nullptr);
+    CHECK((m->m.flags & EMF_MARKER_BAR) == 0u);
+    CHECK(m->text == "Wolf");
+}
+
 // A beast with no position (not placed yet, or out of the world) was sent at (0, 0, 0): a marker at the world's origin.
 TEST_CASE("beastmaster: a beast with no position gets no marker; it gets one where it is once it has a place") {
     BeastRig b;

@@ -203,7 +203,7 @@ static_assert(sizeof(EmfCanvasCmd) == 64 && offsetof(EmfCanvasCmd, image) == 8 &
               "EmfCanvasCmd layout (v35)");
 static_assert(sizeof(EmfMapClick) == 32 && offsetof(EmfMapClick, x) == 16, "EmfMapClick layout (v34)");
 static_assert(sizeof(EmfMarker) == 80 && offsetof(EmfMarker, text) == 40 && offsetof(EmfMarker, flags) == 64 &&
-                  offsetof(EmfMarker, game_icon) == 72,
+                  offsetof(EmfMarker, game_icon) == 72 && offsetof(EmfMarker, bar) == 76,
               "EmfMarker layout (v33)");
 static_assert(sizeof(EmfMapMarkerType) == 64 && offsetof(EmfMapMarkerType, name) == 16, "EmfMapMarkerType layout (v33)");
 static_assert(sizeof(EmfBuffType) == 40 && offsetof(EmfBuffType, default_ns) == 16 &&

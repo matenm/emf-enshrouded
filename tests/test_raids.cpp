@@ -1010,11 +1010,62 @@ TEST_CASE("walls (1.3.0): the timed hits stop while a worker swings and come bac
     CHECK(w.swung(1, pos, s, 12000).size() == 1);  // it swings now: its hits come from its swings
     for (uint64_t t = 12000; t < 22000; t += 500) CHECK(of_kind(w.tick(raiders, s, t), WallAction::Hit).empty());
     CHECK(of_kind(w.tick(raiders, s, 22000), WallAction::Hit).size() == 1);  // its last swing was 10 s ago
-    raiders[1] = {pos.x + 10, pos.y, pos.z};  // out of range: its 10 s start again when it is back
+    raiders[1] = {pos.x + 10, pos.y, pos.z};  // out of range for 2 s or more: its 10 s start again when it is back
     w.tick(raiders, s, 23000);
+    w.tick(raiders, s, 25000);
     raiders[1] = pos;
-    CHECK(of_kind(w.tick(raiders, s, 24000), WallAction::Hit).empty());
-    CHECK(of_kind(w.tick(raiders, s, 34000), WallAction::Hit).size() == 1);
+    CHECK(of_kind(w.tick(raiders, s, 26000), WallAction::Hit).empty());
+    CHECK(of_kind(w.tick(raiders, s, 35500), WallAction::Hit).empty());
+    CHECK(of_kind(w.tick(raiders, s, 36000), WallAction::Hit).size() == 1);
+}
+
+TEST_CASE("walls (1.3.0, review): a worker hovering at the 3 m line keeps its timed hits and its order (no flip each second)") {
+    WallWork w;
+    const auto s = walls_on();
+    const Vec3 pos{kAltar.x + 20, kAltar.y, kAltar.z};
+    const Vec3 wall{pos.x - 2.9, pos.y + 1.2, pos.z};
+    REQUIRE(w.assign(1, pos, wall, std::nullopt, s, 0));
+    std::map<uint32_t, Vec3> raiders{{1, pos}};
+    size_t hits = 0, orders = 0;
+    for (uint64_t t = 0; t <= 30000; t += 1000) {
+        raiders[1] = {wall.x + ((t / 1000) % 2 ? 3.1 : 2.9), pos.y, pos.z};
+        const auto a = w.tick(raiders, s, t);
+        hits += of_kind(a, WallAction::Hit).size();
+        for (const auto& o : of_kind(a, WallAction::OrderWall)) {
+            ++orders;
+            CHECK(o.swing);
+        }
+    }
+    CHECK(hits >= 10);    // from 10 s on, every 1.5 s or so
+    CHECK(orders <= 11);  // the first one and its 3 s renewals
+}
+
+TEST_CASE("walls (1.3.0, review): a worker out of range for a second keeps its 10 s; for 2 s or more they start again") {
+    WallWork w;
+    const auto s = walls_on();
+    const Vec3 pos{kAltar.x + 20, kAltar.y, kAltar.z};
+    const Vec3 wall{pos.x - 2.0, pos.y + 1.2, pos.z};
+    REQUIRE(w.assign(1, pos, wall, std::nullopt, s, 0));
+    std::map<uint32_t, Vec3> raiders{{1, pos}};
+    w.tick(raiders, s, 0);
+    raiders[1] = {wall.x + 6, pos.y, pos.z};  // pushed off for a second
+    CHECK(of_kind(w.tick(raiders, s, 5000), WallAction::Hit).empty());
+    raiders[1] = pos;
+    CHECK(of_kind(w.tick(raiders, s, 10000), WallAction::Hit).size() == 1);  // its 10 s since 0 still count
+}
+
+TEST_CASE("walls (1.3.0, review): FightClock: a raider fought lately for 10 s after it attacked or was hit") {
+    FightClock f;
+    CHECK_FALSE(f.lately(1, 0));
+    f.fought(1, 1000);
+    CHECK(f.lately(1, 10999));
+    CHECK_FALSE(f.lately(1, 11000));
+    f.fought(1, 20000);
+    f.forget(1);
+    CHECK_FALSE(f.lately(1, 20500));
+    f.fought(2, 0);
+    f.clear();
+    CHECK_FALSE(f.lately(2, 1));
 }
 
 TEST_CASE("walls (1.3.0): the swing target faces the raider; the walk-up point is 1.5 m in front of the wall on its side") {

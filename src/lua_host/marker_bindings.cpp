@@ -110,6 +110,9 @@ Spec read_spec(lua_State* L, Script* s, const char* id, int t, const char* fn) {
     const bool has_bar = !lua_isnil(L, -1);
     lua_pop(L, 1);
     if (has_bar) {
+        const EmfApi* a = s->host->api;  // an older core would draw no bar: an error, so a pcall can send it without
+        if (!a || a->version < 47 || a->size < offsetof(EmfApi, spawn_facing) + sizeof(a->spawn_facing))
+            luaL_error(L, "%s: bar needs EMF 0.6.19 or newer (core API v47)", fn);
         const double bar = number_field(L, t, "bar", fn, 0);
         if (!(bar >= 0 && bar <= 1)) luaL_error(L, "%s: bar must be a number from 0 to 1", fn);
         m.flags |= EMF_MARKER_BAR;

@@ -30,7 +30,7 @@ The switch is kept with the world (`emf\config\raids\<world slot>.txt`). `raids.
    from the altar with the default radius) gets the reward: one rune and one fur per raider slain, or also a rare
    weapon at their level. Only raiders a player or an ally (the companion, a summon) hit count as slain: one that fell
    to its death, or that got stuck and was removed (it fell at its spawn, or found no way in for a minute), does not.
-   A raider fighting a player (within 8 m) is never counted as stuck (1.3.0).
+   A raider fighting a player near it (within 8 m, on its level) is not counted as stuck while it fights (1.3.0).
    A reward that does not fit is dropped at the player's feet. The raiders' corpses keep their loot.
 5. At dawn (6:00), or when no player has been near the base for a minute, the survivors leave.
 
@@ -137,5 +137,6 @@ Switch the rule off to get the old behaviour.
   EMF 0.6.19), and only the cells a player placed: the natural ground is never dug.
 - At a wall, a raider walks up close and swings at it (1.3.0): each swing breaks a piece. For this the
   mod puts an invisible door at the wall for it to swing at, and takes it away once the wall is open or given up (it is
-  never saved). A creature that does not swing for 10 seconds breaks the wall anyway, by the clock as before.
+  never saved). A creature that does not swing for 10 seconds breaks the wall anyway, by the clock as before. A raider
+  hit at its wall turns on whoever hit it.
 - The log (`emf\emf_core.log`, lines `[raids]`) has every raider's id, position and level.

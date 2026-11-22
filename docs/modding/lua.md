@@ -524,7 +524,7 @@ emf.unsend_marker(player, "pet")
 | `edge_arrow` | an arrow at the screen's edge when it is behind you or off screen (default false) |
 | `max_distance` | fades out toward it and is hidden beyond (default: no limit; the map shows it anyway) |
 | `minimap` | (1.27) a canvas's `"markers"` item draws it (default false) |
-| `bar` | (1.40) a bar under the text with this share filled, 0 to 1, in the marker's colour (a health bar); a player's game with an older EMF shows none. An older Lua host refuses the key: `pcall` the call and send it again without `bar` |
+| `bar` | (1.40) a bar under the text with this share filled, 0 to 1, in the marker's colour (a health bar); drawn with the text (the nearest markers), and a player's game with an older EMF shows none. An older Lua host, or one on a core older than v47, refuses the key: `pcall` the call and send it again without `bar` |
 
 ## The map (1.26)
 

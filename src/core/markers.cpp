@@ -312,6 +312,7 @@ bool decode_markers(const std::string& text, DecodedMarkers* out) {
             m.flags = field_u32(v.get("f"));
             m.game_icon = field_u32(v.get("g"));
             m.bar = static_cast<float>(field_num(v.get("b")));
+            if (!v.get("b")) m.flags &= ~EMF_MARKER_BAR;  // an older host passes a mod's raw flags without its bar
             out->markers.push_back(std::move(d));
         }
     }

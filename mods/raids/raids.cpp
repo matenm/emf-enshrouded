@@ -184,6 +184,10 @@ struct SwingTarget {
 };
 std::map<uint32_t, SwingTarget> g_swing_targets;  // wall spot -> what its workers swing at
 raids::SwingWatch g_swings;                       // the wall workers' last attack times
+std::map<uint32_t, uint32_t> g_wall_moves;        // raider -> its walk-up to a wall (an enemy move)
+bool g_swing_spawn_failed = false;                // the game refused a swing target this session: no more tries
+raids::SwingWatch g_attacks;                      // every raider's last attack time (for g_fights)
+raids::FightClock g_fights;                       // when each raider last fought (the stuck rule waits meanwhile)
 std::set<uint32_t> g_wall_looking;            // raiders whose gate path query is out
 std::set<std::string> g_wall_said;            // refusals logged once per session
 bool g_walls_v44_said = false;
@@ -206,10 +210,24 @@ void wall_cancel_order(uint32_t raider) {
     if (emf::has_v39() && emf::api()->enemy_order_cancel) emf::api()->enemy_order_cancel(it->second);
     g_wall_orders.erase(it);
 }
-void wall_forget(uint32_t raider) {
+// Ends its walk-up to a wall, if one is under way (a released raider must not walk on to the wall).
+void wall_cancel_move(uint32_t raider) {
+    auto it = g_wall_moves.find(raider);
+    if (it == g_wall_moves.end()) return;
+    if (emf::has_v40() && emf::api()->enemy_move_cancel) emf::api()->enemy_move_cancel(it->second);
+    g_wall_moves.erase(it);
+}
+// It stops working a wall: its order and its walk-up end.
+void wall_stop(uint32_t raider) {
     wall_cancel_order(raider);
-    g_walls.forget(raider);
+    wall_cancel_move(raider);
     g_swings.forget(raider);
+}
+void wall_forget(uint32_t raider) {
+    wall_stop(raider);
+    g_walls.forget(raider);
+    g_attacks.forget(raider);
+    g_fights.forget(raider);
 }
 
 // Puts one raider of template `t` at `p` (level written soon, marching on `altar`). 0 when the game refused it.
@@ -292,14 +310,18 @@ void swing_target_remove(emf::World w, uint32_t spot) {
 uint32_t swing_target(emf::World w, uint32_t spot, const raids::Vec3& at, const raids::Vec3& side) {
     auto it = g_swing_targets.find(spot);
     if (it != g_swing_targets.end()) {
-        if (raids::horizontal_distance(it->second.at, at) < 0.25 && pos_of(w, it->second.entity))
+        const auto q = pos_of(w, it->second.entity);  // still ours: where it was spawned (an id may be reused)
+        if (raids::horizontal_distance(it->second.at, at) < 0.25 && q &&
+            raids::horizontal_distance(*q, it->second.base) < 0.5 && std::fabs(q->y - it->second.base.y) < 0.5)
             return it->second.entity;
         swing_target_remove(w, spot);
     }
+    if (g_swing_spawn_failed) return 0;
     uint8_t guid[16];
     if (!raids::parse_guid_text(raids::kSwingTargetGuid, guid)) return 0;
     const raids::Vec3 base = raids::front_point(at, side, raids::WallWork::kTargetOut);
     const uint32_t id = emf::spawn_facing(w, guid, base.x, base.y, base.z, float(raids::yaw_toward(base, side)));
+    if (!id) g_swing_spawn_failed = true;
     if (id) {
         g_swing_targets[spot] = {id, at, base};
         EMF_LOG(kMod, "swing target %u at (%.1f, %.1f, %.1f) for the wall at (%.1f, %.1f, %.1f)", id, base.x, base.y, base.z,
@@ -485,6 +507,7 @@ void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, cons
                     o.seconds = 3.5f;
                     const bool first = !g_wall_orders.count(x.raider);
                     const uint32_t oid = a->enemy_order(w.raw(), &o);  // (it ends a walk-up still under way)
+                    g_wall_moves.erase(x.raider);
                     if (oid) g_wall_orders[x.raider] = oid;
                     else wall_say_once("swing", std::string("a raider takes no order on a swing target (") + o.why + ")");
                     if (oid && first) EMF_LOG(kMod, "raider %u swings at the wall: an order on swing target %u", x.raider, target);
@@ -497,13 +520,14 @@ void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, cons
                     EmfMoveOrder m{};
                     m.size = sizeof m;
                     m.enemy = x.raider;
-                    m.flags = EMF_MOVE_PEACEFUL;
                     m.count = 1;
                     m.points = &pt;
                     m.arrive = 0.5f;
                     m.seconds = 10.0f;
                     m.stuck_seconds = 4.0f;
-                    if (!a->enemy_move(w.raw(), &m, nullptr, nullptr))
+                    if (const uint32_t mid = a->enemy_move(w.raw(), &m, nullptr, nullptr))
+                        g_wall_moves[x.raider] = mid;
+                    else
                         wall_say_once("walk", std::string("a raider takes no walk-up to a wall (") + m.why + ")");
                 }
                 break;
@@ -522,8 +546,7 @@ void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, cons
                 break;
             }
             case raids::WallAction::Release:
-                wall_cancel_order(x.raider);
-                g_swings.forget(x.raider);
+                wall_stop(x.raider);
                 order(g_guards, x.raider, g_director.base().altar);  // on to the altar again
                 break;
             case raids::WallAction::GiveUp:
@@ -740,7 +763,8 @@ void upkeep(emf::World w, uint64_t now, const std::vector<raids::Player>& player
             continue;
         }
         const auto p = pos_of(w, id);
-        if (p && raids::stuck_clock_waits(g_walls.holding(id, now), *p, players))
+        if (g_attacks.swung(id, raids::last_attack_time(w, id))) g_fights.fought(id, now);
+        if (p && raids::stuck_clock_waits(g_walls.holding(id, now), g_fights.lately(id, now), *p, players))
             g_stuck.hold(id, now);  // its wall spot takes damage, or it fights a player: not stuck
         if (p && g_director.phase() == raids::Phase::Fighting && g_stuck.stuck(id, *p, g_director.base().pos, now)) {
             emf::api()->destroy(w.raw(), id);  // fell at its spawn, or found no way in: removed, no kill
@@ -769,8 +793,7 @@ void upkeep(emf::World w, uint64_t now, const std::vector<raids::Player>& player
             for (const auto& f : foes) foe_near = foe_near || (f.alive && raids::horizontal_distance(f.pos, *p) <= kFoeNear);
             if (!foe_near) continue;
             g_walls.release(id);
-            wall_cancel_order(id);
-            g_swings.forget(id);
+            wall_stop(id);
         }
         auto* ai = w.get<gen::DynamicEnemy01BehaviorState>(id);
         if (ai && ai->guardEntityId.id != altar) order(g_guards, id, altar);
@@ -811,6 +834,10 @@ void sync_session(emf::World w) {
     g_wall_orders.clear();
     g_swing_targets.clear();  // (its swing targets too: they are never saved)
     g_swings.clear();
+    g_wall_moves.clear();
+    g_swing_spawn_failed = false;
+    g_attacks.clear();
+    g_fights.clear();
     g_wall_looking.clear();
     g_wall_said.clear();
     g_bases_ms = 0;
@@ -1006,7 +1033,14 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
             const auto fac = f->faction;
             by_players = by_players || fac == emf::gen::FactionType::Player || fac == emf::gen::FactionType::PlayerAlly;
         }
-        if (by_players) g_director.credit(target);
+        if (!by_players) return;
+        g_director.credit(target);
+        g_fights.fought(target, GetTickCount64());
+        if (g_walls.working(target)) {  // hit at its wall: it turns on whoever hit it (its order there would not let it)
+            g_walls.release(target);
+            wall_stop(target);
+            order(g_threats, target, source);
+        }
     });
     g_file.attach();
     const auto command = [](const char* name, const char* help, void (*f)(emf::World, const std::vector<std::string>&),

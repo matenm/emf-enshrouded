@@ -303,6 +303,23 @@ private:
     std::map<uint32_t, int64_t> last_;
 };
 
+// When each raider last fought: it attacked (its last attack time changed) or a player's side hit it. The stuck rule
+// waits only for a raider that fought lately, so one stuck under or behind a player who stands near is still removed.
+class FightClock {
+public:
+    static constexpr uint64_t kLatelyMs = 10000;
+    void fought(uint32_t id, uint64_t now) { last_[id] = now; }
+    bool lately(uint32_t id, uint64_t now) const {
+        auto it = last_.find(id);
+        return it != last_.end() && now - it->second < kLatelyMs;
+    }
+    void forget(uint32_t id) { last_.erase(id); }
+    void clear() { last_.clear(); }
+
+private:
+    std::map<uint32_t, uint64_t> last_;
+};
+
 // Damage added to each raider hit on a gate: it falls in about 6 hits at normal (12 easy, 4 hard, 3 deadly); 40 x
 // scale when its health is not known.
 inline int32_t gate_damage(int32_t max_health, double scale) {
@@ -354,6 +371,8 @@ public:
     static constexpr double kStandOut = 2.25;       // a worker is walked up to this far out (1.5 m from the target)
     static constexpr double kSwingRise = 1.5;       // "its floor": its chest within this of the wall point's height
     static constexpr uint64_t kSwingWaitMs = 10000;  // a worker in range without a swing this long gets the timed hits
+    static constexpr double kLeaveMargin = 0.5;      // in range / near enough to swing until this much farther
+    static constexpr uint64_t kOutGraceMs = 2000;    // out of range this long: its time in range starts again
     static constexpr double kSwingDamage = 2.5;     // a swing (about every 4 s) against a timed hit (every 1.5 s)
     static constexpr uint64_t kHitEveryMs = 1500;
     static constexpr uint64_t kOrderEveryMs = 3000; // the orders last 3 s and are renewed
@@ -499,16 +518,22 @@ public:
             int timed = 0;  // workers in range that have not swung for 10 s (a creature that never swings still breaks it)
             for (auto& [id, wk] : sp.workers) {
                 const Vec3& p = raiders.at(id);
-                const bool in_range =
-                    horizontal_distance(p, sp.point) <= kWorkRange && std::fabs(p.y - sp.point.y) <= kWorkRange;
-                if (!in_range)
-                    wk.in_range_since.reset();
-                else if (!wk.in_range_since)
-                    wk.in_range_since = now;
-                if (in_range && now - *wk.in_range_since >= kSwingWaitMs &&
+                const double across = horizontal_distance(p, sp.point);
+                // a margin to leave by, and a short grace out of range: a raider at the line does not flip each tick
+                const bool in_range = across <= kWorkRange + (wk.in_range ? kLeaveMargin : 0.0) &&
+                                      std::fabs(p.y - sp.point.y) <= kWorkRange;
+                wk.in_range = in_range;
+                if (in_range) {
+                    wk.out_since.reset();
+                    if (!wk.in_range_since) wk.in_range_since = now;
+                } else {
+                    if (!wk.out_since) wk.out_since = now;
+                    if (now - *wk.out_since >= kOutGraceMs) wk.in_range_since.reset();
+                }
+                if (in_range && wk.in_range_since && now - *wk.in_range_since >= kSwingWaitMs &&
                     (!wk.last_swing || now - *wk.last_swing >= kSwingWaitMs))
                     ++timed;
-                const bool swing = !sp.gate && horizontal_distance(p, sp.point) <= kSwingReach &&
+                const bool swing = !sp.gate && across <= kSwingReach + (wk.swing ? kLeaveMargin : 0.0) &&
                                    std::fabs(p.y + kChest - sp.point.y) <= kSwingRise;
                 if (!wk.ordered || now - *wk.ordered >= kOrderEveryMs || swing != wk.swing) {
                     wk.ordered = now;
@@ -601,7 +626,9 @@ private:
     struct Worker {
         std::optional<uint64_t> ordered;         // when its order last went out
         bool swing = false;                      // that order told it to swing
-        std::optional<uint64_t> in_range_since;  // within kWorkRange of the spot since
+        bool in_range = false;                   // within kWorkRange (+ kLeaveMargin once in) at the last tick
+        std::optional<uint64_t> in_range_since;  // within kWorkRange of the spot since (kept through short dips)
+        std::optional<uint64_t> out_since;       // out of range since
         std::optional<uint64_t> last_swing;
     };
     struct Track {
