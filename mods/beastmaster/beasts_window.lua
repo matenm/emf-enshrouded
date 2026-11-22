@@ -17,6 +17,7 @@ local loyalty = require("loyalty")
 local slots = require("slots")
 local talents = require("talents")
 local threat = require("threat")
+local pack_mod = require("pack")
 
 local M = {}
 M.ID = "stable"
@@ -175,8 +176,10 @@ function W:beast_rows(world, rows, b)
 		rows[#rows + 1] = { text = string.format("Loyalty %d: %d kill%s to loyalty %d", lvl, kills, kills == 1 and "" or "s",
 			lvl + 1), tooltip = "A kill is a hostile creature it hit that dies within 30 s" }
 	end
-	rows[#rows + 1] = { text = string.format("Health x%.2f, damage x%.2f, speed x%.2f", role_health * f * talents.health(b),
-		role_damage * f * talents.damage(b), talents.speed(b)), tooltip = "Its role, loyalty and talents together" }
+	local health, damage = pack_mod.strength(env.setting)
+	rows[#rows + 1] = { text = string.format("Health x%.2f, damage x%.2f, speed x%.2f", role_health * f * talents.health(b) * health,
+		role_damage * f * talents.damage(b) * damage, talents.speed(b)),
+		tooltip = "Its role, loyalty and talents together, with the Beast health and Beast damage settings" }
 	if not env.setting("threat") then
 		rows[#rows + 1] = { text = "Draws no monsters (Beasts draw monsters is off)" }
 	elseif env.mode(self.account) == "passive" then

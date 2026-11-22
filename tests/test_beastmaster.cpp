@@ -1063,8 +1063,30 @@ void next_beast(BeastRig& b, uint32_t id, float scale = 0.0f) {
 }
 }  // namespace
 
-TEST_CASE("loyalty: a called wolf has its role, 1.2x health and 1.15x damage; at loyalty 10 1.44x and 1.38x") {
+// The owner (2026-11-23), after Spirimtin's "wolves are weak at my level": a bit stronger, and a setting for it. Seen
+// live: a wolf with 70 health fell to two hits of a Vukah warrior (48 each), staggered by each.
+TEST_CASE("beastmaster (1.20): beasts are a bit stronger by default (health 150 %, damage 125 % of their role); the settings change it live") {
     BeastRig b;
+    b.reply("beastmaster.give wolf");
+    next_beast(b, 1234);
+    REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
+    b.seconds(1);
+    CHECK(now_of<ecs::Health>(b, 1234).dataStorage[3] == 80);  // the adder: 100 x 1.2 x 1.5 - 100
+    CHECK(now_of<ecs::DamageMod>(b, 1234).dataStorage[2] == doctest::Approx(1.15 * 1.25));
+    b.r.fake.settings["beastmaster.beast_health"] = "200";
+    b.r.fake.settings["beastmaster.beast_damage"] = "100";
+    for (auto& [mod, cb] : b.r.fake.setting_watchers)  // the Mods tab changed them
+        if (mod == "beastmaster") {
+            cb.first(kServer, "beastmaster", "beast_health", cb.second);
+            cb.first(kServer, "beastmaster", "beast_damage", cb.second);
+        }
+    b.seconds(1);
+    CHECK(now_of<ecs::Health>(b, 1234).dataStorage[3] == 140);  // 100 x 1.2 x 2 - 100, on the beast out at once
+    CHECK(now_of<ecs::DamageMod>(b, 1234).dataStorage[2] == doctest::Approx(1.15));
+}
+
+TEST_CASE("loyalty: a called wolf has its role, 1.2x health and 1.15x damage; at loyalty 10 1.44x and 1.38x") {
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     b.reply("beastmaster.give wolf");
     next_beast(b, 1234);
     REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
@@ -1082,7 +1104,7 @@ TEST_CASE("loyalty: a called wolf has its role, 1.2x health and 1.15x damage; at
 }
 
 TEST_CASE("loyalty: a tamed bear's health is its role (2.2x), not the wild bear's 2.5x") {
-    BeastRig b;
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     b.reply("beastmaster.give bear");
     next_beast(b, 1234, 1.4f);
     REQUIRE(b.reply("beastmaster.call Bear").find("comes") != std::string::npos);
@@ -1197,7 +1219,7 @@ TEST_CASE("loyalty: a hostile foe the beast hit in the last 30 s dies: a point; 
 }
 
 TEST_CASE("loyalty: the tenth point brings loyalty 2: the owner hears it, the beast is stronger at once and stays so") {
-    BeastRig b({{"rest_s", "5"}});
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}, {"rest_s", "5"}});
     b.reply("beastmaster.give wolf");
     next_beast(b, 1234);
     REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
@@ -1253,7 +1275,7 @@ TEST_CASE("loyalty: a y line belongs to the beast of that name, also a name that
 }
 
 TEST_CASE("loyalty: a beast on an entity id the game gave out before gets its own template's damage, not the old beast's") {
-    BeastRig b;
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     b.reply("beastmaster.give bear");
     b.reply("beastmaster.give wolf");
     next_beast(b, 1234, 1.4f);
@@ -1283,7 +1305,7 @@ TEST_CASE("loyalty: a beast the game will neither bring back nor call again leav
 }
 
 TEST_CASE("loyalty: when the game sets a beast's damage multiplier again (a rescale), its role and loyalty go on top") {
-    BeastRig b;
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     b.reply("beastmaster.give wolf");
     next_beast(b, 1234);
     REQUIRE(b.reply("beastmaster.call Wolf").find("comes") != std::string::npos);
@@ -2089,7 +2111,7 @@ TEST_CASE("wild bears: one spawns 50-70 m from a player when none exists; none w
 // Health's attribute storage (seen in game): [0] health, [1] min, [2] Health_Max_Base (the game sets it from the level),
 // [3] Health_Max_Adder, ..., [7] the maximum (base + adder, computed by the game).
 TEST_CASE("beastmaster: a called bear's health adder keeps its maximum at its role, 2.2x the game's base, also after a level change; a wolf at 1.2x") {
-    BeastRig b;
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     b.reply("beastmaster.give bear");
     b.reply("beastmaster.give wolf");
     b.spawnable(2);
@@ -2422,7 +2444,7 @@ constexpr const char* kBoarGraph = "aed0ecec-8a98-4fd3-a450-ab4c508b0ad4";
 }  // namespace
 
 TEST_CASE("beastmaster: an aurochs is the boar graph at 1.2x or more (WildBeast); a game boar or a scaled hound pet is not") {
-    BeastRig b;
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     CHECK(b.reply(std::string("beastmaster.species ") + kBoarGraph + " 6 1.3") == "aurochs");
     CHECK(b.reply(std::string("beastmaster.species ") + kBoarGraph + " 6") == "boar");
     CHECK(b.reply(std::string("beastmaster.species ") + kBoarGraph + " 3 1.3") == "unknown");  // a Vukah's big boar
@@ -2511,7 +2533,7 @@ constexpr const char* kSnakeTemplate = "d4c87337-8c53-41df-8488-8079046e1502";
 }  // namespace
 
 TEST_CASE("beastmaster: a snake is its own graph (WildBeast): tamed, listed, called with the pack's template and its role's health") {
-    BeastRig b;
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     CHECK(b.reply(std::string("beastmaster.species ") + kSnakeGraph + " 6 1") == "snake");
     CHECK(b.reply(std::string("beastmaster.species ") + kSnakeGraph + " 6") == "snake");
     b.beast(50, kSnakeGraph, 0, 5, kWildBeast, 20, 100);
@@ -2593,7 +2615,7 @@ struct RollRig : BeastRig {
 }  // namespace
 
 TEST_CASE("beastmaster: the rare snakes are their own graphs: tamed, called with their role's health, fed their baits") {
-    BeastRig b;
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     CHECK(b.reply(std::string("beastmaster.species ") + kCrimsonGraph + " 6 1.15") == "crimson_snake");
     CHECK(b.reply(std::string("beastmaster.species ") + kGoldenGraph + " 6 1.25") == "golden_snake");
     CHECK(b.reply(std::string("beastmaster.species ") + kAlbinoGraph + " 6 1.35") == "albino_snake");
@@ -3216,7 +3238,7 @@ std::string entry(const char* id, const char* name, const char* tpl, const char*
 }  // namespace
 
 TEST_CASE("beastmaster: a species_extra.lua beside the mod adds its beasts: known by graph and faction, tamed, listed, called with its template and health") {
-    BeastRig b;
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     CHECK(b.reply(std::string("beastmaster.species ") + kTrollGraph + " 3") == "unknown");
     extra_species(b, "return {\n" + entry("troll", "Troll", kTrollTemplate, kTrollGraph,
                                           ", plural = \"trolls\", factions = { [3] = true }, health_mul = 3, role_health = 3") + "}\n");
@@ -3483,7 +3505,7 @@ void one_step(BeastRig& b) {
 }  // namespace
 
 TEST_CASE("talent: Strength and Toughness go on top of role and loyalty, at once on a beast out and on the next call") {
-    BeastRig b;
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     b.reply("beastmaster.give wolf");
     b.reply("beastmaster.loyalty Wolf 3");
     next_beast(b, 1234);
@@ -3816,8 +3838,15 @@ TEST_CASE("beastmaster: mod.json asks EMF for a portrait of every built-in kind 
     }
 }
 
+TEST_CASE("talent (1.20): a beast's tab shows its health and damage with the Beast health and Beast damage settings") {
+    BeastRig b;  // the defaults: 150 % and 125 %
+    fang_window(b);
+    click(b, "beast.Fang");
+    CHECK(shows(shown(b), "Health x1.88, damage x1.50, speed x1.00"));  // 1.25 x 1.5 and 1.20 x 1.25
+}
+
 TEST_CASE("talent: selecting a beast opens its tab with its stats and talents; Stable goes back") {
-    BeastRig b;  // level 10
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});  // level 10
     fang_window(b);
     CHECK(lit(shown(b), "tab.stable"));
     CHECK(row_at(shown(b), "tab.beast") == -1);  // nothing selected: the Stable tab alone
@@ -3857,7 +3886,7 @@ TEST_CASE("talent: selecting a beast opens its tab with its stats and talents; S
 }
 
 TEST_CASE("talent: + spends a point at once on a beast out; full or no point left turns + off; Reset talents gives every point back") {
-    BeastRig b;
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     fang_window(b);
     const double f = 1 + 2.0 / 9 * 0.2;  // loyalty 3
     click(b, "beast.Fang");
@@ -5755,7 +5784,7 @@ TEST_CASE("home: beastmaster.home says where your beasts at home are and what th
 }
 
 TEST_CASE("home: a beast at home has the health it has when called (its role, loyalty and talents)") {
-    BeastRig b;
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
     three_beasts(b);
     large_stable(b, 950, 10, 0);
     homes_ready(b, 3);

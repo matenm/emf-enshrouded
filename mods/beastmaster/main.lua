@@ -835,6 +835,11 @@ local function update_hud(world)
 	publish(world)  -- the shared wheel shows what the other class mod's key opens with
 end
 
+-- beast_health and beast_damage are live: the beasts out follow at the next step
+emf.on_setting_changed(function(key)
+	if key == "beast_health" or key == "beast_damage" then pack:strength_changed() end
+end)
+
 emf.on_event("HitEvent", function(world, e)
 	pack:on_hit(world, e.rootSourceId, e.targetId, e.healthChange)
 	home:on_hit(world, e.rootSourceId, e.targetId)

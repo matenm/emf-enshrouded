@@ -327,7 +327,10 @@ function H:show(world, b, account, owner, h, spot, now)
 	if lvl and lvl.dataStorage and mine and mine.dataStorage then lvl.dataStorage[1] = mine.dataStorage[1] end
 	local scaling = get(world, "DynamicEnemyScaling", id)
 	if scaling then scaling.nextUpdateTime = 0 end
-	if self.env.on_spawn then self.env.on_spawn(world, id, sp, pack_mod.health_mul(b, self.env.setting("loyalty_pace"))) end
+	if self.env.on_spawn then
+		local health = pack_mod.strength(self.env.setting)
+		self.env.on_spawn(world, id, sp, pack_mod.health_mul(b, self.env.setting("loyalty_pace"), health))
+	end
 	guard(world, id, h)
 	return e
 end

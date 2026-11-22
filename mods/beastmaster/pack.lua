@@ -320,9 +320,18 @@ function P:set_speed(world, id, beast)
 end
 
 -- A tamed beast's health against a wild one of its kind at the same level: its role, loyalty and talents.
-function M.health_mul(beast, pace)
+-- The settings beast_health and beast_damage (per cent of a beast's role, loyalty and talents): their factors, 1 when
+-- a setting is not there.
+function M.strength(setting)
+	local h, d = setting("beast_health"), setting("beast_damage")
+	return (tonumber(h) or 100) / 100, (tonumber(d) or 100) / 100
+end
+
+-- A tamed beast's health against the game's base for its level: its role, loyalty and talents, times `health` (the
+-- beast_health factor; 1 when nil).
+function M.health_mul(beast, pace, health)
 	local role_health = species.role(species.by_id(beast.species))
-	return role_health * loyalty.factor(loyalty.level(beast.points, pace)) * talents.health(beast)
+	return role_health * loyalty.factor(loyalty.level(beast.points, pace)) * talents.health(beast) * (health or 1)
 end
 
 -- A beast out as strong as its role, loyalty and talents: its health through the health watch (on_spawn with the
@@ -339,13 +348,21 @@ function P:strengthen(world, id, beast)
 		base = { damage = dm and dm.dataStorage and dm.dataStorage[3] or nil }
 		self.base[id] = base
 	end
-	if self.env.on_spawn then self.env.on_spawn(world, id, sp, M.health_mul(beast, self.env.setting("loyalty_pace"))) end
+	local health, damage = M.strength(self.env.setting)
+	if self.env.on_spawn then
+		self.env.on_spawn(world, id, sp, M.health_mul(beast, self.env.setting("loyalty_pace"), health))
+	end
 	local dm = base.damage and world:get("DamageMod", id)
 	if dm and dm.dataStorage then
-		base.wrote = base.damage * role_damage * f * talents.damage(beast)
+		base.wrote = base.damage * role_damage * f * talents.damage(beast) * damage
 		dm.dataStorage[3] = base.wrote
 	end
 	self:set_speed(world, id, beast)
+end
+
+-- beast_health or beast_damage changed: every beast out follows at the next step.
+function P:strength_changed()
+	self.restrength = true
 end
 
 -- A beast's talents changed: when it is out, its health, damage and speed follow at once.
@@ -794,6 +811,12 @@ function P:step(world)
 	if any_rest and now >= self.next_save then
 		self.next_save = now + 10
 		self.env.save()  -- the rest left survives a reload
+	end
+	if self.restrength then
+		self.restrength = nil
+		for id, e in pairs(self.ids) do
+			if ours(world, id) then self:strengthen(world, id, e.beast) end
+		end
 	end
 	for id, g in pairs(self.gone) do
 		if now >= g.until_s then self.gone[id] = nil end
