@@ -272,10 +272,34 @@ TEST_CASE("raids glue: a raider with a player within 4 m is fighting, not held u
     CHECK_FALSE(raids::player_near({0, 0, 0}, {}, 4.0));
 }
 
+TEST_CASE("raids glue (1.3.0): a raider's stuck clock waits while its wall takes damage or a player is within 8 m") {
+    const std::vector<raids::Player> players = {{1, {10, 0, 10}, 5}};
+    CHECK(raids::stuck_clock_waits(false, {15, 0, 10}, players));        // 5 m: fighting, not stuck
+    CHECK_FALSE(raids::stuck_clock_waits(false, {19, 0, 10}, players));  // 9 m
+    CHECK(raids::stuck_clock_waits(true, {50, 0, 50}, players));         // its wall spot took damage lately
+    CHECK_FALSE(raids::stuck_clock_waits(false, {0, 0, 0}, {}));
+}
+
 namespace {
 uint32_t g_door_state = EMF_DOOR_CLOSED;
 uint32_t f_door_state(EmfWorld*, uint32_t) { return g_door_state; }
 }  // namespace
+
+TEST_CASE("raids glue (1.3.0): a raider's last attack time comes from its enemy AI; none without one") {
+    Rig rig;
+    emf::World w(kW);
+    CHECK_FALSE(raids::last_attack_time(w, 30));
+    auto& ai = plant<gen::DynamicEnemy01BehaviorState>(30);
+    ai.combatData.lastAttackTime.value = 1030383353941;
+    REQUIRE(raids::last_attack_time(w, 30));
+    CHECK(*raids::last_attack_time(w, 30) == 1030383353941);
+}
+
+TEST_CASE("raids glue (1.3.0): the swing target is the invisible collision of a door (a template GUID)") {
+    uint8_t g[16];
+    CHECK(raids::parse_guid_text(raids::kSwingTargetGuid, g));
+    CHECK(g[0] == 0x46);  // 217bfc46-...: the bytes as the game stores them
+}
 
 TEST_CASE("raids glue (review): a gate is gone when its entity is, or when the id is no door any more") {
     Rig rig;

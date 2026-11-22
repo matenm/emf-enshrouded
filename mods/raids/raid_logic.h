@@ -264,6 +264,45 @@ inline Hole hole_at(const Vec3& wall, double feet_y, double r) {
     h.height = (std::max)(0.0, 2.2 - 1.5 * r);
     return h;
 }
+// The yaw (degrees about the up axis: 0 north +z, 90 east +x) of something at `from` turned to face `to`.
+inline double yaw_toward(const Vec3& from, const Vec3& to) {
+    return std::atan2(to.x - from.x, to.z - from.z) * 180.0 / 3.14159265358979323846;
+}
+// The point `d` metres in front of the wall point on the side of `from`, at from's height (a raider standing on the
+// wall point stays where it is).
+inline Vec3 front_point(const Vec3& wall, const Vec3& from, double d) {
+    const double dx = from.x - wall.x, dz = from.z - wall.z, len = std::hypot(dx, dz);
+    if (len < 1e-6) return from;
+    return {wall.x + dx / len * d, from.y, wall.z + dz / len * d};
+}
+
+// What a raider swings at in a wall: Base_Door_Collision, the invisible collision of a door (DoNotSave, never saved).
+// A Vukah walked to 1.5 m of it and given an enemy order on it swings about every 4 s (seen in game); ordered from 3 m
+// or more it stops about 5.5 m short and never swings. It takes no damage; the mod breaks the wall at each swing.
+inline constexpr const char* kSwingTargetGuid = "217bfc46-d4c4-4732-b097-0e8564cb57bc";
+
+// A raider's swings, from the last attack time its enemy AI keeps (it changes once per swing): a change since the last
+// reading is a swing; the first reading, and a creature without that AI (no reading), never is.
+class SwingWatch {
+public:
+    bool swung(uint32_t id, std::optional<int64_t> t) {
+        if (!t) return false;
+        auto it = last_.find(id);
+        if (it == last_.end()) {
+            last_[id] = *t;
+            return false;
+        }
+        const bool changed = it->second != *t;
+        it->second = *t;
+        return changed;
+    }
+    void forget(uint32_t id) { last_.erase(id); }
+    void clear() { last_.clear(); }
+
+private:
+    std::map<uint32_t, int64_t> last_;
+};
+
 // Damage added to each raider hit on a gate: it falls in about 6 hits at normal (12 easy, 4 hard, 3 deadly); 40 x
 // scale when its health is not known.
 inline int32_t gate_damage(int32_t max_health, double scale) {
@@ -285,7 +324,9 @@ struct Gate {
 struct WallAction {
     enum Kind {
         Hit,        // break_blocks at `hole` with the default damage x damage_scale
-        OrderWall,  // keep `raider` at the wall point `at` (renewed every 3 s; the mod walks it up from more than 3 m)
+        OrderWall,  // `raider` works the wall point `at` (renewed every 3 s): `swing` it is near enough to swing at it
+                    // (once the mod walked it up, it orders it at a swing target in front of the wall), else the mod
+                    // walks it up
         OrderGate,  // send `raider` at `door` with gate_damage added to its hits, for 3 s
         Release,    // `raider` stops working: cancel its order, it marches on the altar again
         GiveUp,     // spot `spot` ended without getting through (or nobody works it)
@@ -296,6 +337,8 @@ struct WallAction {
     Vec3 at;
     double damage_scale = 1.0;
     int32_t gate_damage = 0;
+    bool swing = false;  // OrderWall: within kSwingReach of the wall point
+    Vec3 side;           // OrderWall: where its first worker was held up (the wall's near side)
 };
 
 class WallWork {
@@ -306,12 +349,18 @@ public:
     static constexpr double kReach = 4.0;           // the wall search's length from the chest
     static constexpr double kChest = 1.2;
     static constexpr double kWorkRange = 3.0;       // a worker this near its spot counts for its hits
+    static constexpr double kSwingReach = 3.0;      // a wall worker this near across (on its floor) is told to swing
+    static constexpr double kTargetOut = 0.75;      // the swing target stands this far out from the wall point
+    static constexpr double kStandOut = 2.25;       // a worker is walked up to this far out (1.5 m from the target)
+    static constexpr double kSwingRise = 1.5;       // "its floor": its chest within this of the wall point's height
+    static constexpr uint64_t kSwingWaitMs = 10000;  // a worker in range without a swing this long gets the timed hits
+    static constexpr double kSwingDamage = 2.5;     // a swing (about every 4 s) against a timed hit (every 1.5 s)
     static constexpr uint64_t kHitEveryMs = 1500;
     static constexpr uint64_t kOrderEveryMs = 3000; // the orders last 3 s and are renewed
     static constexpr uint64_t kGiveUpMs = 120000;
     static constexpr size_t kMaxSpots = 4;
     static constexpr double kGateRange = 6.0;       // a gate is looked for this near the raider
-    static constexpr uint64_t kHoldMs = 3000;       // the 60 s clock waits while the spot took damage this recently
+    static constexpr uint64_t kHoldMs = 5000;       // the 60 s clock waits while the spot took damage this recently
     static constexpr double kMaxAdvance = 3.0;      // a hole goes at most this far into a wall from where it began
 
     struct SpotInfo {
@@ -394,6 +443,7 @@ public:
                 Spot n;
                 n.id = next_id_++;
                 n.point = n.origin = *wall;
+                n.side = pos;
                 n.hole = hole_at(*wall, pos.y, s.hole_radius);
                 n.started = now;
                 spots_.push_back(n);
@@ -402,8 +452,27 @@ public:
         } else {
             return std::nullopt;
         }
-        spot->workers[raider] = std::nullopt;  // its order goes out at the next tick
+        spot->workers[raider] = Worker{};  // its order goes out at the next tick
         return spot->id;
+    }
+
+    // A worker swung (its last attack time changed): a wall worker within 3 m of its spot breaks the wall there at once
+    // with kSwingDamage x the damage scale, and its timed hits stop for 10 s. A gate worker's swing lands on the gate.
+    std::vector<WallAction> swung(uint32_t raider, const Vec3& pos, const WallSettings& s, uint64_t now) {
+        std::vector<WallAction> out;
+        if (!s.on) return out;
+        for (auto& sp : spots_) {
+            auto it = sp.workers.find(raider);
+            if (it == sp.workers.end()) continue;
+            if (sp.gate || horizontal_distance(pos, sp.point) > kWorkRange || std::fabs(pos.y - sp.point.y) > kWorkRange)
+                return out;
+            it->second.last_swing = now;
+            WallAction a = action(WallAction::Hit, sp, 0);
+            a.damage_scale = s.damage_scale * kSwingDamage;
+            out.push_back(a);
+            return out;
+        }
+        return out;
     }
 
     // About once a second while the raid fights. raiders: the living raiders and where they are.
@@ -427,20 +496,32 @@ public:
                 spots_.erase(spots_.begin() + static_cast<std::ptrdiff_t>(i));
                 continue;
             }
-            int in_range = 0;
-            for (auto& [id, ordered] : sp.workers) {
+            int timed = 0;  // workers in range that have not swung for 10 s (a creature that never swings still breaks it)
+            for (auto& [id, wk] : sp.workers) {
                 const Vec3& p = raiders.at(id);
-                if (horizontal_distance(p, sp.point) <= kWorkRange && std::fabs(p.y - sp.point.y) <= kWorkRange) ++in_range;
-                if (!ordered || now - *ordered >= kOrderEveryMs) {
-                    ordered = now;
+                const bool in_range =
+                    horizontal_distance(p, sp.point) <= kWorkRange && std::fabs(p.y - sp.point.y) <= kWorkRange;
+                if (!in_range)
+                    wk.in_range_since.reset();
+                else if (!wk.in_range_since)
+                    wk.in_range_since = now;
+                if (in_range && now - *wk.in_range_since >= kSwingWaitMs &&
+                    (!wk.last_swing || now - *wk.last_swing >= kSwingWaitMs))
+                    ++timed;
+                const bool swing = !sp.gate && horizontal_distance(p, sp.point) <= kSwingReach &&
+                                   std::fabs(p.y + kChest - sp.point.y) <= kSwingRise;
+                if (!wk.ordered || now - *wk.ordered >= kOrderEveryMs || swing != wk.swing) {
+                    wk.ordered = now;
+                    wk.swing = swing;
                     WallAction a = action(sp.gate ? WallAction::OrderGate : WallAction::OrderWall, sp, id);
+                    a.swing = swing;
                     out.push_back(a);
                 }
             }
-            if (!sp.gate && in_range > 0 && (!sp.last_hit || now - *sp.last_hit >= kHitEveryMs)) {
+            if (!sp.gate && timed > 0 && (!sp.last_hit || now - *sp.last_hit >= kHitEveryMs)) {
                 sp.last_hit = now;
                 WallAction a = action(WallAction::Hit, sp, 0);
-                a.damage_scale = s.damage_scale * in_range;
+                a.damage_scale = s.damage_scale * timed;
                 out.push_back(a);
             }
             ++i;
@@ -517,6 +598,12 @@ public:
     }
 
 private:
+    struct Worker {
+        std::optional<uint64_t> ordered;         // when its order last went out
+        bool swing = false;                      // that order told it to swing
+        std::optional<uint64_t> in_range_since;  // within kWorkRange of the spot since
+        std::optional<uint64_t> last_swing;
+    };
     struct Track {
         double best = 0;
         uint64_t best_ms = 0, last_look = 0;
@@ -529,12 +616,13 @@ private:
         uint32_t door = 0;
         Vec3 point;
         Vec3 origin;  // where the spot began (advance stays near it)
+        Vec3 side;    // where its first worker was held up
         Hole hole;
         int32_t gate_damage = 0;
         uint64_t started = 0;
         std::optional<uint64_t> last_hit, last_damage;
         int32_t last_health = -1;  // the gate's last reading (-1: none yet)
-        std::map<uint32_t, std::optional<uint64_t>> workers;  // raider -> when its order last went out
+        std::map<uint32_t, Worker> workers;
     };
     static WallAction action(WallAction::Kind k, const Spot& sp, uint32_t raider) {
         WallAction a;
@@ -544,6 +632,7 @@ private:
         a.door = sp.door;
         a.hole = sp.hole;
         a.at = sp.point;
+        a.side = sp.side;
         a.gate_damage = sp.gate_damage;
         return a;
     }

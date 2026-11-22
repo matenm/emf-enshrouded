@@ -903,7 +903,7 @@ TEST_CASE("walls: the nearer of a wall and a gate is chosen; walls near each oth
     CHECK_FALSE(w.assign(8, pos, std::nullopt, std::nullopt, s, 0));  // nothing found
 }
 
-TEST_CASE("walls: a hit every 1.5 s while a worker is within 3 m; two workers double the damage scale") {
+TEST_CASE("walls: a worker within 3 m that has not swung for 10 s: a hit every 1.5 s; two such workers double the damage scale") {
     WallWork w;
     const auto s = walls_on(1.0, 1.5);
     const Vec3 pos{kAltar.x + 20, kAltar.y, kAltar.z};
@@ -912,23 +912,137 @@ TEST_CASE("walls: a hit every 1.5 s while a worker is within 3 m; two workers do
     REQUIRE(spot);
     std::map<uint32_t, Vec3> raiders{{1, pos}};
     auto a = w.tick(raiders, s, 0);
-    REQUIRE(of_kind(a, WallAction::Hit).size() == 1);
-    CHECK(of_kind(a, WallAction::Hit)[0].damage_scale == doctest::Approx(1.5));
-    CHECK(of_kind(a, WallAction::Hit)[0].hole.centre.y == doctest::Approx(pos.y + 0.75));
+    CHECK(of_kind(a, WallAction::Hit).empty());  // in range now: its swings are waited for
     REQUIRE(of_kind(a, WallAction::OrderWall).size() == 1);  // the new worker's order
     CHECK(of_kind(a, WallAction::OrderWall)[0].raider == 1);
     CHECK(of_kind(a, WallAction::OrderWall)[0].at.x == wall.x);
-    CHECK(of_kind(w.tick(raiders, s, 1000), WallAction::Hit).empty());
-    CHECK(of_kind(w.tick(raiders, s, 1500), WallAction::Hit).size() == 1);
-    CHECK(w.assign(2, {pos.x, pos.y, pos.z + 0.5}, wall, std::nullopt, s, 1500) == spot);
+    a = w.tick(raiders, s, 10000);
+    REQUIRE(of_kind(a, WallAction::Hit).size() == 1);
+    CHECK(of_kind(a, WallAction::Hit)[0].damage_scale == doctest::Approx(1.5));
+    CHECK(of_kind(a, WallAction::Hit)[0].hole.centre.y == doctest::Approx(pos.y + 0.75));
+    CHECK(of_kind(w.tick(raiders, s, 11000), WallAction::Hit).empty());
+    CHECK(of_kind(w.tick(raiders, s, 11500), WallAction::Hit).size() == 1);
+    CHECK(w.assign(2, {pos.x, pos.y, pos.z + 0.5}, wall, std::nullopt, s, 11500) == spot);
     raiders[2] = {pos.x, pos.y, pos.z + 0.5};
-    a = w.tick(raiders, s, 3000);
+    a = w.tick(raiders, s, 13000);
+    REQUIRE(of_kind(a, WallAction::Hit).size() == 1);
+    CHECK(of_kind(a, WallAction::Hit)[0].damage_scale == doctest::Approx(1.5));  // the second one's 10 s run
+    CHECK(of_kind(a, WallAction::OrderWall).size() == 2);  // the new worker, and the first one's 3 s renewal
+    a = w.tick(raiders, s, 23000);
     REQUIRE(of_kind(a, WallAction::Hit).size() == 1);
     CHECK(of_kind(a, WallAction::Hit)[0].damage_scale == doctest::Approx(3.0));
-    CHECK(of_kind(a, WallAction::OrderWall).size() == 2);  // the new worker, and the first one's 3 s renewal
     raiders[1] = {pos.x + 10, pos.y, pos.z};  // walked off
     raiders[2] = {pos.x + 10, pos.y, pos.z};
-    CHECK(of_kind(w.tick(raiders, s, 4500), WallAction::Hit).empty());
+    CHECK(of_kind(w.tick(raiders, s, 24500), WallAction::Hit).empty());
+}
+
+TEST_CASE("walls (1.3.0): a wall worker within 3 m of the wall point is told to swing; farther it is walked up") {
+    WallWork w;
+    const auto s = walls_on();
+    const Vec3 pos{kAltar.x + 20, kAltar.y, kAltar.z};
+    const Vec3 wall{pos.x - 4, pos.y + 1.2, pos.z};
+    REQUIRE(w.assign(1, pos, wall, std::nullopt, s, 0));
+    std::map<uint32_t, Vec3> raiders{{1, pos}};
+    auto a = of_kind(w.tick(raiders, s, 0), WallAction::OrderWall);
+    REQUIRE(a.size() == 1);
+    CHECK_FALSE(a[0].swing);
+    raiders[1] = {wall.x + 2.9, pos.y, pos.z};
+    a = of_kind(w.tick(raiders, s, 1000), WallAction::OrderWall);  // walked up: told to swing at once
+    REQUIRE(a.size() == 1);
+    CHECK(a[0].swing);
+    CHECK(a[0].at.x == wall.x);
+    CHECK(of_kind(w.tick(raiders, s, 2000), WallAction::OrderWall).empty());
+    REQUIRE(of_kind(w.tick(raiders, s, 4000), WallAction::OrderWall).size() == 1);  // renewed every 3 s
+    raiders[1] = {wall.x + 4.0, pos.y, pos.z};  // pushed back: walked up again at once
+    a = of_kind(w.tick(raiders, s, 4500), WallAction::OrderWall);
+    REQUIRE(a.size() == 1);
+    CHECK_FALSE(a[0].swing);
+    raiders[1] = {wall.x + 1.0, pos.y + 3.5, pos.z};  // near across, but on the floor above
+    CHECK_FALSE(of_kind(w.tick(raiders, s, 7500), WallAction::OrderWall)[0].swing);
+}
+
+TEST_CASE("walls (1.3.0): a wall spot keeps the side its first worker was held up on; its orders carry it") {
+    WallWork w;
+    const auto s = walls_on();
+    const Vec3 pos{kAltar.x + 20, kAltar.y, kAltar.z};
+    const Vec3 wall{pos.x - 1.5, pos.y + 1.2, pos.z};
+    REQUIRE(w.assign(1, pos, wall, std::nullopt, s, 0));
+    std::map<uint32_t, Vec3> raiders{{1, {pos.x - 1, pos.y, pos.z + 2}}};  // it drifted along the wall since
+    const auto a = of_kind(w.tick(raiders, s, 0), WallAction::OrderWall);
+    REQUIRE(a.size() == 1);
+    CHECK(a[0].side.x == doctest::Approx(pos.x));
+    CHECK(a[0].side.z == doctest::Approx(pos.z));
+    REQUIRE(w.assign(2, {pos.x - 3, pos.y, pos.z}, wall, std::nullopt, s, 0));  // joins: the side stays the first one's
+    raiders[2] = {pos.x - 3, pos.y, pos.z};
+    for (const auto& o : of_kind(w.tick(raiders, s, 3000), WallAction::OrderWall)) CHECK(o.side.x == doctest::Approx(pos.x));
+}
+
+TEST_CASE("walls (1.3.0): a wall worker's swing near its spot is a hit at once with 2.5 x the damage scale") {
+    WallWork w;
+    const auto s = walls_on(1.0, 2.0);
+    const Vec3 pos{kAltar.x + 20, kAltar.y, kAltar.z};
+    const Vec3 wall{pos.x - 1.5, pos.y + 1.2, pos.z};
+    REQUIRE(w.assign(1, pos, wall, std::nullopt, s, 0));
+    auto a = w.swung(1, pos, s, 500);
+    REQUIRE(a.size() == 1);
+    CHECK(a[0].kind == WallAction::Hit);
+    CHECK(a[0].damage_scale == doctest::Approx(5.0));
+    CHECK(a[0].hole.centre.x == doctest::Approx(wall.x));
+    CHECK(w.swung(1, {pos.x + 5, pos.y, pos.z}, s, 900).empty());  // swung 6.5 m off: at something else
+    CHECK(w.swung(2, pos, s, 900).empty());                        // works no spot
+    REQUIRE(w.assign(3, pos, std::nullopt, Gate{9, {pos.x, pos.y, pos.z + 2}, 600}, s, 0));
+    CHECK(w.swung(3, pos, s, 900).empty());  // a gate worker's swing lands on the gate itself
+    WallSettings off = s;
+    off.on = false;
+    CHECK(w.swung(1, pos, off, 1000).empty());
+}
+
+TEST_CASE("walls (1.3.0): the timed hits stop while a worker swings and come back 10 s after its last swing") {
+    WallWork w;
+    const auto s = walls_on();
+    const Vec3 pos{kAltar.x + 20, kAltar.y, kAltar.z};
+    const Vec3 wall{pos.x - 1.5, pos.y + 1.2, pos.z};
+    REQUIRE(w.assign(1, pos, wall, std::nullopt, s, 0));
+    std::map<uint32_t, Vec3> raiders{{1, pos}};
+    for (uint64_t t = 0; t < 10000; t += 500) CHECK(of_kind(w.tick(raiders, s, t), WallAction::Hit).empty());
+    CHECK(of_kind(w.tick(raiders, s, 10000), WallAction::Hit).size() == 1);  // no swing in 10 s: the timed hits
+    CHECK(of_kind(w.tick(raiders, s, 11500), WallAction::Hit).size() == 1);
+    CHECK(w.swung(1, pos, s, 12000).size() == 1);  // it swings now: its hits come from its swings
+    for (uint64_t t = 12000; t < 22000; t += 500) CHECK(of_kind(w.tick(raiders, s, t), WallAction::Hit).empty());
+    CHECK(of_kind(w.tick(raiders, s, 22000), WallAction::Hit).size() == 1);  // its last swing was 10 s ago
+    raiders[1] = {pos.x + 10, pos.y, pos.z};  // out of range: its 10 s start again when it is back
+    w.tick(raiders, s, 23000);
+    raiders[1] = pos;
+    CHECK(of_kind(w.tick(raiders, s, 24000), WallAction::Hit).empty());
+    CHECK(of_kind(w.tick(raiders, s, 34000), WallAction::Hit).size() == 1);
+}
+
+TEST_CASE("walls (1.3.0): the swing target faces the raider; the walk-up point is 1.5 m in front of the wall on its side") {
+    CHECK(yaw_toward({0, 0, 0}, {0, 0, 5}) == doctest::Approx(0.0));    // north
+    CHECK(yaw_toward({0, 0, 0}, {5, 0, 0}) == doctest::Approx(90.0));   // east
+    CHECK(yaw_toward({0, 0, 0}, {-5, 0, 0}) == doctest::Approx(-90.0)); // west
+    CHECK(std::fabs(yaw_toward({0, 0, 0}, {0, 0, -5})) == doctest::Approx(180.0));
+    const Vec3 f = front_point({10, 5, 10}, {15, 2, 10}, 1.5);
+    CHECK(f.x == doctest::Approx(11.5));
+    CHECK(f.y == doctest::Approx(2.0));  // at the raider's height
+    CHECK(f.z == doctest::Approx(10.0));
+    const Vec3 same = front_point({10, 5, 10}, {10, 2, 10}, 1.5);  // standing on the point: stays where it is
+    CHECK(same.x == doctest::Approx(10.0));
+    CHECK(same.z == doctest::Approx(10.0));
+}
+
+TEST_CASE("walls (1.3.0): SwingWatch: a change of the last attack time is a swing; the first reading and no reading are not") {
+    SwingWatch sw;
+    CHECK_FALSE(sw.swung(1, 1000));  // the first reading
+    CHECK_FALSE(sw.swung(1, 1000));
+    CHECK(sw.swung(1, 5000));
+    CHECK_FALSE(sw.swung(1, std::nullopt));  // no AI state (another kind of creature): never a swing
+    CHECK_FALSE(sw.swung(1, 5000));
+    CHECK_FALSE(sw.swung(2, 7000));
+    sw.forget(1);
+    CHECK_FALSE(sw.swung(1, 9000));  // forgotten: a first reading again
+    sw.clear();
+    CHECK_FALSE(sw.swung(2, 8000));
 }
 
 TEST_CASE("walls: a spot not through after 2 minutes is given up and its workers released") {
@@ -962,7 +1076,7 @@ TEST_CASE("walls: through: wall_clear releases the workers and ends the spot") {
     CHECK(w.wall_clear(*spot).empty());
 }
 
-TEST_CASE("walls: holding while the spot took damage in the last 3 s, not after") {
+TEST_CASE("walls: holding while the spot took damage in the last 5 s (a swing comes about every 4 s), not after") {
     WallWork w;
     const auto s = walls_on();
     const Vec3 pos{kAltar.x + 20, kAltar.y, kAltar.z};
@@ -972,8 +1086,8 @@ TEST_CASE("walls: holding while the spot took damage in the last 3 s, not after"
     CHECK_FALSE(w.holding(1, 1000));
     w.on_hit(*spot, 5, 0, 2000);
     CHECK(w.holding(1, 2000));
-    CHECK(w.holding(1, 4900));
-    CHECK_FALSE(w.holding(1, 5100));
+    CHECK(w.holding(1, 6900));
+    CHECK_FALSE(w.holding(1, 7100));
     CHECK_FALSE(w.holding(2, 2000));  // not a worker
     const auto g = w.assign(3, pos, std::nullopt, Gate{9, {pos.x - 2, pos.y, pos.z}, 600}, s, 0);
     w.on_gate_health(*g, 600, 1000);  // the first reading is no damage
@@ -1002,11 +1116,12 @@ TEST_CASE("walls (review focus 5): a forgotten raider leaves its spot; a spot wi
     w.forget(1);
     CHECK_FALSE(w.working(1));
     std::map<uint32_t, Vec3> raiders{{2, pos}};
-    CHECK(of_kind(w.tick(raiders, s, 0), WallAction::Hit).size() == 1);
+    w.tick(raiders, s, 0);
+    CHECK(of_kind(w.tick(raiders, s, 10000), WallAction::Hit).size() == 1);
     raiders.clear();  // raider 2 is gone too (not among the living)
-    const auto a = w.tick(raiders, s, 1500);
+    const auto a = w.tick(raiders, s, 11500);
     CHECK(of_kind(a, WallAction::Hit).empty());
-    CHECK(of_kind(a, WallAction::GiveUp).size() == 1);  // its hidden target goes
+    CHECK(of_kind(a, WallAction::GiveUp).size() == 1);  // its swing target goes
     CHECK(w.spots().empty());
     // a gate whose only worker is released: the spot ends at the next tick
     w.assign(3, pos, std::nullopt, Gate{9, {pos.x - 2, pos.y, pos.z}, 600}, s, 2000);

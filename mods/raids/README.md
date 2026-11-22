@@ -30,6 +30,7 @@ The switch is kept with the world (`emf\config\raids\<world slot>.txt`). `raids.
    from the altar with the default radius) gets the reward: one rune and one fur per raider slain, or also a rare
    weapon at their level. Only raiders a player or an ally (the companion, a summon) hit count as slain: one that fell
    to its death, or that got stuck and was removed (it fell at its spawn, or found no way in for a minute), does not.
+   A raider fighting a player (within 8 m) is never counted as stuck (1.3.0).
    A reward that does not fit is dropped at the player's feet. The raiders' corpses keep their loot.
 5. At dawn (6:00), or when no player has been near the base for a minute, the survivors leave.
 
@@ -95,6 +96,7 @@ the list spells out its numbers. The other settings work as always.
 | `raids.start [seconds]` | host / admins | a raid now at the base with the most players, after a 10 s warning (for tests; by day too) |
 | `raids.stop` | host / admins | ends the raid; its living raiders are removed |
 | `raids.kill` | host / admins | every living raider dies (for tests: they count as slain, the raid ends as repelled) |
+| `raids.look <raider>` | host / admins | the raider looks for a wall or a closed gate toward the altar now, as one held up for 10 s does (for tests of Raiders break walls) |
 
 "Any player" works from the game's chat on a dedicated server, and in a game you host with `[chat] players=1` in
 `emf\emf_core.ini` (EMF API v17 commands for players; see `docs/modding/server.md`).
@@ -133,4 +135,7 @@ Switch the rule off to get the old behaviour.
   what players built by comparing each block with the world as the game shipped it).
 - Walls of terrain blocks (Stone, Granite, dirt ...) only with **Raiders also break walls of terrain blocks** on (1.3.0,
   EMF 0.6.19), and only the cells a player placed: the natural ground is never dug.
+- At a wall, a raider walks up close and swings at it (1.3.0): each swing breaks a piece. For this the
+  mod puts an invisible door at the wall for it to swing at, and takes it away once the wall is open or given up (it is
+  never saved). A creature that does not swing for 10 seconds breaks the wall anyway, by the clock as before.
 - The log (`emf\emf_core.log`, lines `[raids]`) has every raider's id, position and level.

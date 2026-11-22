@@ -176,7 +176,14 @@ raids::StuckWatch g_stuck;
 
 // ---- walls ("Raiders break walls", EMF API v44): a raider held up by a wall or a closed gate breaks through it ----
 raids::WallWork g_walls;
-std::map<uint32_t, uint32_t> g_wall_orders;   // raider -> its enemy order on a gate
+std::map<uint32_t, uint32_t> g_wall_orders;   // raider -> its enemy order on a gate or a swing target
+struct SwingTarget {
+    uint32_t entity = 0;
+    raids::Vec3 at;    // the wall point it stands for
+    raids::Vec3 base;  // where it was spawned (it never moves: an entity elsewhere is not ours any more)
+};
+std::map<uint32_t, SwingTarget> g_swing_targets;  // wall spot -> what its workers swing at
+raids::SwingWatch g_swings;                       // the wall workers' last attack times
 std::set<uint32_t> g_wall_looking;            // raiders whose gate path query is out
 std::set<std::string> g_wall_said;            // refusals logged once per session
 bool g_walls_v44_said = false;
@@ -202,6 +209,7 @@ void wall_cancel_order(uint32_t raider) {
 void wall_forget(uint32_t raider) {
     wall_cancel_order(raider);
     g_walls.forget(raider);
+    g_swings.forget(raider);
 }
 
 // Puts one raider of template `t` at `p` (level written soon, marching on `altar`). 0 when the game refused it.
@@ -263,9 +271,52 @@ bool ours(emf::World w, uint32_t id) {
 // ---- walls: the look, the hits, the orders ----
 void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, const Config& c);
 
+// Takes the spot's swing target away (when it is still ours: where it was spawned).
+void swing_target_remove(emf::World w, uint32_t spot) {
+    auto it = g_swing_targets.find(spot);
+    if (it == g_swing_targets.end()) return;
+    const auto p = pos_of(w, it->second.entity);
+    if (p && raids::horizontal_distance(*p, it->second.base) < 0.5 && std::fabs(p->y - it->second.base.y) < 0.5) {
+        emf::api()->destroy(w.raw(), it->second.entity);
+        EMF_LOG(kMod, "swing target %u at (%.1f, %.1f, %.1f) taken away", it->second.entity, it->second.base.x,
+                it->second.base.y, it->second.base.z);
+    } else {
+        EMF_LOG(kMod, "swing target %u is gone or moved: left alone", it->second.entity);
+    }
+    g_swing_targets.erase(it);
+}
+// The spot's swing target for the wall point `at`: 0.75 m out from it toward `side` (where its first worker was held
+// up), at that height and turned to face it, where it can be reached (one inside the wall made raiders walk round to
+// the far side and stop short, seen in game). The one there, else a new one (one left at a point the hole has gone
+// deeper from goes). 0 when the game refused it.
+uint32_t swing_target(emf::World w, uint32_t spot, const raids::Vec3& at, const raids::Vec3& side) {
+    auto it = g_swing_targets.find(spot);
+    if (it != g_swing_targets.end()) {
+        if (raids::horizontal_distance(it->second.at, at) < 0.25 && pos_of(w, it->second.entity))
+            return it->second.entity;
+        swing_target_remove(w, spot);
+    }
+    uint8_t guid[16];
+    if (!raids::parse_guid_text(raids::kSwingTargetGuid, guid)) return 0;
+    const raids::Vec3 base = raids::front_point(at, side, raids::WallWork::kTargetOut);
+    const uint32_t id = emf::spawn_facing(w, guid, base.x, base.y, base.z, float(raids::yaw_toward(base, side)));
+    if (id) {
+        g_swing_targets[spot] = {id, at, base};
+        EMF_LOG(kMod, "swing target %u at (%.1f, %.1f, %.1f) for the wall at (%.1f, %.1f, %.1f)", id, base.x, base.y, base.z,
+                at.x, at.y, at.z);
+    }
+    return id;
+}
+bool is_swing_target(uint32_t id) {
+    for (const auto& [spot, t] : g_swing_targets)
+        if (t.entity == id) return true;
+    return false;
+}
+
 struct HitCtx {
     uint32_t spot, session;
 };
+
 // A hit's answer: damage seen holds the stuck clock; once blocks went, the spot is through when a worker's line to the
 // altar is clear.
 void on_wall_hit(EmfWorld* raw, uint32_t, const EmfBreakResult* res, void* user) {
@@ -315,6 +366,7 @@ void wall_assign(emf::World, uint32_t id, const raids::Vec3& p, std::optional<ra
         wall_say_once("spots", "a raider found a wall, but 4 wall spots are worked already");
         return;
     }
+    g_stuck.hold(id, GetTickCount64());  // a minute from now to reach it and make it give
     for (const auto& sp : g_walls.spots())
         if (sp.id == *spot) {
             if (sp.gate)
@@ -341,7 +393,8 @@ void on_gate_path(EmfWorld* raw, uint32_t, const EmfPathResult* r, const EmfPath
     std::optional<raids::Gate> gate;
     const uint32_t* doors = r && r->size >= offsetof(EmfPathResult, doors) + sizeof(r->doors) ? r->doors : nullptr;
     if (r && r->status == EMF_PATH_FOUND)
-        if (const auto g = raids::nearest_gate(pts, r->count, doors, *p, raids::WallWork::kGateRange)) {
+        if (const auto g = raids::nearest_gate(pts, r->count, doors, *p, raids::WallWork::kGateRange);
+            g && !is_swing_target(g->first)) {  // a swing target is a door to the game, never a gate to break
             const uint32_t st = emf::has_v38() && emf::api()->door_state ? emf::api()->door_state(raw, g->first) : 0;
             if ((st & 0xFu) == EMF_DOOR_CLOSED) gate = raids::Gate{g->first, g->second, raids::door_max_health(w, g->first)};
         }
@@ -412,22 +465,46 @@ void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, cons
                 break;
             }
             case raids::WallAction::OrderWall: {
-                // A held-up raider already stands at the wall (pressing toward the altar), and stays there while it
-                // cracks. An enemy order on a hidden target at the wall was tried live: the Vukah stopped about 6 m
-                // short of it and never swung, so it would only pull raiders away. One more than 3 m off walks up.
+                // Near the wall point: it guards the spot's swing target (in front of the wall, on the side it was
+                // held up on) and gets an enemy order on it, and swings at it (its swings break the wall). Farther:
+                // walked up (peacefully) first, since an order from far stops it about 5.5 m short, and guarding the
+                // altar pulled workers off the wall into the altar's guard area (both seen in game). A creature that
+                // never swings breaks the wall by the clock (WallWork's timed hits).
                 const auto p = pos_of(w, x.raider);
-                if (p && emf::has_v40() && raids::horizontal_distance(*p, x.at) > raids::WallWork::kWorkRange &&
-                    !a->enemy_moving(w.raw(), x.raider)) {  // walk it up to 1.5 m in front of the wall point
-                    const double dx = p->x - x.at.x, dz = p->z - x.at.z, len = std::hypot(dx, dz);
-                    const EmfPathPoint pt{float(x.at.x + dx / len * 1.5), float(p->y), float(x.at.z + dz / len * 1.5), 0};
+                if (!p) break;
+                const uint32_t target = swing_target(w, x.spot, x.at, x.side);
+                if (!target) wall_say_once("target", "a swing target could not be spawned: raiders break walls by the clock");
+                if (x.swing) {
+                    if (!emf::has_v39() || !target) break;
+                    auto* ai = w.get<gen::DynamicEnemy01BehaviorState>(x.raider);
+                    if (ai && ai->guardEntityId.id != target) order(g_guards, x.raider, target);
+                    EmfEnemyOrder o{};
+                    o.size = sizeof o;
+                    o.enemy = x.raider;
+                    o.target = target;
+                    o.seconds = 3.5f;
+                    const bool first = !g_wall_orders.count(x.raider);
+                    const uint32_t oid = a->enemy_order(w.raw(), &o);  // (it ends a walk-up still under way)
+                    if (oid) g_wall_orders[x.raider] = oid;
+                    else wall_say_once("swing", std::string("a raider takes no order on a swing target (") + o.why + ")");
+                    if (oid && first) EMF_LOG(kMod, "raider %u swings at the wall: an order on swing target %u", x.raider, target);
+                    break;
+                }
+                wall_cancel_order(x.raider);
+                if (emf::has_v40() && !a->enemy_moving(w.raw(), x.raider)) {
+                    const raids::Vec3 f = raids::front_point(x.at, x.side, raids::WallWork::kStandOut);
+                    const EmfPathPoint pt{float(f.x), float(p->y), float(f.z), 0};
                     EmfMoveOrder m{};
                     m.size = sizeof m;
                     m.enemy = x.raider;
+                    m.flags = EMF_MOVE_PEACEFUL;
                     m.count = 1;
                     m.points = &pt;
-                    m.arrive = 1.5f;
+                    m.arrive = 0.5f;
                     m.seconds = 10.0f;
-                    a->enemy_move(w.raw(), &m, nullptr, nullptr);
+                    m.stuck_seconds = 4.0f;
+                    if (!a->enemy_move(w.raw(), &m, nullptr, nullptr))
+                        wall_say_once("walk", std::string("a raider takes no walk-up to a wall (") + m.why + ")");
                 }
                 break;
             }
@@ -446,12 +523,14 @@ void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, cons
             }
             case raids::WallAction::Release:
                 wall_cancel_order(x.raider);
+                g_swings.forget(x.raider);
                 order(g_guards, x.raider, g_director.base().altar);  // on to the altar again
                 break;
             case raids::WallAction::GiveUp:
+                swing_target_remove(w, x.spot);
                 EMF_LOG(kMod, "wall spot at (%.1f, %.1f, %.1f) given up", x.at.x, x.at.y, x.at.z);
                 break;
-            case raids::WallAction::Done: break;
+            case raids::WallAction::Done: swing_target_remove(w, x.spot); break;
         }
     }
 }
@@ -478,6 +557,14 @@ void walls_tick(emf::World w, uint64_t now, const std::vector<raids::Player>& pl
                 wall_look(w, id, p, c);
     wall_actions(w, g_walls.tick(raiders, s, now), c);
     if (!active) return;
+    for (const auto& sp : g_walls.spots()) {  // a wall worker's swing (its last attack time changed) breaks the wall
+        if (sp.gate) continue;
+        for (uint32_t r : sp.workers) {
+            const auto it = raiders.find(r);
+            if (it != raiders.end() && g_swings.swung(r, raids::last_attack_time(w, r)))
+                wall_actions(w, g_walls.swung(r, it->second, s, now), c);
+        }
+    }
     for (const auto& sp : g_walls.spots()) {
         if (!sp.gate) continue;
         if (raids::gate_gone(w, sp.door)) {  // broken by the game, taken away, or its id is someone else's now
@@ -653,7 +740,8 @@ void upkeep(emf::World w, uint64_t now, const std::vector<raids::Player>& player
             continue;
         }
         const auto p = pos_of(w, id);
-        if (p && g_walls.holding(id, now)) g_stuck.hold(id, now);  // its wall spot takes damage: not stuck
+        if (p && raids::stuck_clock_waits(g_walls.holding(id, now), *p, players))
+            g_stuck.hold(id, now);  // its wall spot takes damage, or it fights a player: not stuck
         if (p && g_director.phase() == raids::Phase::Fighting && g_stuck.stuck(id, *p, g_director.base().pos, now)) {
             emf::api()->destroy(w.raw(), id);  // fell at its spawn, or found no way in: removed, no kill
             g_director.on_gone(id);
@@ -682,6 +770,7 @@ void upkeep(emf::World w, uint64_t now, const std::vector<raids::Player>& player
             if (!foe_near) continue;
             g_walls.release(id);
             wall_cancel_order(id);
+            g_swings.forget(id);
         }
         auto* ai = w.get<gen::DynamicEnemy01BehaviorState>(id);
         if (ai && ai->guardEntityId.id != altar) order(g_guards, id, altar);
@@ -720,6 +809,8 @@ void sync_session(emf::World w) {
     g_stuck.clear();
     g_walls.clear();  // the old world's raiders went with it
     g_wall_orders.clear();
+    g_swing_targets.clear();  // (its swing targets too: they are never saved)
+    g_swings.clear();
     g_wall_looking.clear();
     g_wall_said.clear();
     g_bases_ms = 0;
@@ -858,6 +949,30 @@ void cmd_kill(emf::World w, const std::vector<std::string>&) {
     }
     EMF_REPLY("%d raider(s) killed", n);
 }
+
+// raids.look <raider>: for tests, the raider looks for a wall or a closed gate toward the altar now, as one held up for
+// 10 s does (a test world seldom has a base closed by walls).
+void cmd_look(emf::World w, const std::vector<std::string>& a) {
+    sync_session(w);
+    const Config c = config();
+    const uint32_t id = a.size() == 2 ? static_cast<uint32_t>(std::strtoul(a[1].c_str(), nullptr, 10)) : 0;
+    if (!id) {
+        EMF_REPLY("usage: raids.look <raider>");
+        return;
+    }
+    if (!c.walls.on || !raids::walls_available()) {
+        EMF_REPLY("Raiders break walls is off (or EMF is older than 0.6.14)");
+        return;
+    }
+    if (g_director.phase() != raids::Phase::Fighting || !ours(w, id)) {
+        EMF_REPLY("%u is no raider of a raid that fights now", id);
+        return;
+    }
+    const auto p = pos_of(w, id);
+    if (!p) return;
+    wall_look(w, id, *p, c);
+    EMF_REPLY("raider %u looks for a wall or a closed gate toward the altar (the log says what it found)", id);
+}
 }  // namespace
 
 extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
@@ -904,6 +1019,8 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
     command("raids.stop", ": end the raid; its raiders are removed (host)", cmd_stop, 0);
     command("raids.world", "on|off: Night Raids in this world (host; every world starts off)", cmd_world, 0);
     command("raids.kill", ": every living raider dies (host, for tests; they count as slain)", cmd_kill, 0);
+    command("raids.look", "<raider>: it looks for a wall or a closed gate toward the altar now, as a held-up raider "
+            "does (host, for tests)", cmd_look, 0);
     emf::on_tick(on_tick);
     const Config c = config();
     EMF_LOG(kMod, "ready: %d%% chance per night at %.1f h, %d wave(s) of %d; off in each world until raids.world on",

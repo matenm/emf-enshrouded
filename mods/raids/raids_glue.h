@@ -117,6 +117,13 @@ inline std::optional<bool> switch_step(bool file_ready, int64_t setting, bool wo
 // ---- walls ("Raiders break walls", EMF API v44) ----
 inline bool walls_available() { return emf::has_v44(); }
 
+// When the raider last attacked (its enemy AI's combat data; it changes once per swing). None without that AI.
+inline std::optional<int64_t> last_attack_time(emf::World w, uint32_t id) {
+    auto* ai = w.get<emf::gen::ecs::DynamicEnemy01BehaviorState>(id);
+    if (!ai) return std::nullopt;
+    return ai->combatData.lastAttackTime.value;
+}
+
 // The wall search's line: from the raider's chest (1.2 m up), level, toward the altar, `reach` metres long.
 inline std::pair<Vec3, Vec3> chest_line(const Vec3& pos, const Vec3& altar, double reach) {
     const Vec3 from{pos.x, pos.y + WallWork::kChest, pos.z};
@@ -179,6 +186,12 @@ inline bool player_near(const Vec3& p, const std::vector<Player>& players, doubl
     for (const auto& pl : players)
         if (horizontal_distance(pl.pos, p) <= range) return true;
     return false;
+}
+// A raider's stuck clock (60 s without 3 m of progress: removed) waits while its wall spot took damage lately, or while
+// a player is within 8 m: it is fighting, not stuck (a fight outside the altar's 12 m otherwise removes it mid-fight).
+inline constexpr double kFightNear = 8.0;
+inline bool stuck_clock_waits(bool wall_holding, const Vec3& p, const std::vector<Player>& players) {
+    return wall_holding || player_near(p, players, kFightNear);
 }
 // One raider hit on a wall: the game's T4 pickaxe (EMF_BREAK_DEFAULT_DAMAGE) times scale, whole, 1 to 100000 (all
 // 0 would ask break_blocks for the full default).
