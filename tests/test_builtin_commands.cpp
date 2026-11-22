@@ -57,10 +57,17 @@ void* b_tpl(uint8_t*, uint32_t hash, uint32_t entity) {
     return hash == 0x1a8b5909u /* ActiveNpcState */ && entity == 42 ? g_tpl_npc : nullptr;
 }  // (the game's getTemplateComponent; the size comes from the registry, unknown in these fake worlds)
 int g_bspawns = 0;
+float g_bspawn_qy = 0, g_bspawn_qw = 1;  // the last spawn's rotation (CurrentTransform's quaternion y and w)
 std::vector<uint32_t> g_pickup_amounts;
 uint16_t g_pickup_fails = 0;  // != 0: a pickup of this amount is not created (the game's spawn gives no entity)
 uint32_t b_spawn(void*, const void*, const SpawnSlice* comps) {
     ++g_bspawns;
+    if (comps->count && comps->ptr[0].size == sizeof(WorldTransformData)) {
+        WorldTransformData xf{};
+        std::memcpy(&xf, comps->ptr[0].data, sizeof xf);
+        g_bspawn_qy = xf.qy;
+        g_bspawn_qw = xf.qw;
+    }
     for (uint64_t i = 0; i < comps->count; ++i)
         if (comps->ptr[i].hash == kHashPickupItem) {
             uint16_t a = 0;
@@ -463,7 +470,7 @@ TEST_CASE("builtin commands: spawn places count copies near the player") {
     f.run(w);
     CHECK(g_bspawns == 2);
     CHECK(bsaid("spawned 2"));
-    CHECK(bsaid("usage: spawn <item name | template guid> [count 1-20] [at <x> <y> <z>]"));
+    CHECK(bsaid("usage: spawn <item name | template guid> [count 1-20] [at <x> <y> <z>] [yaw <degrees>]"));
 }
 
 TEST_CASE("builtin commands: spawn at a place: no player needed (a dedicated server's console)") {
@@ -479,8 +486,29 @@ TEST_CASE("builtin commands: spawn at a place: no player needed (a dedicated ser
     CHECK(g_bspawns == 4);
     CHECK(bsaid("spawned 1"));
     CHECK(bsaid("spawned 3"));
-    CHECK(bsaid("usage: spawn <item name | template guid> [count 1-20] [at <x> <y> <z>]"));
+    CHECK(bsaid("usage: spawn <item name | template guid> [count 1-20] [at <x> <y> <z>] [yaw <degrees>]"));
     CHECK_FALSE(bsaid("player position unknown"));
+}
+
+TEST_CASE("builtin commands: spawn ... yaw <degrees> spawns it turned (v47 spawn_facing), anywhere among the words") {
+    BFixture f;
+    FakeWorld w;
+    w.put<uint8_t>(off::kKind, 0);
+    f.center.enqueue("spawn 9543cfb0-b4d7-408e-905c-ccb79a15136d at 1 2 3 yaw 90");
+    f.run(w);
+    CHECK(g_bspawns == 1);
+    CHECK(bsaid("spawned 1"));
+    CHECK(g_bspawn_qy == doctest::Approx(0.70710678f));
+    CHECK(g_bspawn_qw == doctest::Approx(0.70710678f));
+    f.center.enqueue("spawn 9543cfb0-b4d7-408e-905c-ccb79a15136d yaw -90 at 1 2 3");
+    f.run(w);
+    CHECK(g_bspawns == 2);
+    CHECK(g_bspawn_qy == doctest::Approx(-0.70710678f));
+    f.center.enqueue("spawn 9543cfb0-b4d7-408e-905c-ccb79a15136d at 1 2 3 yaw north");
+    f.center.enqueue("spawn 9543cfb0-b4d7-408e-905c-ccb79a15136d at 1 2 3 yaw");
+    f.run(w);
+    CHECK(g_bspawns == 2);
+    CHECK(bsaid("usage: spawn <item name | template guid> [count 1-20] [at <x> <y> <z>] [yaw <degrees>]"));
 }
 
 TEST_CASE("builtin commands: time sets the time of day; pos and entities report") {

@@ -1030,8 +1030,21 @@ bool parse_coord(const char* s, double* out);  // goto's, below
 // front of you, or at a place in metres written any way (a dedicated server's console has no player of its own).
 void cmd_spawn(EmfWorld* w, int argc, const char* const* argv, void* u) {
     auto& c = ctx_of(u);
-    const char* usage = "usage: spawn <item name | template guid> [count 1-20] [at <x> <y> <z>]";
+    const char* usage = "usage: spawn <item name | template guid> [count 1-20] [at <x> <y> <z>] [yaw <degrees>]";
     std::vector<std::string> words(argv + 1, argv + argc);
+    // v47: "yaw <degrees>" anywhere: spawned turned about the up axis (spawn_facing)
+    bool turned = false;
+    double yaw_deg = 0;
+    for (size_t i = 0; i < words.size(); ++i) {
+        if (lower(words[i]) != "yaw") continue;
+        if (i + 1 >= words.size() || !parse_coord(words[i + 1].c_str(), &yaw_deg) || !std::isfinite(yaw_deg)) {
+            command_reply_line(usage);
+            return;
+        }
+        turned = true;
+        words.erase(words.begin() + static_cast<std::ptrdiff_t>(i), words.begin() + static_cast<std::ptrdiff_t>(i) + 2);
+        break;
+    }
     const auto at_word = std::find_if(words.begin(), words.end(), [](const std::string& s) { return lower(s) == "at"; });
     const bool at = at_word != words.end();
     const std::vector<std::string> what(words.begin(), at_word);
@@ -1094,7 +1107,11 @@ void cmd_spawn(EmfWorld* w, int argc, const char* const* argv, void* u) {
     std::string ids;
     uint32_t made = 0;
     for (uint32_t k = 0; k < count; ++k) {
-        const uint32_t id = c.api->spawn(w, guid, p[0] + 1.5 * k, p[1], p[2]);
+        const bool facing = turned && c.api->size >= offsetof(EmfApi, spawn_facing) + sizeof(c.api->spawn_facing) &&
+                            c.api->spawn_facing;
+        const uint32_t id = facing ? c.api->spawn_facing(w, guid, p[0] + 1.5 * k, p[1], p[2], static_cast<float>(yaw_deg),
+                                                         nullptr, 0)
+                                   : c.api->spawn(w, guid, p[0] + 1.5 * k, p[1], p[2]);
         if (!id) continue;
         ++made;
         ids += (ids.empty() ? "" : " ") + std::to_string(id);
@@ -1685,7 +1702,7 @@ bool add_builtin_commands(BuiltinContext& ctx) {
                 "default (host)",
          cmd_put},
         {"take", "<item name> [count 1-65535] [entity]: take items out of an inventory, yours by default (host)", cmd_take},
-        {"spawn", "<item name | template guid> [count 1-20] [at <x> <y> <z>]: what a placeable item puts down (or a template), in front of you or at a place (host)",
+        {"spawn", "<item name | template guid> [count 1-20] [at <x> <y> <z>] [yaw <degrees>]: what a placeable item puts down (or a template), in front of you or at a place, turned yaw degrees (0 north, 90 east) (host)",
          cmd_spawn},
         {"time", "<hours 0-24>: set the time of day (host)", cmd_time},
         {"pos", ": your position", cmd_pos},
