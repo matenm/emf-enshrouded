@@ -35,10 +35,12 @@ struct BlockFns {
     void (*column_release)(void* loader, uint32_t id) = nullptr;
     // v47 terrain a player placed (EMF_BREAK_TERRAIN): the terrain config lookup (TerrainTerraformingConfig by terrain
     // material, the building config's offsets) and the box fill "air" the building kernel removes a block with:
-    // fill(editor, 0, voxel data, &{Vec4 lo, Vec4 hi} (16-byte aligned, metres), &u64 0, 1)
+    // fill(editor, 0, voxel data, &{Vec4 lo, Vec4 hi} (16-byte aligned, metres), &{0, 0} (16 bytes), grow). grow 1 (the
+    // kernel's) grows the box by 0.5 m first and clears the terrain in that margin too (seen live: the ground next to a
+    // removed block went); EMF passes 0, which clears exactly the box
     const uint8_t* (*terrain_config_find)(void* registry, uint8_t terrain_material) = nullptr;
-    void (*box_fill_air)(void* editor, void* zero, void* voxel_data, const void* box, const void* zero8,
-                         uint8_t one) = nullptr;
+    void (*box_fill_air)(void* editor, void* zero, void* voxel_data, const void* box, const void* zero16,
+                         uint8_t grow) = nullptr;
 };
 
 // What one step's program call holds.

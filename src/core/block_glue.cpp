@@ -111,7 +111,7 @@ bool call_config(decltype(BlockFns::config_find) fn, void* reg, uint8_t id, cons
 bool call_box_fill(decltype(BlockFns::box_fill_air) fn, void* editor, void* voxel_data, const void* box) {
     __try {
         alignas(16) const uint64_t zero[2] = {0, 0};  // the kernel passes &{0, 0}
-        fn(editor, nullptr, voxel_data, box, zero, 1);
+        fn(editor, nullptr, voxel_data, box, zero, 0);  // grow 0: exactly the box (1 also clears the ground around it)
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;

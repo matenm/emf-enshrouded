@@ -264,7 +264,7 @@ struct BoxFill {
 };
 std::vector<BoxFill> g_fills;
 bool g_box_fill_keeps_terrain = false;  // a game build whose box fill leaves solid terrain in place
-void f_box_fill(void* editor, void* zero, void* voxel_data, const void* box, const void* zero8, uint8_t one) {
+void f_box_fill(void* editor, void* zero, void* voxel_data, const void* box, const void* zero8, uint8_t grow) {
     if (g_box_fill_faults) *static_cast<volatile int*>(nullptr) = 1;
     CHECK((reinterpret_cast<uintptr_t>(zero8) & 15) == 0);
     CHECK(static_cast<const uint64_t*>(zero8)[1] == 0);
@@ -272,7 +272,9 @@ void f_box_fill(void* editor, void* zero, void* voxel_data, const void* box, con
     CHECK(zero == nullptr);
     CHECK(voxel_data == g_voxel_data);
     CHECK(*static_cast<const uint64_t*>(zero8) == 0);
-    CHECK(one == 1);
+    // Seen live (2026-11-22): grow 1, the kernel's, also clears the terrain within 0.5 m around the box (4 ground cells
+    // next to one log block went); with 0 exactly the cell goes (a 1 m sphere: its 33 cells, the 92 around unchanged)
+    CHECK(grow == 0);
     BoxFill b{};
     std::memcpy(b.lo, box, 16);
     std::memcpy(b.hi, static_cast<const uint8_t*>(box) + 16, 16);

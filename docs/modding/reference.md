@@ -1390,7 +1390,9 @@ overlap take a hit from each (`damaged` counts them twice). Drops (`EMF_BREAK_DR
 material's item, one per so many removed blocks (the game's blocks-per-item rate; the rest is kept for the next break
 in the same world), as loose pickups at the column's middle. Props on removed blocks (a chest, a torch) stay where
 they stood, with their contents (seen live), as with the game's own explosions; blocks above a hole stay too (the game
-has no support model).
+has no support model). The game's code that removes a building block also clears the terrain within 0.5 m of it, so
+the ground right next to a hole loses up to one cell (seen live; the game's own pickaxe digs the ground there anyway).
+Terrain breaking (v47) clears exactly its cells.
 
 At most 64 breaks wait, and at most 8 spheres run per server step (all mods together; the rest wait their turn), so a
 burst of breaks never changes more than the game's ring of changed boxes holds. One 3.5 m break cost less than 1 ms of
