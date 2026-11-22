@@ -854,6 +854,54 @@ TEST_CASE("beastmaster: passive beasts' aggro and chosen targets are cleared eve
     CHECK_FALSE(still_fighting(b, 1234));
 }
 
+namespace {
+// The game keeps `id` peaceful toward players and their allies (its PacifiedState: the game's own Beastmaster skill
+// pacifies Vukah this way until the player attacks them).
+void pacify(BeastRig& b, uint32_t id, bool on) {
+    auto& p = component<ecs::PacifiedState>(b.r.fake, id);
+    p.canBePacified = true;
+    p.isPacified = on;
+    p.pacifiedBy.id = on ? 1 : 0;
+}
+}  // namespace
+
+// Spirimtin (2026-11-22): with the game's Beastmaster skill the Vukah leave the player alone until attacked, but the
+// beasts went for them, and then the Vukah fought back.
+TEST_CASE("beastmaster (1.20): aggressive beasts and Attack's cone leave a creature the game keeps pacified; its peace over, it is a foe again") {
+    BeastRig b;
+    wolf_out(b);
+    creature(b, 71, 5, 20, kVukahFoe);  // 21 m from the owner, 14 degrees aside of +z: in the cone, not under the crosshair
+    pacify(b, 71, true);
+    armed(b, 1234);
+    b.reply("beastmaster.mode aggressive");
+    b.seconds(3);
+    CHECK(ordered(b, 1234) == 0u);
+    b.look(1, 0, 10.5, 0, 0);  // looking along +z: not taken from the cone either
+    CHECK(b.reply("beastmaster.attack") == "No monster where you look (within 40 m): look at the creature to attack.");
+    pacify(b, 71, false);  // the player hit it: the game ended its peace
+    b.seconds(3);
+    CHECK(ordered(b, 1234) == 71u);
+}
+
+TEST_CASE("beastmaster (1.20): a beast's own fight against a pacified creature is cleared every step; Attack on it is the player's call") {
+    BeastRig b;
+    wolf_out(b);
+    creature(b, 71, 0, 3, kVukahFoe);
+    pacify(b, 71, true);
+    creature(b, 70, 3, 0, kSkeletonFoe);
+    fighting(b, 1234, 71);  // its own senses picked the pacified Vukah
+    b.seconds(1);
+    CHECK_FALSE(still_fighting(b, 1234));
+    fighting(b, 1234, 70);  // a foe that is not pacified: left to fight
+    b.seconds(1);
+    CHECK(still_fighting(b, 1234));
+    armed(b, 1234);
+    b.look(1, 0, 10.5, 0, 0);  // the player aims right at the pacified Vukah and sends the beasts
+    CHECK(b.reply("beastmaster.attack") == "Your beasts attack (1).");
+    b.seconds(1);
+    CHECK(ordered(b, 1234) == 71u);
+}
+
 TEST_CASE("beastmaster: passive beasts still go where Attack sends them, for 20 s") {
     BeastRig b;
     wolf_out(b);

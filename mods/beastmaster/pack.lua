@@ -127,10 +127,17 @@ function M.fightable(world, id)
 	return cur ~= nil and cur > 0
 end
 
--- A living hostile creature (HOSTILE), never a player.
+-- The game keeps it peaceful toward players and their allies (its PacifiedState): the game's own Beastmaster skill
+-- pacifies Vukah until the player attacks them, and a beast that bites one ends that peace for everyone.
+function M.pacified(world, id)
+	local p = world:get("PacifiedState", id)
+	return p ~= nil and p.isPacified == true
+end
+
+-- A living hostile creature (HOSTILE), never a player, never one the game keeps pacified.
 function M.hostile(world, id)
 	local f = world:get("Faction", id)
-	if not (f and HOSTILE[f.faction]) or world:get("PlayerState", id) then return false end
+	if not (f and HOSTILE[f.faction]) or world:get("PlayerState", id) or M.pacified(world, id) then return false end
 	local cur = emf.health(world, id)
 	return cur ~= nil and cur > 0
 end
@@ -142,12 +149,15 @@ end
 
 -- Clears what a beast's AI fights (every aggro target and every chosen target), so it turns from a fight: the game
 -- picks targets again from what it senses and what hits it, so a passive beast is cleared every step.
--- `players_only`: only its fights against the player side (players and their allies), as for a beast just tamed (it
--- may still fight a monster that bites it: seen, a wild wolf killed a tamed one kept from fighting back).
-local function calm(world, id, players_only)
+-- `only` true: only its fights against the player side (players and their allies), as for a beast just tamed (it may
+-- still fight a monster that bites it: seen, a wild wolf killed a tamed one kept from fighting back).
+-- `only` "pacified": only its fights against creatures the game keeps pacified (its own senses pick them: the game
+-- leaves a pacified creature's foes alone only from the pacified side).
+local function calm(world, id, only)
 	local function clears(e)
-		if not players_only then return true end
+		if not only then return true end
 		if not e or e == 0 then return false end
+		if only == "pacified" then return M.pacified(world, e) end
 		if world:account(e) then return true end
 		local f = world:get("Faction", e)
 		return f ~= nil and PLAYER_SIDE[f.faction] == true
@@ -556,7 +566,7 @@ local function nearest_foe(world, owner, range)
 	local best, best_d
 	for _, id in ipairs(world:entities()) do
 		local f = world:get("Faction", id)
-		if f and HOSTILE[f.faction] and not world:get("PlayerState", id) then
+		if f and HOSTILE[f.faction] and not world:get("PlayerState", id) and not M.pacified(world, id) then
 			local x, y, z = world:position(id)
 			local d = x and math.sqrt((x - ox) ^ 2 + (y - oy) ^ 2 + (z - oz) ^ 2)
 			if d and d <= range and (not best_d or d < best_d) and not world:get("Boss", id)
@@ -773,10 +783,15 @@ function P:step(world)
 			if world:position(id) and (not cur or cur <= 0) then emf.destroy(world, id) end
 		end
 	end
-	-- every step: passive beasts (unless Attack sent them) and beasts coming back from a chase fight nothing
+	-- every step: passive beasts (unless Attack sent them) and beasts coming back from a chase fight nothing; the others
+	-- nothing the game keeps pacified, unless the player's Attack sent them at it
 	for id, e in pairs(self.ids) do
 		local passive = self.env.mode and self.env.mode(e.account) == "passive" and now >= (self.sent[id] or 0)
-		if passive or now < (self.recall[id] or 0) then calm(world, id) end
+		if passive or now < (self.recall[id] or 0) then
+			calm(world, id)
+		elseif now >= (self.sent[id] or 0) then
+			calm(world, id, "pacified")
+		end
 		if self.speeds[id] then self:set_speed(world, id, e.beast) end
 	end
 	-- ids that left (sent home, fallen, aside, not ours): the game's speeds and minimum health back

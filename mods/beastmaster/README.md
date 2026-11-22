@@ -45,6 +45,8 @@ page says who applies them). Without them everything else works and those beasts
      it falls, turns friendly or they drop the chase: then they are calm again at once).
    - **Aggressive:** they also go after hostile creatures within 25 m of you (never wildlife, farm animals, bosses or
      players).
+   - In every mode they leave alone creatures the game keeps peaceful toward you, such as the Vukah after the game's own
+     Beastmaster skill (1.20.0): until you attack one, or send your beasts at it with Attack.
 7. **A beast that falls** rests for 60 seconds, then comes back beside you by itself, free (the line at the bottom left
    and `/beastmaster list` show "rests 0:40, then comes back"). It keeps its active slot meanwhile: **Dismiss** it (the
    wheel shows "Dismiss Wolf (rests 0:40)") to leave it at home and call another. With **A fallen beast comes back by
