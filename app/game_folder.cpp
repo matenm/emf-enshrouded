@@ -447,7 +447,7 @@ void note_shared_keys(FolderState& s) {
         }
     }
     const auto said = [](const core::KeyUse& k) { return k.owner_name + " (" + k.label + ")"; };
-    for (const auto& g : core::group_keys(uses, [](unsigned scan) { return MapVirtualKeyW(scan, MAPVK_VSC_TO_VK); })) {
+    for (const auto& g : core::group_keys(uses, core::scan_to_vk)) {
         if (g.on_uses() < 2) continue;
         std::vector<const core::KeyUse*> on;
         for (const auto& u : g.uses)

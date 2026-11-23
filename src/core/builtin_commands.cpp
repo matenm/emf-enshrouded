@@ -985,7 +985,7 @@ void cmd_keys(EmfWorld*, int, const char* const*, void* u) {
             uses.push_back(std::move(k));
         }
     }
-    const auto groups = group_keys(uses, [](unsigned scan) { return MapVirtualKeyW(scan, MAPVK_VSC_TO_VK); });
+    const auto groups = group_keys(uses, scan_to_vk);
     if (groups.empty()) {
         command_reply_line("no keys in use");
         return;

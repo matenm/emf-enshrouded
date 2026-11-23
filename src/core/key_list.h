@@ -30,8 +30,13 @@ struct KeyGroup {
 };
 
 // The keys in `uses` grouped by the key they are (compared as the key settings read them: "f3" is F3), empty keys left
-// out; the clashes first, then by name as people read it (F2 before F10, any case). `scan_to_vk` gives the virtual key a scan code is on this keyboard (Windows:
-// MapVirtualKeyW(scan, MAPVK_VSC_TO_VK)), so the console key groups with a mod's key on the same physical key.
+// out; the clashes first, then by name as people read it (F2 before F10, any case). `scan_to_vk` gives the virtual key
+// a scan code is on this keyboard (below), so the console key groups with a mod's key on the same physical key.
 std::vector<KeyGroup> group_keys(const std::vector<KeyUse>& uses, const std::function<uint32_t(unsigned)>& scan_to_vk);
+
+// The virtual key a (not extended) scan code is on this keyboard: Windows' own table (MapVirtualKeyW), except the numpad,
+// which that table gives as its NumLock-off keys (Home, the arrows); a console key there is the numpad key, as a mod's
+// "Numpad7" with NumLock on.
+uint32_t scan_to_vk(unsigned scan);
 
 }  // namespace emf::core

@@ -12,6 +12,25 @@
 
 namespace emf::core {
 
+uint32_t scan_to_vk(unsigned scan) {
+    switch (scan) {  // the numpad's scan codes 0x47-0x53 (not extended)
+        case 0x47: return VK_NUMPAD7;
+        case 0x48: return VK_NUMPAD8;
+        case 0x49: return VK_NUMPAD9;
+        case 0x4A: return VK_SUBTRACT;
+        case 0x4B: return VK_NUMPAD4;
+        case 0x4C: return VK_NUMPAD5;
+        case 0x4D: return VK_NUMPAD6;
+        case 0x4E: return VK_ADD;
+        case 0x4F: return VK_NUMPAD1;
+        case 0x50: return VK_NUMPAD2;
+        case 0x51: return VK_NUMPAD3;
+        case 0x52: return VK_NUMPAD0;
+        case 0x53: return VK_DECIMAL;
+        default: return MapVirtualKeyW(scan, MAPVK_VSC_TO_VK);
+    }
+}
+
 size_t KeyGroup::on_uses() const {
     size_t n = 0;
     for (const auto& u : uses) n += u.on;

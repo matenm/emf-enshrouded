@@ -9,6 +9,7 @@
 using emf::core::group_keys;
 using emf::core::KeyGroup;
 using emf::core::KeyUse;
+using emf::core::scan_to_vk;
 
 namespace {
 KeyUse use(const char* owner, const char* name, const char* label, const char* key, bool on = true, bool shared = false) {
@@ -88,6 +89,18 @@ TEST_CASE("key list: names sort as people read them (F2 before F10), in any case
     CHECK(g[1].name == "F10");
     CHECK(g[2].name == "the key under Esc (0x29)");
     CHECK(g[3].name == "Z");
+}
+
+TEST_CASE("key list: a console key on the numpad is that numpad key, not the arrow or Home it is with NumLock off") {
+    CHECK(scan_to_vk(0x47) == 0x67u);  // VK_NUMPAD7 (Windows' own table says VK_HOME)
+    CHECK(scan_to_vk(0x52) == 0x60u);  // VK_NUMPAD0
+    CHECK(scan_to_vk(0x53) == 0x6Eu);  // VK_DECIMAL
+    CHECK(scan_to_vk(0x10) == 0x51u);  // Q on a US layout: Windows' own table
+    KeyUse console = use("emf", "EMF", "Console key", "0x47");
+    console.scan = true;
+    const auto g = group_keys({console, use("minimap", "Minimap", "Zoom key", "Numpad7")}, scan_to_vk);
+    REQUIRE(g.size() == 1);
+    CHECK(g[0].clash());
 }
 
 TEST_CASE("key list: the groups come sorted, the clashes first") {
