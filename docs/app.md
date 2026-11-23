@@ -138,7 +138,10 @@ mod's settings asks once, then puts every one back (never the mod's on/off switc
 uses too says so under it ("Also used by Pets (Wheel key): one press does both."), and the Warnings tab has a note for
 each such key. Keys a mod marks as shared on purpose (`"shared": true`, such as E at a stable and at a bounty board) get
 a quieter line and no note.
-Hovering a setting shows its default ("Default: on", an option's label, a key), as the in-game Mods tab does.
+Hovering a setting shows its default ("Default: on", an option's label, a key), as the in-game Mods tab does. A mod with
+six settings or more has a search box above them: it keeps the settings whose label, key, help or group hold the text
+(any case), with a group's heading only over what is left, and remembers the text for each mod while EMF.exe runs; Esc
+empties it. The filter above the list finds a mod by its settings' labels too ("raid size" finds Night Raids).
 
 ## Profiles
 

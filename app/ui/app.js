@@ -356,7 +356,8 @@ function modRow(m) {
 function renderList() {
   const groups = $('groups');
   const f = filterText.trim().toLowerCase();
-  const match = (m) => !f || [m.name, m.id, m.description, (m.authors || []).join(' '), m.loaded_by].join(' ').toLowerCase().includes(f);
+  // a setting's label finds its mod too ("raid size" finds Night Raids)
+  const match = (m) => !f || [m.name, m.id, m.description, (m.authors || []).join(' '), m.loaded_by, (m.settings || []).map((s) => s.label).join(' ')].join(' ').toLowerCase().includes(f);
   if (selected && !state.mods.some((m) => keyOf(m) === selected)) {  // --select gives "source:id"
     const named = state.mods.find((m) => m.source + ':' + m.id === selected);
     if (named) selected = keyOf(named);
@@ -593,17 +594,51 @@ function resetAllButton(m) {
   }, asking ? 'Reset every setting? Click again' : 'Reset all');
 }
 
-// The settings with a heading where a group starts (the host sends them in the in-game Mods tab's order).
+// The search above a mod's settings (6 or more), per mod while EMF.exe runs: its label, key, help or group hold the text.
+const SEARCH_FROM = 6;
+const settingSearch = {};
+function settingMatches(s, q) {
+  return !q || [s.label, s.key, s.help, s.group].join(' ').toLowerCase().includes(q);
+}
+function settingSearchBox(m) {
+  if (m.settings.length < SEARCH_FROM) return null;
+  const k = keyOf(m);
+  // the details are not drawn again while a field has focus (the player types): the box draws them itself, then puts
+  // the caret back where it was
+  const redraw = (pos) => {
+    renderDetails(true);
+    const again = $('details').querySelector('.setting-search');
+    if (again) { again.focus(); again.setSelectionRange(pos, pos); }
+  };
+  return withFocus(el('input', {
+    class: 'setting-search', type: 'search', placeholder: 'Find a setting', 'aria-label': 'Find a setting',
+    autocomplete: 'off', spellcheck: 'false', value: settingSearch[k] || '',
+    oninput: (e) => { settingSearch[k] = e.target.value; redraw(e.target.selectionStart); },
+    onkeydown: (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      settingSearch[k] = '';
+      redraw(0);
+    },
+  }), 'setting-search');
+}
+
+// The settings with a heading where a group starts (the host sends them in the in-game Mods tab's order); with a search,
+// only the settings it finds, and a heading only over a group with one of them.
 function settingList(m) {
+  const q = m.settings.length >= SEARCH_FROM ? (settingSearch[keyOf(m)] || '').trim().toLowerCase() : '';
   const out = [];
   let group = '';
   for (const s of m.settings) {
+    if (!settingMatches(s, q)) continue;
     if ((s.group || '') !== group) {
       group = s.group || '';
       if (group) out.push(el('h4', { class: 'setting-group' }, group));
     }
     out.push(settingControl(m, s));
   }
+  if (!out.length) out.push(el('p', { class: 'settings-none' }, 'No setting matches the search.'));
   return out;
 }
 
@@ -664,6 +699,7 @@ function renderDetails(force) {
     m.game_build ? el('p', { class: 'd-note' }, 'Made for game build ' + m.game_build + '.') : null,
     m.settings.length ? el('div', { class: 'd-section' },
       el('h3', {}, 'Settings', resetAllButton(m)),
+      settingSearchBox(m),
       state.game_running ? el('p', { class: 'd-note' }, 'The game is running: what you save here applies at its next start. The in-game Mods tab changes settings at once.') : null,
       settingList(m)) : null,
     m.readme ? el('div', { class: 'd-section' }, el('h3', {}, 'Readme'), el('pre', { class: 'readme' }, m.readme)) : null);

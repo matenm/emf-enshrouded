@@ -291,6 +291,23 @@ try {
     $iniText = if (Test-Path -LiteralPath $starterIni) { Get-Content -LiteralPath $starterIni -Raw } else { "" }
     Check (($iniText -notmatch "(?m)^toggle_key=") -and ($iniText -notmatch "(?m)^show=")) "the reset settings' lines are gone from emf\config\my_first_mod.ini ($($iniText.Trim() -replace "`r`n", ' | '))"
 
+    # 1e. the settings search (a mod with 6 settings or more): label, key, help or group in any case; headings only over
+    # what is shown; a line when nothing matches; the caret stays; Esc empties it; kept per mod; the list filter finds a
+    # mod by a setting's label
+    $searchJs = "var W=function(c,f,n){n=n||0;if(c()){f();}else if(n<120){setTimeout(function(){W(c,f,n+1);},100);}else{f();}}; var pr={}; window.emfProbe=pr; var box=function(){return document.querySelector('.setting-search');}; var rows=function(){return document.querySelectorAll('.setting').length;}; var heads=function(){return [...document.querySelectorAll('.setting-group')].map(function(h){return h.textContent;}).join('|');}; var type=function(t,at){var b=box(); b.focus(); b.value=t; b.setSelectionRange(at,at); b.dispatchEvent(new Event('input',{bubbles:true}));}; var row=function(n){return [...document.querySelectorAll('.mod-row')].find(function(x){return x.querySelector('.mod-name')&&x.querySelector('.mod-name').textContent===n;});}; W(function(){return !!box();},function(){ pr.all=rows(); type('KEY',3); pr.key=rows()+':'+heads(); type('line',2); pr.line=rows()+':'+heads(); var b=box(); pr.caret=(document.activeElement===b)+','+b.selectionStart+','+b.value; type('zzz',3); pr.none=rows()+':'+((document.querySelector('.settings-none')||{}).textContent||''); type('line',4); row('Clock').click(); W(function(){return !box();},function(){ row('My First Mod').click(); W(function(){return !!box();},function(){ pr.kept=box().value+':'+rows(); box().dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); pr.esc=box().value+':'+rows(); var f=document.getElementById('filter'); f.value='hides the line'; f.dispatchEvent(new Event('input',{bubbles:true})); pr.filter=[...document.querySelectorAll('.mod-row .mod-name')].map(function(x){return x.textContent;}).join('|'); f.value=''; f.dispatchEvent(new Event('input',{bubbles:true})); window.emfDone=true; }); }); });"
+    $run = Invoke-Smoke -Eval $searchJs -SelectMod "emf:my_first_mod" -More @("--probe-wait", "9000")
+    $p1e = if ($run.R -and $run.R.probe) { $run.R.probe.probe } else { $null }
+    Check ($run.Code -eq 0 -and $null -ne $p1e) "the settings search script ran ($($run.Code))"
+    if ($p1e) {
+        Check ($p1e.all -eq 6 -and $p1e.key -eq "1:Keys") "KEY keeps the key bind under its heading ($($p1e.all) -> $($p1e.key))"
+        Check ($p1e.line -eq "2:On screen|Keys") "line keeps two settings, each under its heading ($($p1e.line))"
+        Check ($p1e.caret -eq "true,2,line") "the box keeps the keyboard and the caret while the list is drawn again ($($p1e.caret))"
+        Check ($p1e.none -eq "0:No setting matches the search.") "nothing matching says so ($($p1e.none))"
+        Check ($p1e.kept -eq "line:2") "the search is kept for the mod while another is shown ($($p1e.kept))"
+        Check ($p1e.esc -eq ":6") "Esc empties the box and shows every setting ($($p1e.esc))"
+        Check ($p1e.filter -eq "My First Mod") "the mods filter finds a mod by a setting's label ($($p1e.filter))"
+    }
+
     # 2. lockdown: from the page, a fetch must fail and a navigation must be cancelled
     $lock = "var W=function(c,f,n){n=n||0;if(c()){f();}else if(n<120){setTimeout(function(){W(c,f,n+1);},100);}else{f();}}; var t0=Date.now(); window.emfProbe={fetch:'pending'}; fetch('https://example.com/').then(function(x){window.emfProbe.fetch='status '+x.status;},function(){window.emfProbe.fetch='blocked';}); setTimeout(function(){location.href='https://example.com/';},200); W(function(){return window.emfProbe.fetch!=='pending'&&Date.now()-t0>700;},function(){window.emfDone=true;});"
     # the script takes 0.7 s and the fetch's answer: with the default 1 s wait, a busy PC could read the page while the
