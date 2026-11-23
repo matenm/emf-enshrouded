@@ -7,6 +7,11 @@ local PLAYER_ALLY = 11
 
 --   model_viewer.foe <template guid> [ahead] [right]  spawns a creature as it is (hostile ones stay hostile)
 --   model_viewer.attack                               every ally model_viewer spawned attacks the last foe
+--   model_viewer.order [off]                          every ally it spawned goes for the last foe as an enemy order
+--                                                     for allies (emf.enemy_order), renewed every 3 s: also at a
+--                                                     target the attack command does not reach (the game's
+--                                                     Base_Door_Collision: unseen, no health, stays where it is,
+--                                                     so a creature swings at one spot for a film); off ends it
 --   model_viewer.status                               health of every ally and foe it spawned
 --   model_viewer.god [on|off]                         test god mode: your health is filled up every step (a single
 --                                                     blow bigger than your health can still kill you)
@@ -28,6 +33,9 @@ local foes = {}
 local god = false
 local session = emf.session()
 local calmed = {}  -- entity id -> true: its aggro and chosen targets cleared every step
+local ORDER_S, ORDER_EVERY_S = 4, 3  -- an order lasts ORDER_S and is renewed every ORDER_EVERY_S
+-- while model_viewer.order runs: {target = id, at = seconds of the next renewal, ids = {order ids}}
+local ordering = nil
 
 -- Clears what a creature's AI fights: every aggro target's state and aggro, every chosen target.
 local function calm(world, id)
@@ -51,8 +59,41 @@ local function calm(world, id)
 	end
 end
 
+-- Every ally model_viewer spawned gets an order at the target; returns how many, and the first refusal as text.
+local function order_all(world, target)
+	local n, refused = 0, nil
+	ordering.ids = {}
+	for _, id in ipairs(spawned) do
+		if world:position(id) then
+			local order, why = emf.enemy_order(world, id, target, { seconds = ORDER_S, allies = true })
+			if order then
+				n = n + 1
+				ordering.ids[#ordering.ids + 1] = order
+			elseif not refused then
+				refused = id .. ": " .. tostring(why)
+			end
+		end
+	end
+	return n, refused
+end
+
+local function end_orders()
+	if not ordering then return false end
+	for _, order in ipairs(ordering.ids) do emf.enemy_order_cancel(order) end
+	ordering = nil
+	return true
+end
+
 emf.on_tick(function(world)
 	if not world:is_server() then return end
+	if ordering and world:tick() / 60 >= ordering.at then
+		if world:position(ordering.target) then
+			order_all(world, ordering.target)
+			ordering.at = world:tick() / 60 + ORDER_EVERY_S
+		else
+			ordering = nil
+		end
+	end
 	for id in pairs(calmed) do
 		if world:position(id) then calm(world, id) else calmed[id] = nil end
 	end
@@ -73,6 +114,7 @@ local function same_session()
 		session = emf.session()
 		spawned = {}
 		foes = {}
+		ordering = nil
 	end
 end
 
@@ -138,6 +180,25 @@ emf.command("attack", ": every ally model_viewer spawned attacks the last foe", 
 		end
 	end
 	emf.reply(n .. " allies attack " .. target)
+end)
+
+emf.command("order", "[off]: every ally model_viewer spawned goes for the last foe (an order for allies, renewed)",
+	function(world, args)
+	same_session()
+	if args[1] == "off" then emf.reply(end_orders() and "orders ended" or "no orders") return end
+	if not emf.enemy_order then emf.reply("this EMF has no enemy orders (emf.enemy_order, Lua host 1.32)") return end
+	local target = foes[#foes]
+	if not target or not world:position(target) then emf.reply("no foe (model_viewer.foe first)") return end
+	end_orders()
+	ordering = { target = target, at = world:tick() / 60 + ORDER_EVERY_S, ids = {} }
+	local n, refused = order_all(world, target)
+	if n == 0 then
+		ordering = nil
+		emf.reply("0 allies ordered at " .. target .. (refused and " (" .. refused .. ")" or ""))
+		return
+	end
+	emf.reply(string.format("%d allies ordered at %d, renewed every %d s (model_viewer.order off ends it)%s", n, target,
+		ORDER_EVERY_S, refused and " (" .. refused .. ")" or ""))
 end)
 
 emf.command("status", ": health of the allies and foes model_viewer spawned", function(world, args)
@@ -268,6 +329,7 @@ emf.command("clear", ": remove every ally and foe model_viewer spawned", functio
 		end
 	end
 	spawned, foes = {}, {}
+	end_orders()
 	emf.reply("removed " .. n)
 end)
 
