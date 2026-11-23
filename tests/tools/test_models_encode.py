@@ -310,6 +310,16 @@ class MakeModTests(unittest.TestCase):
             make_mod.listing_entry(dict(BEAR, own_proportions=cfg))  # no "hierarchy"
         make_mod.listing_entry(dict(BEAR, own_proportions=cfg, hierarchy="wolf.hierarchy.json"))
 
+    def test_a_colour_version_shares_the_model_data_of_the_creature_with_the_same_glb(self):
+        fox = dict(BEAR, name="fox", glb="wilds/fox.glb", hierarchy="wolf.hierarchy.json", source_model_json="wolf.json")
+        arctic = dict(fox, name="fox_arctic")
+        silver = dict(fox, name="fox_silver", glb=os.path.join("wilds", "fox.glb"))
+        wolf = dict(fox, name="wolf", glb="wilds/wolf.glb")
+        other_bones = dict(fox, name="fox_on_boar", hierarchy="boar.hierarchy.json")
+        own = dict(fox, name="fox_own", own_proportions={"sidecar": "x"})
+        self.assertEqual(make_mod.shared_geometry([fox, arctic, silver, wolf, other_bones, own]),
+                         {"fox_arctic": "fox", "fox_silver": "fox"})
+
     def test_a_bad_field_path_is_refused(self):
         for bad in ("data storage", "dataStorage[-1]", "dataStorage[x]", ""):
             with self.assertRaises(SystemExit, msg=bad):

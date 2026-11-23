@@ -7,7 +7,7 @@
  "authors": [
   "EMF contributors"
  ],
- "notes": "Each model was generated standing as its game animal stands at rest (two pictures made from renders of the game animal's body, then Meshy multi-image-to-3D at 12000 polygons) and fitted straight onto that animal's skeleton with blender/fit_to_game_skeleton.py --keep-uvs --material <slot> (the fox also --sides), without own proportions: the game's skeleton, clips and graph play, so the pack adds no skeleton, clip or graph. Fox and wolf stand on the wolf (material 0), bear, panther and lynx on the sabretooth (material 1), goat, ram, deer, elk and llama on the goat (material 0); the goat has no attack clips, so those five cannot fight. A coat is the same fitted model with another texture (a Meshy retexture that kept the model's UVs), 1.1 times the size. The bear, panther and lynx were made with the sabretooth's hanging front toes; what lies under the ground when they stand is flattened into a sole. Template and model GUIDs are fixed.",
+ "notes": "Each model was generated standing as its game animal stands at rest (two pictures made from renders of the game animal's body, then Meshy multi-image-to-3D at 12000 polygons) and fitted straight onto that animal's skeleton with blender/fit_to_game_skeleton.py --keep-uvs --material <slot> (the fox also --sides), without own proportions: the game's skeleton, clips and graph play, so the pack adds no skeleton, clip or graph. Fox and wolf stand on the wolf (material 0), bear, panther and lynx on the sabretooth (material 1), goat, ram, deer, elk and llama on the goat (material 0); the goat has no attack clips, so those five cannot fight. A coat is the same fitted model with another texture (a Meshy retexture that kept the model's UVs) at 512 px, 1.1 times the size; a base animal's texture is 1024 px. The bear, panther and lynx were made with the sabretooth's hanging front toes; what lies under the ground when they stand is flattened into a sole. Template and model GUIDs are fixed.",
  "creatures": [
   {
    "name": "wilds_fox",
@@ -45,7 +45,7 @@
    "model_guid": "6782a2d9-cb61-4164-89e5-57a54dbef944",
    "template_guid": "9c54a6f2-8075-4688-8668-533b44fddd8c",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/fox_arctic",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/fox_arctic",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "d9df1150-badf-4ce7-bbe6-51a797b1154e"
@@ -70,7 +70,7 @@
    "model_guid": "350367ce-504f-4065-8a1e-680ff1bdaedd",
    "template_guid": "f08e4f1f-ac91-455b-b2a3-5fee230cbd39",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/fox_silver",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/fox_silver",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "59d2223c-bd12-446d-a37c-8f6d8e42becd"
@@ -95,7 +95,7 @@
    "model_guid": "7238ed03-d2a1-429c-874f-c0c621a60acd",
    "template_guid": "4ecf0cd1-ffe3-4416-b95c-71f20f4ea3da",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/fox_sand",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/fox_sand",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "5941309c-6662-40e1-8c22-786f18a7dffd"
@@ -145,7 +145,7 @@
    "model_guid": "e9e5f173-9ea6-492d-b711-6b48385336c5",
    "template_guid": "856d751b-f604-4237-b14d-06833ad90ea2",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/wolf_white",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/wolf_white",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "9f379d82-e862-4884-bb12-6cd1478520de"
@@ -170,7 +170,7 @@
    "model_guid": "43645e3b-7c17-4395-a183-faa07bb5f1d9",
    "template_guid": "53ae5a6f-8cbc-4294-813c-155894104aec",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/wolf_black",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/wolf_black",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "1b1b1022-781f-4da4-8515-f1168389a132"
@@ -195,7 +195,7 @@
    "model_guid": "bde9dec5-ec62-430b-aa49-87fcf53a2318",
    "template_guid": "54f4bc35-24fe-4a9f-8456-98e5d1f60587",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/wolf_red",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/wolf_red",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "9e86a9ba-2f4d-4b0b-9174-c5f3911f387c"
@@ -245,7 +245,7 @@
    "model_guid": "3dd313a9-b12f-4a6e-b294-52cbb8c36e8e",
    "template_guid": "797eac81-cf61-413b-8ae4-81297aac0ae6",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/bear_black",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/bear_black",
     "slot": 1,
     "flat_size": 64,
     "material_guid": "b3138076-b486-432a-b322-a4465d899bb0"
@@ -270,7 +270,7 @@
    "model_guid": "f6fb2cac-4a40-487f-944d-ff3470100a83",
    "template_guid": "8027e2cc-db55-4242-9977-a0dcf5fabbb6",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/bear_snow",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/bear_snow",
     "slot": 1,
     "flat_size": 64,
     "material_guid": "5d051c6e-737e-46a6-b903-7747aaf350ff"
@@ -295,7 +295,7 @@
    "model_guid": "b7e4fe8a-64b7-4d4f-aa64-8fa4698412ff",
    "template_guid": "ffa09987-f202-43c0-915c-cbcee5fe02c8",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/bear_cinnamon",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/bear_cinnamon",
     "slot": 1,
     "flat_size": 64,
     "material_guid": "a093d16f-de12-47ef-adba-80de95160eb0"
@@ -345,7 +345,7 @@
    "model_guid": "4e55501f-582f-44d0-944a-c7df3e97a098",
    "template_guid": "96ae9a28-0684-4a01-b7fc-37be9c05622e",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/panther_black",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/panther_black",
     "slot": 1,
     "flat_size": 64,
     "material_guid": "bda6e8a3-1c49-4101-a39a-94b9625b418e"
@@ -370,7 +370,7 @@
    "model_guid": "fa195384-6f29-4645-9d9e-bd29f2d264d7",
    "template_guid": "faadafd6-add1-4fb2-963d-63918576e805",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/panther_golden",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/panther_golden",
     "slot": 1,
     "flat_size": 64,
     "material_guid": "b950175c-f6f9-4674-a130-8bc7663c0db5"
@@ -395,7 +395,7 @@
    "model_guid": "91b086f0-07ff-4d67-ad6a-053666888b02",
    "template_guid": "a5bb5bae-429d-43f7-9e0f-4cf2a4c066a9",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/panther_snow",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/panther_snow",
     "slot": 1,
     "flat_size": 64,
     "material_guid": "784e96af-0b16-4dca-9e95-4571f8a7e0ab"
@@ -420,7 +420,7 @@
    "model_guid": "23eaa9de-c4de-438d-a50f-ab503c187834",
    "template_guid": "741654d6-1e0f-43f2-8c7f-c03c721be9fc",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/panther_tiger",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/panther_tiger",
     "slot": 1,
     "flat_size": 64,
     "material_guid": "eb723fb2-e214-466b-aa04-1dda78f86271"
@@ -470,7 +470,7 @@
    "model_guid": "dec2269f-af84-4a43-b283-d165a0024e5e",
    "template_guid": "b810787c-a8c5-4aab-8b4f-03ed113fbd66",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/lynx_snow",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/lynx_snow",
     "slot": 1,
     "flat_size": 64,
     "material_guid": "cc7d5c81-24b7-40d2-a3b0-5dc3824aaf62"
@@ -495,7 +495,7 @@
    "model_guid": "e9f9f101-36e6-4d41-89bc-38bd7e392d5e",
    "template_guid": "112dbfc5-a3a6-4238-ad04-3bf0a4a79a56",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/lynx_dark",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/lynx_dark",
     "slot": 1,
     "flat_size": 64,
     "material_guid": "5813f340-2399-495f-9651-e15ad4de5a3c"
@@ -520,7 +520,7 @@
    "model_guid": "b44a66b2-eed8-4091-9c9c-b044e5af1f73",
    "template_guid": "f268e168-2086-4425-aa0f-03f1145a7413",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/lynx_red",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/lynx_red",
     "slot": 1,
     "flat_size": 64,
     "material_guid": "b877228f-2e9b-401d-be56-918ce7659bc8"
@@ -570,7 +570,7 @@
    "model_guid": "7f8b3368-8dd5-4389-822c-a36b608c5dd5",
    "template_guid": "9fd8da53-63c1-4a0a-ab8f-2c096089d876",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/goat_black",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/goat_black",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "a61920ef-cb0b-4cce-9c76-bade8eefb505"
@@ -595,7 +595,7 @@
    "model_guid": "d44b68ea-8b59-46cb-a97e-9f2b3b08b185",
    "template_guid": "918db95d-e945-40b3-8382-bfc9d3a70f78",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/goat_piebald",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/goat_piebald",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "aa1a843b-3479-4269-b2a8-d9f1458e652c"
@@ -620,7 +620,7 @@
    "model_guid": "31923f62-da9d-4768-9017-c77aa1d67ce6",
    "template_guid": "621380f8-caab-4234-be8b-3f64ac8180a1",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/goat_chamois",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/goat_chamois",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "5aaa7284-cc31-4053-b7e8-d1b88dadbf61"
@@ -670,7 +670,7 @@
    "model_guid": "883c2e29-9b8f-4b48-a6cb-afca77cc9caa",
    "template_guid": "0605d235-d7e2-46c4-ba3f-e0e0c475b576",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/ram_black",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/ram_black",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "d8258d47-d647-4391-890b-022053b1a2e9"
@@ -695,7 +695,7 @@
    "model_guid": "63e65084-4990-4393-aca5-e25b4f8971e0",
    "template_guid": "ffb8bdb0-c9c1-43ac-b96b-d58125602c97",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/ram_golden",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/ram_golden",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "d5611d52-cd63-492c-bd2a-248c490fb2c3"
@@ -720,7 +720,7 @@
    "model_guid": "823dc61c-5888-4704-a4f8-b9be7a80309e",
    "template_guid": "83c3422f-63bb-4b37-9164-a4837f6f7241",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/ram_mouflon",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/ram_mouflon",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "50062204-2191-44c8-8630-fd3f4023dfca"
@@ -770,7 +770,7 @@
    "model_guid": "2d46b51e-4ab8-484d-ae1d-959c7839bcc7",
    "template_guid": "2f439967-180c-4156-8ded-ccf31e055c00",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/deer_white",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/deer_white",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "0fbe70c0-d764-4ae8-9b62-bcc3cb3c7269"
@@ -795,7 +795,7 @@
    "model_guid": "cce12ef2-0d88-46be-bc52-ec700748d4a0",
    "template_guid": "a5e4052a-f4f7-4872-9124-3c7e862fa925",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/deer_dark",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/deer_dark",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "a68830ee-af02-4918-80ed-c03f73cd19ed"
@@ -820,7 +820,7 @@
    "model_guid": "848c4f28-a016-47aa-95d6-60d03765b01d",
    "template_guid": "4e6c70fb-52ae-4e3f-a8d3-efe6214a982a",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/deer_fallow",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/deer_fallow",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "58c8b023-442c-42cb-b887-4a81a252dec0"
@@ -870,7 +870,7 @@
    "model_guid": "1efc5ba2-ae06-42bc-a76b-5076aefe7a4a",
    "template_guid": "0632d636-df6d-4f91-b1c6-9c0b1986978e",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/elk_white",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/elk_white",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "00e6ef33-5249-4f6a-8488-651418853e4d"
@@ -895,7 +895,7 @@
    "model_guid": "f35384f1-48e6-4bfa-87b8-dbdb6729e9d7",
    "template_guid": "c87dcfeb-7073-4cac-ad06-04509bb82346",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/elk_dark",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/elk_dark",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "62d4bcb9-4bff-491e-876f-e9f4721c0f61"
@@ -920,7 +920,7 @@
    "model_guid": "a75cc309-5552-4c16-b5d6-a53d57f7bc50",
    "template_guid": "e7fcf30a-5f3d-48d0-8a33-3d3114731aae",
    "texture": {
-    "albedo_dir": "../../../analysis/models/wilds/tex/elk_grey",
+    "albedo_dir": "../../../analysis/models/wilds/tex512/elk_grey",
     "slot": 0,
     "flat_size": 64,
     "material_guid": "cfe19d91-f443-4354-b869-0302329f3b9c"
