@@ -148,6 +148,9 @@ def build(cfg, glb_path, creature="creature"):
             continue
         if spec.get("made"):
             made = spec["made"]
+            if made.get("from") and made.get("base"):
+                raise SystemExit("%s: clip %s is made from %r and on a base: one of them" % (creature, name,
+                                                                                           made["from"]))
             if made.get("from") and made["from"] not in have:
                 raise SystemExit("%s: clip %s is made from %r, which the glb does not have" % (creature, name,
                                                                                             made["from"]))

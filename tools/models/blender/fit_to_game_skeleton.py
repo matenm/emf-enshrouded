@@ -13,6 +13,10 @@ Steps:
     creature's legs stretch below the belly to reach them (../quad_landmarks.py). The width is fitted to the game
     body's (--width fit, the default); --width keep keeps the creature's own proportions (the mean of its length and
     height scales), for a creature stretched much more in length and height than in width.
+    In every fit the creature's centre line (the middle of its trunk) goes onto the game's, and a creature made in
+    the game body's rest pose has its own uneven grounds levelled first. So fitting a creature again gives the glb of
+    this version of the script: a creature a pack already ships (the aurochs, the lich, the bone golem) may come out
+    a little different from the glb the pack was built from, and is only fitted again on purpose.
  3. Copy bone weights from all game meshes (nearest surface) and UVs from one game mesh (--uv-from), so the creature
     can use that mesh's material and textures (--material, the game material index). Detail bones then keep weight
     only where the creature has that detail (../quad_landmarks.py clean_detail_weights): a big rump on a small tail's
@@ -412,7 +416,8 @@ if own_path:
     base = max(g["ground_front"], g["ground_back"])
     with open(os.path.abspath(own_path), "w", encoding="utf-8") as f:
         json.dump({"space": "Blender after the glTF import (forward -y, up +z, width x), the game armature's world",
-                   "ground": base, "scale": (g["top"] - base) / ((c["top"] - max(c["ground_front"], c["ground_back"])) or 1e-6) * size,
+                   "ground": base,
+                   "scale": (g["top"] - base) / ((c["top"] - max(c["ground_front"], c["ground_back"])) or 1e-6) * size,
                    "joints": joints}, f, indent=1)
     print("FIT own proportions: %d joints moved into the creature's shape, sidecar %s" % (len(joints), own_path))
 
@@ -439,6 +444,7 @@ try:
     bpy.ops.export_scene.gltf(export_vertex_color="ACTIVE" if vertex_colors else "NONE", **kw)
 except TypeError:
     bpy.ops.export_scene.gltf(**kw)
-sz = (g["top"] - max(g["ground_front"], g["ground_back"])) / ((c["top"] - max(c["ground_front"], c["ground_back"])) or 1e-6)
+sz = ((g["top"] - max(g["ground_front"], g["ground_back"]))
+      / ((c["top"] - max(c["ground_front"], c["ground_back"])) or 1e-6))
 print("FIT game", {k: round(v, 3) for k, v in g.items()}, "creature", {k: round(v, 3) for k, v in c.items()},
       "scales x %.3f z %.3f" % (sx, sz), "verts", len(body.data.vertices))

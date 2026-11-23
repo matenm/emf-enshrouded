@@ -276,6 +276,7 @@ for g, r in pairs(resources[SEQ]) do
 end
 for g, r in pairs(resources["keen::RenderModel"]) do
 	print(string.format("model %s cloth %s", g, r.data.cloth == nil and "none" or "kept"))
+	print(string.format("model %s name %s", g, tostring(r.data.debugName)))
 	if r.data.hierarchy then print(string.format("model %s hierarchy %s", g, tostring(r.data.hierarchy))) end
 	if r.data.hierarchyJointCount then
 		print(string.format("model %s hierarchyJointCount %s", g, tostring(r.data.hierarchyJointCount)))

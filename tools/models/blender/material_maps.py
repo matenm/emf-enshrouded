@@ -79,13 +79,21 @@ def write_levels(px, kind, fix=lambda p: p):
         level += 1
 
 
+def power_of_two(flag, default):
+    """A level's size: every level is half the one before, down to 1."""
+    size = int(opt(flag, default))
+    if size < 1 or size & (size - 1):
+        raise SystemExit("material_maps.py: %s %d is not a power of two" % (flag, size))
+    return size
+
+
 normal, roughness = opt("--normal"), opt("--roughness")
 if not normal and not roughness:
     raise SystemExit("material_maps.py: name --normal or --roughness (or both)")
 os.makedirs(out_dir, exist_ok=True)
 done = []
 if normal:
-    size = int(opt("--size", "1024"))
+    size = power_of_two("--size", "1024")
     px = load(normal, size)
     xy = (px[..., :2] * 2.0 - 1.0) * float(opt("--strength", "1.0"))
     if "--keep-green" not in opts:
@@ -93,10 +101,11 @@ if normal:
     px[..., :2] = np.clip(xy, -1.0, 1.0) * 0.5 + 0.5
     done.append("normal %d levels from %dx%d" % (write_levels(unit(px), "normal", unit), size, size))
 if roughness:
-    size = int(opt("--material-size", "512"))
+    size = power_of_two("--material-size", "512")
     px = np.ones((size, size, 4), dtype=np.float32)
     px[..., 0] = float(opt("--red", "0"))
-    px[..., 1] = load(roughness, size)[..., 0]
+    # green: where a glTF metallic-roughness picture keeps roughness (a grey picture has it in every channel)
+    px[..., 1] = load(roughness, size)[..., 1]
     if opt("--ao"):
         px[..., 2] = load(opt("--ao"), size)[..., 0]
     done.append("material %d levels from %dx%d" % (write_levels(px, "material"), size, size))

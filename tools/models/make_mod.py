@@ -35,7 +35,8 @@ pack.json:
         "own_proportions": {                          # optional: a skeleton of its own (own_creature.py), with
           "sidecar": "panther_own.json",              #   blender/fit_to_game_skeleton.py --own-proportions's sidecar
           "skeleton_guid": "...",                     #   the skeleton copy's GUID (FIXED forever)
-          "reference_clip": "<clips>/sabretooth_<guid>.json",  # a game clip whose first frame stands (the idle), or "rest"
+          "reference_clip": "<clips>/sabretooth_<guid>.json",  # a game clip whose first frame stands (the idle),
+                                                      #   or "rest" (a creature made in the game's rest pose)
           "clips": "<clips>/sabretooth_*.json",       #   every game clip the graph plays (EML dumps <owner>_<guid>.json)
           "graph": "<guid>", "graph_guid": "..."      #   the game's animation graph and its copy's GUID
         },
@@ -223,15 +224,19 @@ local function flat_levels(size, r, g, b, a)
 	return levels
 end
 
--- a game material by its debugName (a material's GUID is not in the survey; its name is)
+-- a game material by its debugName (a material's GUID is not in model_survey's dump; its name is). A name that
+-- two materials share names neither: asking for it is an error that says so.
 local materials_by_name
 local function material_named(name)
 	if not materials_by_name then
 		materials_by_name = {}
 		for _, r in ipairs(game.assets.get_resources_by_type("keen::RenderMaterialResource")) do
-			materials_by_name[tostring(r.data.debugName)] = tostring(r.guid)
+			local n = tostring(r.data.debugName)
+			materials_by_name[n] = materials_by_name[n] == nil and tostring(r.guid) or false
 		end
 	end
+	assert(materials_by_name[name] ~= false,
+		"two game materials are named " .. tostring(name) .. ": name the one meant by its GUID")
 	return materials_by_name[name]
 end
 
@@ -250,7 +255,9 @@ local function make_material(c, m)
 		local kind = name:find("albedo") and "albedo" or name:match("_([a-z]+)_map")
 		if kind and ours[kind] then
 			local levels = {}
-			for _, png in ipairs(require(c.name .. "_" .. kind)) do table.insert(levels, image.decode(buffer.wrap(png), "png")) end
+			for _, png in ipairs(require(c.name .. "_" .. kind)) do
+				table.insert(levels, image.decode(buffer.wrap(png), "png"))
+			end
 			done[#done + 1] = kind .. " " .. write_texture(im.texture, levels)
 		else
 			local r, g, b, a = average_color(im.texture)
@@ -730,7 +737,8 @@ def shared_geometry(creatures):
     for c in creatures:
         if c.get("game_dump") or c.get("new_skeleton") or c.get("own_proportions") or not c.get("glb"):
             continue
-        key = (os.path.normpath(c["glb"]), c.get("hierarchy"), c.get("source_model_json"))
+        key = tuple(os.path.normpath(c[k]) if c.get(k) else None
+                    for k in ("glb", "hierarchy", "source_model_json"))
         if key in first:
             shared[c["name"]] = first[key]
         else:
@@ -1067,7 +1075,9 @@ def build_prop(p, src, path):
             changed = True
         maps = write_maps(src, p["name"], path(t["albedo_dir"]))
         entry["texture"] = {"slot": int(t.get("slot", 1)), "material_guid": t["material_guid"],
-                            "flat_size": int(t.get("flat_size", 128)), "maps": maps}
+                            "flat_size": int(t.get("flat_size", 128))}
+        if maps:
+            entry["texture"]["maps"] = maps
     else:
         remove_maps(src, p["name"])
     print("%s: prop, %d meshes, %d bytes, %.2f x %.2f x %.2f m, model %s" % (
@@ -1129,6 +1139,7 @@ def main():
     changed = False
     listing = []
     same_model = shared_geometry(pack["creatures"])
+    models = {}  # name -> (groups, blob, record fields) of the models built
     for c in pack["creatures"]:
         if not NAME.match(c["name"]):
             raise SystemExit("creature name '%s': use lowercase letters, digits and _" % c["name"])
@@ -1159,11 +1170,15 @@ def main():
             print("%s: model on the new skeleton, rest difference %.2g, %.2f times as wide"
                   % (c["name"], report["max_rest_difference"], widen_by))
             palette = None
-        else:
+        elif c["name"] not in same_model:
             groups, _ = gltf_in.load_groups(path(c["glb"]), rm.load_record(path(c["hierarchy"])),
                                             material_count=len(source["materials"]))
             palette = None
-        blob, fields = encode.build(groups, palette=palette)
+        if c["name"] in same_model:  # the same fitted model as an earlier creature: built once
+            groups, blob, fields = models[same_model[c["name"]]]
+        else:
+            blob, fields = encode.build(groups, palette=palette)
+            models[c["name"]] = (groups, blob, fields)
         ctr = fields["boundingSphere"]["center"]
         radius = max(((p[0] - ctr["x"]) ** 2 + (p[1] - ctr["y"]) ** 2 + (p[2] - ctr["z"]) ** 2) ** 0.5
                      for g in groups for p in g["pos"])
@@ -1178,8 +1193,8 @@ def main():
                 f.write("-- generated by tools/models/make_mod.py: record fields of the model %s\nreturn %s\n"
                         % (c["name"], lua_value(data)))
             with open(os.path.join(out, "src", c["name"] + "_blob.lua"), "w", encoding="ascii", newline="\n") as f:
-                f.write("-- generated by tools/models/make_mod.py: render data of %s (vertices, skin, indices), %d bytes\n"
-                        "return %s\n" % (c["name"], len(blob), lua_bytes(blob)))
+                f.write("-- generated by tools/models/make_mod.py: render data of %s (vertices, skin, indices), "
+                        "%d bytes\nreturn %s\n" % (c["name"], len(blob), lua_bytes(blob)))
         entry = listing_entry(c)
         if c["name"] in same_model:
             entry["geometry"] = same_model[c["name"]]
@@ -1204,7 +1219,9 @@ def main():
                 changed = True
             maps = write_maps(os.path.join(out, "src"), c["name"], path(t["albedo_dir"]))
             entry["texture"] = {"slot": int(t.get("slot", 1)), "material_guid": t["material_guid"],
-                                "flat_size": int(t.get("flat_size", 128)), "maps": maps}
+                                "flat_size": int(t.get("flat_size", 128))}
+            if maps:
+                entry["texture"]["maps"] = maps
         else:
             remove_maps(os.path.join(out, "src"), c["name"])
         listing.append(entry)

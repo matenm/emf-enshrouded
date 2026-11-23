@@ -311,7 +311,8 @@ class MakeModTests(unittest.TestCase):
         make_mod.listing_entry(dict(BEAR, own_proportions=cfg, hierarchy="wolf.hierarchy.json"))
 
     def test_a_colour_version_shares_the_model_data_of_the_creature_with_the_same_glb(self):
-        fox = dict(BEAR, name="fox", glb="wilds/fox.glb", hierarchy="wolf.hierarchy.json", source_model_json="wolf.json")
+        fox = dict(BEAR, name="fox", glb="wilds/fox.glb", hierarchy="wolf.hierarchy.json",
+                   source_model_json="wolf.json")
         arctic = dict(fox, name="fox_arctic")
         silver = dict(fox, name="fox_silver", glb=os.path.join("wilds", "fox.glb"))
         wolf = dict(fox, name="wolf", glb="wilds/wolf.glb")
@@ -319,6 +320,42 @@ class MakeModTests(unittest.TestCase):
         own = dict(fox, name="fox_own", own_proportions={"sidecar": "x"})
         self.assertEqual(make_mod.shared_geometry([fox, arctic, silver, wolf, other_bones, own]),
                          {"fox_arctic": "fox", "fox_silver": "fox"})
+
+    def test_the_key_of_a_shared_model_ignores_how_a_path_is_written(self):
+        fox = dict(BEAR, name="fox", glb="wilds/fox.glb", hierarchy="dump/wolf.hierarchy.json",
+                   source_model_json="dump/wolf.json")
+        coat = dict(fox, name="fox_arctic", hierarchy=os.path.join("dump", ".", "wolf.hierarchy.json"),
+                    source_model_json="dump//wolf.json")
+        self.assertEqual(make_mod.shared_geometry([fox, coat]), {"fox_arctic": "fox"})
+
+    @unittest.skipUnless(shutil.which("lua"), "needs lua 5.4 on PATH")
+    def test_a_creature_on_a_shared_model_is_added_from_the_first_ones_files_under_its_own_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            coat = make_mod.listing_entry(dict(BEAR, name="beast_bear_snow", model_guid="m-2", template_guid="t-2",
+                                               template_name="Beast_Bear_Snow"))
+            coat["geometry"] = "beast_bear"
+            make_mod.write_scripts(d, {"id": "test_pack", "title": "Test"},
+                                   [make_mod.listing_entry(dict(BEAR)), coat], [])
+            with open(os.path.join(d, "beast_bear_data.lua"), "w", encoding="utf-8") as f:
+                f.write(STUB_DATA)
+            with open(os.path.join(d, "beast_bear_blob.lua"), "w", encoding="utf-8") as f:
+                f.write('return "blob"\n')
+            mock = os.path.join(HERE, "..", "..", "tools", "models", "mock_eml.lua")
+            out = subprocess.run(["lua", mock, d], capture_output=True, text=True, timeout=60)
+            self.assertEqual(out.returncode, 0, out.stderr)
+            self.assertNotIn("not added", out.stdout)
+            self.assertIn("added beast_bear:", out.stdout)
+            self.assertIn("added beast_bear_snow: model m-2", out.stdout)
+            self.assertIn("model m-2 name beast_bear_snow", out.stdout)
+            self.assertIn("model m-1 name beast_bear", out.stdout.replace("beast_bear_snow", ""))
+
+    def test_a_texture_without_extra_maps_names_none(self):
+        """write_maps returns no optional maps for a folder with only albedo levels: the listing then names none."""
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as tex:
+            with open(os.path.join(tex, "albedo_mip00.png"), "wb") as f:
+                f.write(b"png")
+            self.assertEqual(make_mod.write_maps(d, "bear", tex), [])
+            self.assertEqual(os.listdir(d), ["bear_albedo.lua"])
 
     def test_a_bad_field_path_is_refused(self):
         for bad in ("data storage", "dataStorage[-1]", "dataStorage[x]", ""):

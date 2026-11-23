@@ -164,8 +164,9 @@ bpy.context.scene.collection.objects.link(fur)
 inv = mw.inverted()
 for v in mesh.vertices:
     v.co = inv @ v.co
-fur.matrix_world = mw
 fur.parent = arm
+fur.matrix_parent_inverse = arm.matrix_world.inverted()  # the parent's transform is not applied a second time
+fur.matrix_world = mw
 mod = fur.modifiers.new("Armature", "ARMATURE")
 mod.object = arm
 groups = {g.index: g.name for g in body.vertex_groups}

@@ -239,11 +239,12 @@ def _blend(a, b, s):
 
 
 def timeline_poses(gltf, binc, sk, keys, fps=60):
-    """The poses, one per frame, of a clip that times an animation's moments (a swing that must land when the game's attack hits, two swings in
-    one combo): keys [at, animation, time], seconds into the clip, the glb's animation and seconds into it; the
-    first at 0, each at or after the one before, the last at the clip's length. Between two keys forward through
-    one animation the clip plays that stretch of it, faster or slower; between any other two (back in time, another
-    animation) the first pose blends into the second, eased in and out (3u^2 - 2u^3); two keys at one moment cut."""
+    """The poses, one per frame, of a clip that times an animation's moments (a swing that must land when the game's
+    attack hits, two swings in one combo): keys [at, animation, time], seconds into the clip, the glb's animation and
+    seconds into it; the first at 0, each at or after the one before, the last at the clip's length. Between two keys
+    forward through one animation the clip plays that stretch of it, faster or slower; between any other two (back in
+    time, another animation) the first pose blends into the second, eased in and out (3u^2 - 2u^3); two keys at one
+    moment cut."""
     if len(keys) < 2:
         raise ValueError("a timeline needs two keys or more")
     if any(len(k) != 3 for k in keys):

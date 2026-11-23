@@ -64,16 +64,33 @@ class MaterialMapTests(unittest.TestCase):
             out = os.path.join(tmp, "out")
             r = run(out, "--roughness", rough, "--material-size", "4")
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            self.assertEqual(sorted(os.listdir(out)), ["material_mip00.png", "material_mip01.png", "material_mip02.png"])
+            self.assertEqual(sorted(os.listdir(out)),
+                             ["material_mip00.png", "material_mip01.png", "material_mip02.png"])
             w, red, green, blue = pixel(os.path.join(out, "material_mip00.png"))
             self.assertEqual((w, red, blue), (4, 0, 255))  # no occlusion map: none
             self.assertAlmostEqual(green, 200, delta=2)
-            self.assertEqual(run(out, "--roughness", rough, "--ao", ao, "--red", "0.25", "--material-size", "4").returncode, 0)
+            self.assertEqual(run(out, "--roughness", rough, "--ao", ao, "--red", "0.25", "--material-size",
+                                 "4").returncode, 0)
             w, red, green, blue = pixel(os.path.join(out, "material_mip01.png"))
             self.assertEqual(w, 2)
             self.assertAlmostEqual(red, 64, delta=2)
             self.assertAlmostEqual(green, 200, delta=2)
             self.assertAlmostEqual(blue, 90, delta=2)
+
+    def test_roughness_is_read_from_green_as_a_gltf_metallic_roughness_picture_keeps_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rough = flat_png(os.path.join(tmp, "mr.png"), 8, (10, 200, 30))
+            out = os.path.join(tmp, "out")
+            r = run(out, "--roughness", rough, "--material-size", "4")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertAlmostEqual(pixel(os.path.join(out, "material_mip00.png"))[2], 200, delta=2)
+
+    def test_a_size_that_is_not_a_power_of_two_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rough = flat_png(os.path.join(tmp, "r.png"), 8, (200, 200, 200))
+            r = run(os.path.join(tmp, "out"), "--roughness", rough, "--material-size", "1000")
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("--material-size 1000 is not a power of two", r.stdout + r.stderr)
 
     def test_it_needs_a_map(self):
         with tempfile.TemporaryDirectory() as tmp:

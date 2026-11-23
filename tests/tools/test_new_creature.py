@@ -139,6 +139,15 @@ class BuildTests(Fixture):
             nc.build(cfg(0.7), self.glb, "elk")
         self.assertIn("elk: clip die", str(e.exception))
 
+    def test_a_made_clip_is_from_a_pose_or_on_a_base_not_both(self):
+        cfg = config(clips={"move": {"animation": "Move"}, "stand": {"animation": "Move"},
+                            "die": {"made": {"from": "Move", "base": [[0.0, "Move", 0.0], [0.5, "Move", 1.0]],
+                                             "keys": [{"t": 0.0}, {"t": 0.5, "turn": {"Hips": ["z", 90]}}]}}})
+        with self.assertRaises(SystemExit) as e:
+            nc.build(cfg, self.glb, "elk")
+        self.assertIn("elk: clip die", str(e.exception))
+        self.assertIn("one of them", str(e.exception))
+
     def test_a_timeline_clip(self):
         """timeline: [[at, animation, time], ...], a clip that times the animation's moments (gltf_clips.timeline:
         a swing that lands when the game's attack hits); an animation the glb has not, or keys that do not go
