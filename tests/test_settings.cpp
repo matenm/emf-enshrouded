@@ -31,6 +31,24 @@ struct FakeIni : IniBackend {
         values[mod + "." + key] = value;
         return true;
     }
+    bool erase(const std::string& mod, const std::string& key) override {
+        if (fail) return false;
+        values.erase(mod + "." + key);
+        return true;
+    }
+};
+// A backend from before erase existed (the default: it cannot remove a line).
+struct OldIni : IniBackend {
+    std::map<std::string, std::string> values;
+    std::optional<std::string> read(const std::string& mod, const std::string& key) override {
+        auto it = values.find(mod + "." + key);
+        if (it == values.end()) return std::nullopt;
+        return it->second;
+    }
+    bool write(const std::string& mod, const std::string& key, const std::string& value) override {
+        values[mod + "." + key] = value;
+        return true;
+    }
 };
 
 SettingDef def(const char* key, SettingType t, const char* dflt, double mn = 0, double mx = 0, bool has_range = false,
@@ -526,4 +544,73 @@ TEST_CASE("emf_core.ini: a size typed as 150% reads as 150") {
     CoreIniBackend b(ini);
     CHECK(b.read(kEmfSettingsId, "hud.size").value_or("") == "150");
     DeleteFileW(ini.c_str());
+}
+
+TEST_CASE("settings: reset puts a setting back to its default and removes its line (GitHub #54)") {
+    FakeIni ini;
+    SettingsStore store(&ini);
+    REQUIRE(store.declare("clock", def("radius", SettingType::Int, "10", 2, 50, true)));
+    REQUIRE(store.set("clock", "radius", "30") == SettingsStore::SetResult::Ok);
+    store.take_changes();
+    CHECK(store.stored("clock", "radius"));
+    CHECK(store.reset("clock", "radius") == SettingsStore::SetResult::Ok);
+    CHECK(store.get("clock", "radius") == "10");
+    CHECK_FALSE(store.stored("clock", "radius"));
+    CHECK(ini.values.count("clock.radius") == 0);  // the line is gone: a later default follows the mod
+    CHECK(store.take_changes() == std::vector<std::pair<std::string, std::string>>{{"clock", "radius"}});
+    CHECK(store.reset("clock", "radius") == SettingsStore::SetResult::Unchanged);  // nobody set it
+    std::string why;
+    CHECK(store.reset("clock", "nope", &why) == SettingsStore::SetResult::UnknownSetting);
+    CHECK(why.find("nope") != std::string::npos);
+    // the default written in the file by hand counts as set: reset removes its line
+    ini.values["clock.radius"] = "10";
+    SettingsStore fresh(&ini);
+    REQUIRE(fresh.declare("clock", def("radius", SettingType::Int, "10", 2, 50, true)));  // read from the file
+    CHECK(fresh.stored("clock", "radius"));
+    CHECK(fresh.reset("clock", "radius") == SettingsStore::SetResult::Ok);
+    CHECK(ini.values.count("clock.radius") == 0);
+}
+
+TEST_CASE("settings: a reset that cannot remove the line changes nothing") {
+    OldIni old;  // a backend that cannot remove a line
+    SettingsStore store(&old);
+    REQUIRE(store.declare("clock", def("radius", SettingType::Int, "10", 2, 50, true)));
+    REQUIRE(store.set("clock", "radius", "30") == SettingsStore::SetResult::Ok);
+    store.take_changes();
+    std::string why;
+    CHECK(store.reset("clock", "radius", &why) == SettingsStore::SetResult::WriteFailed);
+    CHECK(store.get("clock", "radius") == "30");
+    CHECK(store.stored("clock", "radius"));
+    CHECK(store.take_changes().empty());
+    CHECK_FALSE(why.empty());
+}
+
+
+TEST_CASE("settings: the file backends remove a key's line (and only it); no file or no line is fine") {
+    const std::wstring ini = test_scratch::temp_path(L"emf_core_test_erase", L".ini");
+    put_bytes(ini, "[hud]\r\nsize = 140 ; bigger\r\nstyle=boxed\r\n");
+    CoreIniBackend core(ini);
+    CHECK(core.erase(kEmfSettingsId, "hud.size"));
+    CHECK_FALSE(core.read(kEmfSettingsId, "hud.size").has_value());
+    CHECK(core.read(kEmfSettingsId, "hud.style").value_or("") == "boxed");
+    CHECK(core.erase(kEmfSettingsId, "hud.size"));  // no line: fine
+    CHECK_FALSE(core.erase(kEmfSettingsId, "nodot"));
+    DeleteFileW(ini.c_str());
+    CHECK(core.erase(kEmfSettingsId, "hud.style"));  // no file: fine, and none is made
+    CHECK(GetFileAttributesW(ini.c_str()) == INVALID_FILE_ATTRIBUTES);
+
+    wchar_t tmp[MAX_PATH];
+    GetTempPathW(MAX_PATH, tmp);
+    const std::wstring dir = std::wstring(tmp) + L"emf_settings_erase_" + std::to_wstring(GetCurrentProcessId());
+    CreateDirectoryW(dir.c_str(), nullptr);
+    FileIniBackend files(dir);
+    CHECK(files.erase("m", "radius"));  // no file
+    CHECK(GetFileAttributesW((dir + L"\m.ini").c_str()) == INVALID_FILE_ATTRIBUTES);
+    REQUIRE(files.write("m", "radius", "30"));
+    REQUIRE(files.write("m", "enabled", "1"));
+    CHECK(files.erase("m", "radius"));
+    CHECK_FALSE(files.read("m", "radius").has_value());
+    CHECK(files.read("m", "enabled").value_or("") == "1");
+    DeleteFileW((dir + L"\m.ini").c_str());
+    RemoveDirectoryW(dir.c_str());
 }

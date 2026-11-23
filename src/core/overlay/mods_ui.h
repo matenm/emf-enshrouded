@@ -83,6 +83,10 @@ std::string mods_colour_legend();
 // A widget changed a setting: saves it through the store and sets ui.message. False when refused.
 bool apply_setting_edit(SettingsStore& store, const std::string& mod, const std::string& key, const std::string& value,
                         ModsUiState& ui);
+// Whether a setting has a reset button: someone changed it (its line is in the ini).
+bool setting_resettable(const SettingsStore& store, const std::string& mod, const std::string& key);
+// The reset button: back to the default (the ini's line removed) and ui.message says so. False when refused.
+bool apply_setting_reset(SettingsStore& store, const std::string& mod, const std::string& key, ModsUiState& ui);
 // An edit in progress of widget `full` ("mod.key"), or nullptr; marks the widget as drawn in `frame`.
 const std::string* pending_edit(ModsUiState& ui, const std::string& full, int frame);
 void set_pending_edit(ModsUiState& ui, const std::string& full, std::string value, int frame);

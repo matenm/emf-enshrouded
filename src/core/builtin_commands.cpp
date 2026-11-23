@@ -900,6 +900,60 @@ void cmd_set(EmfWorld*, int argc, const char* const* argv, void* u) {
     command_reply_line("refused: " + why);
 }
 
+// reset <mod> [key]: one setting, or every setting of the mod (never its switch), back to its default
+void cmd_reset(EmfWorld*, int argc, const char* const* argv, void* u) {
+    auto& c = ctx_of(u);
+    if (argc < 2 || !c.settings) {
+        command_reply_line("usage: reset <mod> [key]   (settings <mod> lists the keys)");
+        return;
+    }
+    const std::string id = argv[1];
+    const auto defs = c.settings->defs(id);
+    if (defs.empty()) {
+        command_reply_line(c.registry && c.registry->find(id) ? id + " has no settings" : fmt("no mod \"%s\"", id.c_str()));
+        return;
+    }
+    if (argc >= 3) {
+        const std::string key = argv[2];
+        std::string why;
+        const auto r = c.settings->reset(id, key, &why);
+        if (r == SettingsStore::SetResult::Ok || r == SettingsStore::SetResult::Unchanged) {
+            for (const auto& d : defs)
+                if (d.key == key) {
+                    command_reply_line(id + "." + key + " = " + shown_value(d, c.settings->get(id, key)) + " (the default)" +
+                                       (d.live || r == SettingsStore::SetResult::Unchanged
+                                            ? ""
+                                            : " (applies at the next game start)"));
+                    break;
+                }
+            return;
+        }
+        command_reply_line("refused: " + why);
+        return;
+    }
+    std::vector<std::string> done;
+    std::string failed;
+    for (const auto& d : defs) {
+        std::string why;
+        const auto r = c.settings->reset(id, d.key, &why);
+        if (r == SettingsStore::SetResult::Ok)
+            done.push_back(d.key + " = " + shown_value(d, c.settings->get(id, d.key)));
+        else if (r == SettingsStore::SetResult::WriteFailed && failed.empty())
+            failed = why;
+    }
+    if (done.empty() && failed.empty()) {
+        command_reply_line(id + ": every setting is at its default");
+        return;
+    }
+    std::string list;
+    for (const auto& s : done) list += (list.empty() ? "" : ", ") + s;
+    std::string line = done.size() == 1   ? id + ": 1 setting back to its default (" + list + ")"
+                       : !done.empty() ? fmt("%s: %zu settings back to their defaults (", id.c_str(), done.size()) + list + ")"
+                                       : id + ":";
+    if (!failed.empty()) line += (done.empty() ? " refused: " : "; refused: ") + failed;
+    command_reply_line(line);
+}
+
 // items [words]: the items whose names hold every word (in any order, a part of a word is enough), best match first
 void cmd_items(EmfWorld* w, int argc, const char* const* argv, void* u) {
     auto& c = ctx_of(u);
@@ -1707,6 +1761,8 @@ bool add_builtin_commands(BuiltinContext& ctx) {
         {"hooks", ": every inline hook, its owner and target (EMF's and mods')", cmd_hooks},
         {"pattern", "<bytes> [.section]: test a byte pattern against the game exe (found once?)", cmd_pattern},
         {"set", "<mod> <key> <value>: change a mod's setting (saved in emf/config/<mod>.ini)", cmd_set},
+        {"reset", "<mod> [key]: put a setting, or every setting of the mod (not its switch), back to its default",
+         cmd_reset},
         {"items", "[words]: find the game's items by name (words in any order, part of a word is enough)", cmd_items},
         {"give", "<item name> [count]: drop items at your feet (host)", cmd_give},
         {"put", "<item name> [count 1-65535] [entity] [level] [rarity 0-4]: put items straight into an inventory, yours by "
@@ -1762,6 +1818,7 @@ bool add_builtin_commands(BuiltinContext& ctx) {
     for (const auto& d : defs) {
         const bool anywhere = std::strcmp(d.name, "help") == 0 || std::strcmp(d.name, "mods") == 0 ||
                               std::strcmp(d.name, "settings") == 0 || std::strcmp(d.name, "set") == 0 ||
+                              std::strcmp(d.name, "reset") == 0 ||
                               std::strcmp(d.name, "hooks") == 0 || std::strcmp(d.name, "pattern") == 0;  // need no world
         // help is for every player (it lists only what they may run)
         const uint32_t flags = std::strcmp(d.name, "help") == 0 ? kCommandForPlayers : 0u;

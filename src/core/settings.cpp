@@ -125,6 +125,12 @@ bool FileIniBackend::write(const std::string& mod, const std::string& key, const
     return WritePrivateProfileStringW(wide(mod).c_str(), wide(key).c_str(), wide(value).c_str(), file.c_str()) != 0;
 }
 
+bool FileIniBackend::erase(const std::string& mod, const std::string& key) {
+    const std::wstring file = dir_ + L"\\" + wide(mod) + L".ini";
+    if (GetFileAttributesW(file.c_str()) == INVALID_FILE_ATTRIBUTES) return true;  // no file: no line
+    return WritePrivateProfileStringW(wide(mod).c_str(), wide(key).c_str(), nullptr, file.c_str()) != 0;
+}
+
 namespace {
 // "hud.size" -> ("hud", "size"); false without a '.' or with an empty part.
 bool split_core_key(const std::string& key, std::wstring* section, std::wstring* name) {
@@ -155,6 +161,13 @@ bool CoreIniBackend::write(const std::string&, const std::string& key, const std
     return WritePrivateProfileStringW(section.c_str(), name.c_str(), wide(value).c_str(), path_.c_str()) != 0;
 }
 
+bool CoreIniBackend::erase(const std::string&, const std::string& key) {
+    std::wstring section, name;
+    if (!split_core_key(key, &section, &name)) return false;
+    if (GetFileAttributesW(path_.c_str()) == INVALID_FILE_ATTRIBUTES) return true;  // no file: no line
+    return WritePrivateProfileStringW(section.c_str(), name.c_str(), nullptr, path_.c_str()) != 0;
+}
+
 std::optional<std::string> RoutingIniBackend::read(const std::string& mod, const std::string& key) {
     IniBackend* b = mod == kEmfSettingsId ? emf_ : mods_;
     return b ? b->read(mod, key) : std::nullopt;
@@ -163,6 +176,11 @@ std::optional<std::string> RoutingIniBackend::read(const std::string& mod, const
 bool RoutingIniBackend::write(const std::string& mod, const std::string& key, const std::string& value) {
     IniBackend* b = mod == kEmfSettingsId ? emf_ : mods_;
     return b && b->write(mod, key, value);
+}
+
+bool RoutingIniBackend::erase(const std::string& mod, const std::string& key) {
+    IniBackend* b = mod == kEmfSettingsId ? emf_ : mods_;
+    return b && b->erase(mod, key);
 }
 
 const SettingsStore::Entry* SettingsStore::find(const std::string& mod, const std::string& key) const {
@@ -297,6 +315,34 @@ SettingsStore::SetResult SettingsStore::set(const std::string& mod, const std::s
     if (auto* e = const_cast<Entry*>(find(mod, key))) {  // still there: entries change only under io_m_
         e->value = v;
         e->stored = true;
+    }
+    changes_.emplace_back(mod, key);
+    ++version_;
+    return SetResult::Ok;
+}
+
+SettingsStore::SetResult SettingsStore::reset(const std::string& mod, const std::string& key, std::string* why) {
+    std::lock_guard<std::mutex> io(io_m_);  // changes one at a time, in order
+    std::string dflt;
+    {
+        std::lock_guard<std::mutex> l(m_);
+        const Entry* e = find(mod, key);
+        if (!e) {
+            if (why) *why = "no setting \"" + key + "\" in " + mod;
+            return SetResult::UnknownSetting;
+        }
+        auto d = setting_value(e->def, e->def.default_value, true, nullptr);  // the default as values are kept
+        dflt = d ? *d : e->def.default_value;
+        if (!e->stored && e->value == dflt) return SetResult::Unchanged;
+    }
+    if (backend_ && !backend_->erase(mod, key)) {  // the file, outside m_
+        if (why) *why = "could not remove " + key + " from emf\\config\\" + mod + ".ini";
+        return SetResult::WriteFailed;
+    }
+    std::lock_guard<std::mutex> l(m_);
+    if (auto* e = const_cast<Entry*>(find(mod, key))) {  // still there: entries change only under io_m_
+        e->value = dflt;
+        e->stored = false;
     }
     changes_.emplace_back(mod, key);
     ++version_;

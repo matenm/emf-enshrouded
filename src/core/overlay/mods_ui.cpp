@@ -233,6 +233,15 @@ void draw_setting(SettingsStore& s, const std::string& mod, const SettingDef& d,
         ImGui::SameLine();
         ImGui::TextDisabled("(next start)");
     }
+    if (setting_resettable(s, mod, d.key)) {  // someone changed it: one click back to the default
+        ImGui::SameLine();
+        if (ImGui::SmallButton("reset")) {
+            ui.pending.erase(full);
+            apply_setting_reset(s, mod, d.key, ui);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("back to the default: %s", setting_shown_value(d, d.default_value).c_str());
+    }
     if (!active) ImGui::EndDisabled();
     const std::string condition = active ? "" : setting_condition_text(d, defs);
     for (const std::string* line : {&d.help, &condition}) {
@@ -349,6 +358,27 @@ bool apply_setting_edit(SettingsStore& store, const std::string& mod, const std:
         if (d.key == key) live = d.live;
     ui.message = key + " = " + store.get(mod, key) + (live ? "" : ": applies at the next game start");
     ui.message_error = false;
+    return true;
+}
+
+bool setting_resettable(const SettingsStore& store, const std::string& mod, const std::string& key) {
+    return store.stored(mod, key);
+}
+
+bool apply_setting_reset(SettingsStore& store, const std::string& mod, const std::string& key, ModsUiState& ui) {
+    std::string why;
+    const auto r = store.reset(mod, key, &why);
+    if (r != SettingsStore::SetResult::Ok && r != SettingsStore::SetResult::Unchanged) {
+        ui.message = key + ": " + why;
+        ui.message_error = true;
+        return false;
+    }
+    for (const auto& d : store.defs(mod))
+        if (d.key == key) {
+            ui.message = key + " is back to its default (" + setting_shown_value(d, store.get(mod, key)) + ")" +
+                         (d.live ? "" : ": applies at the next game start");
+            ui.message_error = false;
+        }
     return true;
 }
 

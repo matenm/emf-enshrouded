@@ -99,6 +99,10 @@ struct MemIni : IniBackend {
         values[mod + "." + key] = value;
         return true;
     }
+    bool erase(const std::string& mod, const std::string& key) override {
+        values.erase(mod + "." + key);
+        return true;
+    }
 };
 
 struct BFixture {
@@ -285,6 +289,35 @@ TEST_CASE("builtin commands: settings lists a mod's settings, set changes them")
     CHECK(f.ini.values["companion.enabled"] == "0");
     CHECK(bsaid("no mod \"ghost\""));
     CHECK(bsaid("sample_mod has no settings"));
+}
+
+TEST_CASE("builtin commands: reset puts one setting, or every setting of a mod (never its switch), back to its default") {
+    BFixture f;
+    FakeWorld w;
+    f.center.enqueue("set companion radius 20");
+    f.center.enqueue("set companion place bottom left");
+    f.center.enqueue("set companion enabled 0");
+    f.run(w);
+    REQUIRE(f.ini.values["companion.radius"] == "20");
+    f.center.enqueue("reset companion radius");
+    f.run(w);
+    CHECK(bsaid("companion.radius = 10 (the default)"));
+    CHECK(f.ini.values.count("companion.radius") == 0);
+    f.center.enqueue("reset companion");
+    f.run(w);
+    CHECK(bsaid("companion: 1 setting back to its default (place = 1 (bottom right))"));
+    CHECK(f.ini.values.count("companion.place") == 0);
+    CHECK(f.ini.values["companion.enabled"] == "0");  // its switch stays
+    f.center.enqueue("reset companion");
+    f.run(w);
+    CHECK(bsaid("companion: every setting is at its default"));
+    f.center.enqueue("reset companion nope");
+    f.center.enqueue("reset ghost");
+    f.center.enqueue("reset");
+    f.run(w);
+    CHECK(bsaid("no setting \"nope\""));
+    CHECK(bsaid("no mod \"ghost\""));
+    CHECK(bsaid("usage: reset <mod> [key]"));
 }
 
 TEST_CASE("builtin commands: set emf hud.size 120 changes EMF's own setting; settings emf lists its pages") {

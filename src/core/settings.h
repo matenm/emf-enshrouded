@@ -20,6 +20,8 @@ public:
     virtual ~IniBackend() = default;
     virtual std::optional<std::string> read(const std::string& mod, const std::string& key) = 0;
     virtual bool write(const std::string& mod, const std::string& key, const std::string& value) = 0;
+    // Removes the key's line (true also when there was none); false when it could not (a backend that cannot).
+    virtual bool erase(const std::string&, const std::string&) { return false; }
 };
 
 // <config_dir>\<mod>.ini, section [<mod>] (Win32 profile functions: only the key written changes).
@@ -28,6 +30,7 @@ public:
     explicit FileIniBackend(std::wstring config_dir) : dir_(std::move(config_dir)) {}
     std::optional<std::string> read(const std::string& mod, const std::string& key) override;
     bool write(const std::string& mod, const std::string& key, const std::string& value) override;
+    bool erase(const std::string& mod, const std::string& key) override;
 
 private:
     std::wstring dir_;
@@ -45,6 +48,7 @@ public:
     explicit CoreIniBackend(std::wstring ini_path) : path_(std::move(ini_path)) {}
     std::optional<std::string> read(const std::string& mod, const std::string& key) override;
     bool write(const std::string& mod, const std::string& key, const std::string& value) override;
+    bool erase(const std::string& mod, const std::string& key) override;
 
 private:
     std::wstring path_;
@@ -56,6 +60,7 @@ public:
     RoutingIniBackend(IniBackend* emf, IniBackend* mods) : emf_(emf), mods_(mods) {}
     std::optional<std::string> read(const std::string& mod, const std::string& key) override;
     bool write(const std::string& mod, const std::string& key, const std::string& value) override;
+    bool erase(const std::string& mod, const std::string& key) override;
 
 private:
     IniBackend* emf_;
@@ -88,6 +93,10 @@ public:
 
     enum class SetResult { Ok, Unchanged, UnknownSetting, Invalid, WriteFailed };
     SetResult set(const std::string& mod, const std::string& key, const std::string& value, std::string* why = nullptr);
+    // Back to the default: the stored line is removed (never the default written in: EMF's look reads only the keys
+    // someone set, and a mod's next version may change a default), recorded as a change. Unchanged when nobody had set
+    // it; WriteFailed (nothing changes) when the line could not be removed.
+    SetResult reset(const std::string& mod, const std::string& key, std::string* why = nullptr);
 
     // The on/off switch ("enabled" in the mod's ini; `fallback` when it holds nothing readable).
     bool enabled(const std::string& mod, bool fallback) const;

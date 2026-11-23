@@ -28,6 +28,10 @@ struct MemIni : IniBackend {
         values[mod + "." + key] = value;
         return true;
     }
+    bool erase(const std::string& mod, const std::string& key) override {
+        values.erase(mod + "." + key);
+        return true;
+    }
 };
 
 SettingDef def(const char* key, SettingType t, const char* dflt) {
@@ -187,6 +191,26 @@ TEST_CASE("mods ui: an edit from a widget is saved, or refused with the reason s
     CHECK(ui.message.find("between 2 and 50") != std::string::npos);
     CHECK(apply_setting_edit(s, "m", "h24", "0", ui));
     CHECK(ui.message == "h24 = 0");
+}
+
+TEST_CASE("mods ui: reset puts a setting back to its default and says so; only a setting someone changed has it") {
+    MemIni ini;
+    SettingsStore s(&ini);
+    SettingDef radius = def("radius", SettingType::Int, "10");
+    radius.min = 2;
+    radius.max = 50;
+    radius.has_min = radius.has_max = true;
+    s.declare("m", radius);
+    ModsUiState ui;
+    CHECK_FALSE(setting_resettable(s, "m", "radius"));
+    REQUIRE(apply_setting_edit(s, "m", "radius", "20", ui));
+    CHECK(setting_resettable(s, "m", "radius"));
+    CHECK(apply_setting_reset(s, "m", "radius", ui));
+    CHECK(s.get("m", "radius") == "10");
+    CHECK(ini.values.count("m.radius") == 0);
+    CHECK(ui.message == "radius is back to its default (10): applies at the next game start");
+    CHECK_FALSE(ui.message_error);
+    CHECK_FALSE(setting_resettable(s, "m", "radius"));
 }
 
 TEST_CASE("mods ui: the console's Mods tab draws every kind of setting and many mods without ImGui errors") {
