@@ -4312,6 +4312,34 @@ TEST_CASE("threat: never on a monster not in the fight, a player-side creature, 
     CHECK(switches(b, 74));
 }
 
+// A creature the game keeps pacified (the game's Beastmaster skill on Vukah) is no foe: the beasts never draw it into
+// the fight, a hit on its player does not make a beast taunt it, and one held that becomes pacified is let go.
+TEST_CASE("threat (1.20): a pacified monster is never drawn to the beasts, nor taunted; one held that becomes pacified gets its own pick back") {
+    RollRig b;
+    b.reply("beastmaster.give boar");
+    out_at(b, "Boar", 1234, 0, 4);
+    b.roll(0.99);  // a pick would be the boar
+    monster(b, 75, 6, 4, 1);
+    pacify(b, 75, true);
+    b.seconds(2);
+    CHECK(pick_of(b, 75) == 1);  // left to the game
+    CHECK(switches(b, 75));
+    deliver(b.r.fake, "HitEvent", hit_event(75, 1));  // it hits the player beside the boar anyway
+    one_step(b);
+    CHECK(pick_of(b, 75) == 1);
+    CHECK(switches(b, 75));
+    monster(b, 76, 6, 4, 1);
+    b.seconds(1);
+    REQUIRE(pick_of(b, 76) == 1234);
+    REQUIRE_FALSE(switches(b, 76));
+    pacify(b, 76, true);  // the game makes its peace
+    one_step(b);
+    CHECK(switches(b, 76));  // let go
+    game_picks(b, 76, 1);
+    b.seconds(2);
+    CHECK(pick_of(b, 76) == 1);
+}
+
 // ---- Taunt ----
 namespace {
 // Player 1's beasts `names` (given now) at loyalty 10 with Taunt spent `points` times, at a stable.
