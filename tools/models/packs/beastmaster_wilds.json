@@ -7,7 +7,7 @@
  "authors": [
   "EMF contributors"
  ],
- "notes": "Each model was generated standing as its game animal stands at rest (two pictures made from renders of the game animal's body, then Meshy multi-image-to-3D at 12000 polygons) and fitted straight onto that animal's skeleton with blender/fit_to_game_skeleton.py --keep-uvs --material <slot> (the fox also --sides), without own proportions: the game's skeleton, clips and graph play, so the pack adds no skeleton, clip or graph. Fox and wolf stand on the wolf (material 0), bear, panther and lynx on the sabretooth (material 1), goat, ram, deer, elk and llama on the goat (material 0); the goat has no attack clips, so those five cannot fight. A coat is the same fitted model with another texture (a Meshy retexture that kept the model's UVs) at 512 px, 1.1 times the size; a base animal's texture is 1024 px. The bear, panther and lynx were made with the sabretooth's hanging front toes; what lies under the ground when they stand is flattened into a sole. Template and model GUIDs are fixed.",
+ "notes": "Each model was generated standing as its game animal stands at rest (two pictures made from renders of the game animal's body, then Meshy multi-image-to-3D at 12000 polygons) and fitted straight onto that animal's skeleton with blender/fit_to_game_skeleton.py --keep-uvs --material <slot> (the fox also --sides), without own proportions: the game's skeleton, clips and graph play, so the pack adds no skeleton, clip or graph. Fox and wolf stand on the wolf (material 0), bear, panther and lynx on the sabretooth (material 1), goat, ram, deer, elk and llama on the goat (material 0), the ox on the yak (material 0); the goat has no attack clips, so those five cannot fight. A coat is the same fitted model with another texture (a Meshy retexture that kept the model's UVs) at 512 px, 1.1 times the size; a base animal's texture is 1024 px. The bear, panther and lynx were made with the sabretooth's hanging front toes; what lies under the ground when they stand is flattened into a sole. Template and model GUIDs are fixed.",
  "creatures": [
   {
    "name": "wilds_fox",
@@ -930,6 +930,106 @@
      "type": "ScaleComponent",
      "value": {
       "uniformScale": 1.65
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_ox",
+   "glb": "../../../analysis/models/wilds/ox.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/Enemy_yak_01.hierarchy.json",
+   "source_model_guid": "d0211f52-8b8f-4090-89b0-4b853d67d320",
+   "source_model_json": "../../../analysis/model_survey/dump/Enemy_yak_01.json",
+   "source_template": "Animal_Wildlife_T5_Yak_AG2",
+   "template_name": "Wilds_Ox",
+   "model_guid": "e6334aeb-f590-4ea2-b637-188ffd86b400",
+   "template_guid": "12454bfc-06a3-402b-a332-d3cf40a5db16",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/ox",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "573f55ba-138a-4397-89e3-d1b9b84f2630"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.0
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_ox_white",
+   "glb": "../../../analysis/models/wilds/ox.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/Enemy_yak_01.hierarchy.json",
+   "source_model_guid": "d0211f52-8b8f-4090-89b0-4b853d67d320",
+   "source_model_json": "../../../analysis/model_survey/dump/Enemy_yak_01.json",
+   "source_template": "Animal_Wildlife_T5_Yak_AG2",
+   "template_name": "Wilds_Ox_White",
+   "model_guid": "0f555fb1-23ff-48ff-8ac4-698c392f8cae",
+   "template_guid": "9678a7cc-74f3-4864-b215-232b3df29321",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/ox_white",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "9718d68f-462c-4f1e-a7ae-9ee3f7d4cb38"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.1
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_ox_black",
+   "glb": "../../../analysis/models/wilds/ox.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/Enemy_yak_01.hierarchy.json",
+   "source_model_guid": "d0211f52-8b8f-4090-89b0-4b853d67d320",
+   "source_model_json": "../../../analysis/model_survey/dump/Enemy_yak_01.json",
+   "source_template": "Animal_Wildlife_T5_Yak_AG2",
+   "template_name": "Wilds_Ox_Black",
+   "model_guid": "fbe03dca-e93f-428b-9bef-9b2dd72d67f6",
+   "template_guid": "d6793ae5-58cc-4c29-9625-1a1927c8c055",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/ox_black",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "6f71bafa-dbe7-4251-a149-910966d90d18"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.1
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_ox_red",
+   "glb": "../../../analysis/models/wilds/ox.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/Enemy_yak_01.hierarchy.json",
+   "source_model_guid": "d0211f52-8b8f-4090-89b0-4b853d67d320",
+   "source_model_json": "../../../analysis/model_survey/dump/Enemy_yak_01.json",
+   "source_template": "Animal_Wildlife_T5_Yak_AG2",
+   "template_name": "Wilds_Ox_Red",
+   "model_guid": "502e9a8a-05f5-4d41-a389-1e3e41f524e4",
+   "template_guid": "e0ecf31d-0ede-49d0-b5a6-6feb1c87b261",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/ox_red",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "a0e4161c-8b41-422e-b0b2-50d940df794d"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.1
      }
     }
    ]
