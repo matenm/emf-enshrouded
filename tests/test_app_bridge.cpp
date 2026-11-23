@@ -279,7 +279,10 @@ TEST_CASE("app bridge: set_setting and reset_setting with the id emf change EMF'
     for (const auto& r : replies)
         if (r.find("\"type\":\"state\"") != std::string::npos) listed = r.find("\"emf_settings\":[") != std::string::npos && r.find("cascadia") != std::string::npos;
     CHECK(listed);
-    CHECK(result_of(bridge.handle(R"({"cmd":"reset_setting","id":"emf","key":"overlay.font"})")).get("ok")->b);
+    host.running = "enshrouded.exe (process 5) is running from this folder";
+    const json::Value reset = result_of(bridge.handle(R"({"cmd":"reset_setting","id":"emf","key":"overlay.font"})"));
+    CHECK(reset.get("ok")->b);
+    CHECK(reset.get("text")->s.find("in-game Settings tab") != std::string::npos);  // EMF's own: not the Mods tab
     CHECK(g.read(L"emf\\emf_core.ini").find("font=") == std::string::npos);
 }
 

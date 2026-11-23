@@ -819,7 +819,9 @@ std::vector<std::string> Bridge::handle(const std::string& message) {
                                                                    : reset_mod_setting(game, text_of(m, "id"), key);
         std::string text = c.unchanged ? "Already at the default." : key.empty() ? "Every setting is back to its default." : "Back to the default.";
         if (c.ok && !c.unchanged && !host_.running_reason().empty())
-            text += " The running game uses it from its next start (the in-game Mods tab resets settings at once).";
+            text += text_of(m, "id") == core::kEmfSettingsId
+                        ? " The running game uses it from its next start (the in-game Settings tab resets it at once)."
+                        : " The running game uses it from its next start (the in-game Mods tab resets settings at once).";
         return with_state(result(cmd, c.ok, c.error, c.ok ? text : ""));
     }
     if (auto out = handle_profiles(cmd, m)) return *out;  // mod profiles (bridge_profiles.cpp)

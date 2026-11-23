@@ -92,6 +92,7 @@ function onMessage(m) {
     if (refreshAfterState) {  // a saved setting decides whether others can be changed: draw them again
       refreshAfterState = false;
       forceDetails = true;
+      forceEmfSettings = true;
     }
     render();
     updatesOnState();
@@ -159,6 +160,7 @@ function onResult(m) {
     else {
       settingErrors[m.ref] = m.error;
       forceDetails = true;  // the control shows the stored value again, with the reason under it
+      if (m.ref.startsWith(EMF_CARD.key + ':')) forceEmfSettings = true;  // a setting of the EMF tab's card
     }
   }
   if (!m.ok && m.error) toast(m.error, true);
@@ -473,6 +475,7 @@ window.addEventListener('keydown', (e) => {
     const what = e.key && e.key.length === 1 ? e.key.toUpperCase() : (e.key || e.code || 'That key');
     if (!sc) toast(what + ' cannot open the console: choose another key (Esc cancels).', true);
     else if (sc === 0x1c) toast('Enter sends the command line: choose another key (Esc cancels).', true);
+    else if (sc === 0x1d) toast('Left Ctrl cannot be the console key here: AltGr and Pause press it too. Choose another key (Esc cancels).', true);
     else bindCaptured('0x' + sc.toString(16).padStart(2, '0'));
     return;
   }
@@ -818,9 +821,12 @@ function renderEmf() {
 const EMF_CARD = { key: 'emf-core', id: 'emf', live_where: 'in-game Settings tab' };
 let emfSettingsPage = '';
 let emfSettingsShown = '';
+let forceEmfSettings = false;  // a save was refused: draw the card again even if one of its fields has focus
 function renderEmfSettings(force) {
   const box = $('emf-settings');
   if (!box || !state) return;
+  if (forceEmfSettings) force = true;
+  forceEmfSettings = false;
   const list = (state.game_found && state.emf_installed && !state.server && state.emf_settings) || [];
   $('emf-settings-title').hidden = box.hidden = !list.length;
   if (!list.length) { emfSettingsShown = ''; return; }
