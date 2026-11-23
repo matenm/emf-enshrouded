@@ -736,15 +736,86 @@ TEST_CASE("path service (v48): a creature's profile goes to the game with the qu
     CHECK(done[1].result.height == 0.0f);
 }
 
-TEST_CASE("api table (v48): version 48 (0.6.20: EmfPathQuery.as_entity, the result's used values); v48 did not grow the table") {
+TEST_CASE("api table (v49): version 49 (0.6.22: EmfPathQuery.as_state); v48 and v49 did not grow the table") {
     const EmfApi* api = api_table();
-    CHECK(api->version == 48u);
-    CHECK(EMF_API_VERSION == 48);
+    CHECK(api->version == 49u);
+    CHECK(EMF_API_VERSION == 49);
     CHECK(kApiV48Size == kApiV47Size);
-    CHECK(api->size == kApiV48Size);
+    CHECK(kApiV49Size == kApiV48Size);
+    CHECK(api->size == kApiV49Size);
     CHECK(api->path_find != nullptr);
     CHECK(kPathQueryV37Size == 52u);
-    CHECK(sizeof(EmfPathQuery) == 56u);
+    CHECK(kPathQueryV48Size == 56u);
+    CHECK(sizeof(EmfPathQuery) == 60u);
     CHECK(kPathResultV42Size == 32u);
     CHECK(sizeof(EmfPathResult) == 48u);
+}
+
+TEST_CASE("path creature (v49): an enemy's Guard profile from its behaviour: its extended moves and roaming costs") {
+    const PathCreature c = creature();
+    CHECK(c.enemy);
+    CHECK(c.guard_moves == (EMF_PATH_JUMP_UP | EMF_PATH_JUMP_DOWN | EMF_PATH_JUMP_ACROSS));  // the template's 0x1c
+    CHECK(c.roam_cost[4] == doctest::Approx(0.3f));  // road (factor 6), spread as the default costs are
+    CHECK(c.cost[4] == doctest::Approx(1.6f));       // the calm cost stays the default one
+
+    Parts p;
+    g::Wildlife wild{};  // wildlife has no Guard: no extended moves
+    wild.movementSetup.defaultMoveTypes = EMF_PATH_WALK;
+    PathCreatureParts wp = p.parts(true, false);
+    wp.wildlife = &wild;
+    wp.wildlife_size = sizeof wild;
+    PathCreature w;
+    REQUIRE(read_path_creature(wp, &w));
+    CHECK_FALSE(w.enemy);
+    CHECK(w.guard_moves == 0u);
+}
+
+TEST_CASE("path used (v49): as_state guard adds the creature's extended moves; calm (0) plans as v48") {
+    const PathCreature c = creature();
+    EmfPathQuery q = query();
+    q.as_entity = 5;
+    q.as_state = EMF_PATH_AS_GUARD;
+    PathUsed u = path_used(q, &c);
+    CHECK(u.moves == (EMF_PATH_WALK | EMF_PATH_OPEN_DOOR | EMF_PATH_JUMP_UP | EMF_PATH_JUMP_DOWN | EMF_PATH_JUMP_ACROSS));
+    q.as_state = EMF_PATH_AS_CALM;
+    u = path_used(q, &c);
+    CHECK(u.moves == (EMF_PATH_WALK | EMF_PATH_OPEN_DOOR));
+}
+
+TEST_CASE("path query bytes (v49): in Guard the creature's roaming costs go to the game, calm its default costs") {
+    const PathCreature c = creature();
+    EmfPathQuery q = query();
+    q.as_entity = 5;
+    q.as_state = EMF_PATH_AS_GUARD;
+    uint8_t b[kPathQueryBytes] = {};
+    fill_path_query(b, q, 7, &c);
+    float road = 0;
+    std::memcpy(&road, b + 0x6c + 4 * 4, 4);
+    CHECK(road == doctest::Approx(0.3f));
+    uint16_t moves = 0;
+    std::memcpy(&moves, b + 0x54, 2);
+    CHECK((moves & EMF_PATH_JUMP_UP) != 0);
+    q.as_state = EMF_PATH_AS_CALM;
+    std::memset(b, 0, sizeof b);
+    fill_path_query(b, q, 7, &c);
+    std::memcpy(&road, b + 0x6c + 4 * 4, 4);
+    CHECK(road == doctest::Approx(1.6f));
+}
+
+TEST_CASE("path query check (v49): as_state needs as_entity and a known state; Guard needs an enemy") {
+    EmfPathQuery q = query();
+    q.as_state = EMF_PATH_AS_GUARD;
+    CHECK(path_query_check(q) == "as_state needs as_entity (the creature whose state it plans in)");
+    q.as_entity = 5;
+    CHECK(path_query_check(q).empty());
+    q.as_state = 7;
+    CHECK(path_query_check(q) == "unknown as_state (EMF_PATH_AS_*)");
+    q.as_state = EMF_PATH_AS_GUARD;
+    const PathCreature enemy = creature();
+    CHECK(path_as_check(q, enemy).empty());
+    PathCreature villager;  // no enemy behaviour: no Guard state
+    CHECK(path_as_check(q, villager) ==
+          "as_entity 5: as_state guard needs an enemy (Enemy01BehaviorState): only enemies walk in the game's Guard state");
+    q.as_state = EMF_PATH_AS_CALM;
+    CHECK(path_as_check(q, villager).empty());
 }

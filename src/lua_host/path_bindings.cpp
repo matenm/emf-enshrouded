@@ -1,7 +1,8 @@
-// Lua 1.29 paths on the game's path grid (API v37; 1.35: points[i].door, API v42; 1.41: as, result.used, API v48): emf.path_find(world, from, to [, opts], fn) and emf.path_cancel(id).
+// Lua 1.29 paths on the game's path grid (API v37; 1.35: points[i].door, API v42; 1.41: as, result.used, API v48; 1.43: state, API v49): emf.path_find(world, from, to [, opts], fn) and emf.path_cancel(id).
 // The answer comes once, after a server step or more, to fn(world, result, points); a script paused or reloaded in
 // between hears nothing.
 #include <cstddef>
+#include <cstring>
 #include <memory>
 #include <string>
 
@@ -152,6 +153,7 @@ int l_path_find(lua_State* L) {
     read_pos(L, 2, q.from, "from");
     read_pos(L, 3, q.to, "to");
     int fn_index = 4;
+    bool state_given = false;
     if (lua_istable(L, 4)) {
         fn_index = 5;
         if (opt_bool(L, 4, "jumps")) q.moves |= EMF_PATH_JUMP_UP | EMF_PATH_JUMP_DOWN | EMF_PATH_JUMP_ACROSS;
@@ -165,11 +167,23 @@ int l_path_find(lua_State* L) {
         q.max_nodes = static_cast<uint32_t>(opt_number(L, 4, "nodes", 0, 0, 20000));
         q.owner = static_cast<uint32_t>(opt_number(L, 4, "owner", 0, 0, 4294967295.0));
         q.as_entity = static_cast<uint32_t>(opt_number(L, 4, "as", 0, 0, 4294967295.0));  // 1.41 (API v48)
+        lua_getfield(L, 4, "state");  // 1.43 (API v49): the state `as` walks in
+        if (!lua_isnil(L, -1)) {
+            const char* st = lua_type(L, -1) == LUA_TSTRING ? lua_tostring(L, -1) : nullptr;
+            if (!st || (std::strcmp(st, "calm") != 0 && std::strcmp(st, "guard") != 0))
+                luaL_error(L, "emf.path_find: state is \"calm\" or \"guard\"");
+            state_given = true;
+            q.as_state = std::strcmp(st, "guard") == 0 ? EMF_PATH_AS_GUARD : EMF_PATH_AS_CALM;
+        }
+        lua_pop(L, 1);
     }
     luaL_checktype(L, fn_index, LUA_TFUNCTION);
     const EmfApi* a = s->host->api;
     if (q.as_entity && a && a->version < 48)  // an older core ignores it: it would plan as a player
         luaL_error(L, "emf.path_find: as needs EMF 0.6.20 or newer (core API v48)");
+    if (state_given && !q.as_entity) luaL_error(L, "emf.path_find: state needs as (the creature whose state it plans in)");
+    if (state_given && a && a->version < 49)  // an older core ignores it: it would plan calm
+        luaL_error(L, "emf.path_find: state needs EMF 0.6.22 or newer (core API v49)");
     if (!has_v37(a)) {
         lua_pushnil(L);
         return 1;

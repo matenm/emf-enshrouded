@@ -107,6 +107,7 @@ version the additions need (empty: the v20 the `lua` mod needs is enough). Range
 | 1.40 | terrain a player placed: the break option `terrain`, `emf.find_wall`'s `{terrain = true}`, a terrain block's `world`; `emf.spawn`'s `{yaw = degrees}`; a marker's `bar` | v47 |
 | 1.41 | `emf.path_find`'s `as = entity` (plan as that creature walks) and `result.used` | v48 |
 | 1.42 | `emf.offer`'s `sequence = "chest"` (the game's storage screen of the entity's own inventory) | v48 |
+| 1.43 | `emf.path_find`'s `state = "guard"` (plan as an enemy walks in the game's Guard state); `emf.enemy_move`'s `clear = true` (arrived only with no wall between) | v49 |
 
 ## What happens when a script fails
 
@@ -674,6 +675,7 @@ errors.
 | `nodes` | how many nodes the search may spend (0 to 20000; default 2000) |
 | `owner` | an entity the query belongs to (default: the first player; with `as`, that creature) |
 | `as` | (1.41) an entity id: plan as that creature walks when calm, from its templates: its room (the game's own, from its `PathWalker`: a Vukah warrior is a point 2 m tall, the brawler 0.5 m all round, whatever its body), its node rules (a Vukah never crosses tar, deadly fog or lava), its default moves (walk for the game's Vukah and wolves; the door move for an enemy that can open doors) and its costs per ground type. Your options go on top: `jumps`, `doors`, `swim` are added, `max_jump_up`/`max_jump_down` as given, `width` and `height` replace its room. With `doors = true` the room across is 0 unless you give `width` (any room loses the door point). An enemy sent somewhere (the game's Guard state: EMF's move orders, a raid's march) or in a fight also jumps (a warrior up, down and across, the brawler and wolves down and across): add `jumps` with small `max_jump_up`/`max_jump_down` (a modder's raiders walk jumps of at most 1 m) to plan for that. Refused (nil, the reason in the log) for an entity that is not a creature the game plans paths for. An older core would ignore it and plan as a player, so on a core older than API v48 it is an error |
+| `state` | (1.43, with `as`) `"calm"` (the default, as 1.41) or `"guard"`: plan as that enemy walks in the game's Guard state, as on `emf.enemy_move` or a raid's march: its own extended moves are added (jumps up, down and across for a Vukah warrior; down and across for a brawler or a wolf) and its roaming costs per ground type are used, as the game's own query in Guard holds them. Jump heights stay yours (`max_jump_up`, `max_jump_down`; 0 = no limit, as the game's). Refused (nil, the reason in the log) for a creature without the enemy AI. Another value, `state` without `as`, or a core older than API v49 (it would plan calm) is an error |
 
 Use `closest = true` and check `reaches`. A short path can mean blocked or ran out: without `closest`, `"no_path"` means
 the target is shut off for these moves, while `"too_long"` (all `nodes` spent) and `"no_memory"` (the game's fixed
@@ -752,12 +754,13 @@ if not id then emf.log("no order: " .. why) end
 
 ## Move orders (1.33)
 
-`emf.enemy_move(world, enemy, points [, {arrive = m, seconds = n, peaceful = true, allies = true}] [, fn])` walks a
+`emf.enemy_move(world, enemy, points [, {arrive = m, seconds = n, peaceful = true, allies = true, clear = true}] [, fn])` walks a
 creature with the enemy AI (an enemy, or a tamed beast with `allies = true`) to a point `{x, y, z}` or through a list of
 up to 16 of them (the points `emf.path_find` gives fit; thin a longer path to 16). It walks the game's own way: EMF puts a hidden waypoint at each
 point in turn and gives the creature the game's guard order on it, so it finds its path and jumps where its kind can. Seen
 in game: a Vukah walked 36 m in 10 s. A creature stops about 3 m short of a guarded spot (its guard distance), so a point
-counts as reached within that distance + 1 m, or within `arrive` if that is larger.
+counts as reached within that distance + 1 m, or within `arrive` if that is larger. That goes by distance alone: a
+creature just behind a thin wall from its point has arrived too, unless `clear = true`.
 
 - `arrive`: metres (0.5 to 50, default 2).
 - `seconds`: a time limit (default 0: none; at most 3600).
@@ -766,6 +769,9 @@ counts as reached within that distance + 1 m, or within `arrive` if that is larg
   Without it, it may fight on the way (the game's way) and goes on afterwards.
 - `stuck` (1.34): seconds without a metre closer (while not fighting) before it ends `"stuck"` (2 to 120; default 15).
 - `allies = true`: the creature may be a player's ally (a tamed beast).
+- `clear = true` (1.43): a point counts as reached only when no building block lies between the creature and it (a
+  line 1 m above its feet to 1 m above the point): one inside a wall from its point walks on, or ends `"stuck"`. Put the
+  point at least 0.5 m off a wall. On a core older than API v49 the move is refused (nil and why).
 - Another key, or a value of the wrong type (`peaceful = 1`), is a Lua error.
 
 `fn(world, id, status)` comes once when the move ends; `status` is `"arrived"`, `"stuck"` (no metre closer for 15 s,

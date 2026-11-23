@@ -69,6 +69,10 @@ struct PathCreature {
     bool has_finder = false;               // the PathFinder template's fields below were read
     uint32_t start_search[2] = {};         // start search radius across, up (half metres)
     float height_diff[3] = {};             // the highest step on terrain, buildings, colliders (metres)
+    // v49 (as_state guard): an enemy's Guard profile from its behaviour template
+    bool enemy = false;                    // it has the enemy behaviour (Enemy01BehaviorState): it can walk in Guard
+    uint16_t guard_moves = 0;              // movementSetup.extendedMoveTypes: added in Guard
+    float roam_cost[20] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};  // roamingCostFactors, as cost
 };
 // A creature's templates (each null when it has none) with their sizes.
 struct PathCreatureParts {
@@ -127,6 +131,8 @@ std::string path_answer_text(uint32_t id, const EmfPathResult& r, const EmfPathP
 std::string path_used_text(uint32_t id, const EmfPathResult& r);
 // "" when the query can be sent, else why not.
 std::string path_query_check(const EmfPathQuery& q);
+// v49: "" when the creature `as` (read for q.as_entity) can plan in q.as_state, else why not.
+std::string path_as_check(const EmfPathQuery& q, const PathCreature& as);
 
 class PathService {
 public:

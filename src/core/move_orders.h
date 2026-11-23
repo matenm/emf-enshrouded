@@ -66,6 +66,8 @@ public:
         std::function<bool(EmfWorld*, uint32_t entity)> dead;             // its health is known and 0 or less
         // moves a creature there with the game's teleport (one standing on another moving creature's spot); false: refused
         std::function<bool(EmfWorld*, uint32_t entity, double x, double y, double z)> nudge;
+        // v49 EMF_MOVE_CLEAR: a building block on the line from `from` to `to` (metres); null: no wall checks here
+        std::function<bool(EmfWorld*, const Point& from, const Point& to)> wall_between;
     };
     explicit MoveOrders(Deps d) : d_(std::move(d)) {}
 

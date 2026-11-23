@@ -133,9 +133,10 @@ int l_enemy_move(lua_State* L) {
             const char* k = lua_type(L, -2) == LUA_TSTRING ? lua_tostring(L, -2) : "";
             const bool number = !std::strcmp(k, "arrive") || !std::strcmp(k, "seconds") || !std::strcmp(k, "stuck");
             const bool peaceful = !std::strcmp(k, "peaceful");
-            const bool flag = !std::strcmp(k, "allies");
+            const bool flag = !std::strcmp(k, "allies") || !std::strcmp(k, "clear");  // clear: 1.43 (API v49)
             if (!number && !flag && !peaceful)
-                return luaL_error(L, "emf.enemy_move: unknown option '%s' (arrive, seconds, stuck, peaceful, allies)", k);
+                return luaL_error(L, "emf.enemy_move: unknown option '%s' (arrive, seconds, stuck, peaceful, allies, clear)",
+                                  k);
             if (number && lua_type(L, -1) != LUA_TNUMBER) return luaL_error(L, "emf.enemy_move: %s is a number", k);
             if (flag && !lua_isboolean(L, -1)) return luaL_error(L, "emf.enemy_move: %s is true or false", k);
             if (peaceful) {  // true / "players": its fights with players are cleared; "all": every fight
@@ -152,7 +153,7 @@ int l_enemy_move(lua_State* L) {
             } else if (!std::strcmp(k, "stuck")) {
                 o.stuck_seconds = static_cast<float>(lua_tonumber(L, -1));
             } else if (lua_toboolean(L, -1)) {
-                o.flags |= EMF_MOVE_ALLIES;
+                o.flags |= !std::strcmp(k, "clear") ? EMF_MOVE_CLEAR : EMF_MOVE_ALLIES;
             }
             lua_pop(L, 1);
         }

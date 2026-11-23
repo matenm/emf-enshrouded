@@ -515,12 +515,15 @@ void move_done(EmfWorld*, uint32_t id, uint32_t status, void* user) {
 void cmd_move(EmfWorld* w, int argc, const char* const* argv, void* u) {
     auto& c = ctx_of(u);
     std::vector<std::string> words = emf::coordinate_words({argv + 1, argv + argc});
-    bool peaceful = false, bad = false;
+    bool peaceful = false, bad = false, clear = false;
     float arrive = 0;  // 0: the core's 2 m
     for (bool more = true; more && !words.empty();) {  // the options at the end, in any order
         more = false;
         if (!peaceful && lower(words.back()) == "peaceful") {
             peaceful = more = true;
+            words.pop_back();
+        } else if (!clear && lower(words.back()) == "clear") {  // 0.6.22: arrived only with no wall between
+            clear = more = true;
             words.pop_back();
         } else if (words.size() >= 2 && lower(words[words.size() - 2]) == "arrive" && arrive == 0) {
             char* end = nullptr;
@@ -548,8 +551,8 @@ void cmd_move(EmfWorld* w, int argc, const char* const* argv, void* u) {
         }
     }
     if (!ok) {
-        command_reply_line("usage: move <enemy> <x> <y> <z> [peaceful] [arrive <metres>] | move <enemy> <entity | me> "
-                           "[peaceful] [arrive <metres>]");
+        command_reply_line("usage: move <enemy> <x> <y> <z> [peaceful] [arrive <metres>] [clear] | move <enemy> "
+                           "<entity | me> [peaceful] [arrive <metres>] [clear]");
         return;
     }
     if (c.api->size < offsetof(EmfApi, enemy_moving) + sizeof(c.api->enemy_moving) || !c.api->enemy_move) {
@@ -560,7 +563,7 @@ void cmd_move(EmfWorld* w, int argc, const char* const* argv, void* u) {
     EmfMoveOrder o{};
     o.size = sizeof o;
     o.enemy = enemy;
-    o.flags = peaceful ? EMF_MOVE_PEACEFUL : 0;
+    o.flags = (peaceful ? EMF_MOVE_PEACEFUL : 0) | (clear ? EMF_MOVE_CLEAR : 0);
     o.arrive = arrive;
     o.count = 1;
     o.points = &pt;
@@ -571,7 +574,8 @@ void cmd_move(EmfWorld* w, int argc, const char* const* argv, void* u) {
         command_reply_line(fmt("entity %u not moved: %s", enemy, o.why[0] ? o.why : "move orders are off"));
         return;
     }
-    const std::string within = arrive > 0 ? fmt(", arriving within %g m", arrive) : std::string();
+    std::string within = arrive > 0 ? fmt(", arriving within %g m", arrive) : std::string();
+    if (clear) within += within.empty() ? ", arriving with no wall between" : " with no wall between";
     command_reply_line(fmt("move %u: entity %u walks to (%.1f, %.1f, %.1f)%s%s (move.stop %u)", id, enemy, pt.x, pt.y,
                            pt.z, peaceful ? ", ignoring players" : "", within.c_str(), id));
 }
@@ -1676,13 +1680,15 @@ void cmd_path(EmfWorld* w, int argc, const char* const* argv, void* u) {
         else if (a == "closest") q.closest = 1;
         else if (a == "as" && !q.as_entity && i + 1 < words.size())
             ok = parse_uint(words[++i].c_str(), 0xffffffffu, &q.as_entity) && q.as_entity;
+        else if (a == "guard" && !q.as_state) q.as_state = EMF_PATH_AS_GUARD;  // 0.6.22: as it walks in Guard
         else if (a == "nodes" && !q.max_nodes && i + 1 < words.size())  // "nodes 20000", as the usage line says it
             ok = parse_uint(words[++i].c_str(), kPathMaxNodes, &nodes) && nodes && (q.max_nodes = nodes);
         else if (!q.max_nodes && parse_uint(a.c_str(), kPathMaxNodes, &nodes) && nodes) q.max_nodes = nodes;
         else ok = false;
     }
+    if (q.as_state && !q.as_entity) ok = false;  // guard plans as a creature
     if (!ok) {
-        command_reply_line("usage: path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000] [as <entity>]");
+        command_reply_line("usage: path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000] [as <entity> [guard]]");
         return;
     }
     const uint32_t player = c.player ? c.player() : 0;
@@ -1857,9 +1863,10 @@ bool add_builtin_commands(BuiltinContext& ctx) {
         {"order", "<enemy> <target> [seconds] [damage]: the enemy goes for the target (a door, a gate, a creature, a "
                   "player); damage is added to each of its hits on it (host)", cmd_order},
         {"order.stop", "<id>: end an order (host)", cmd_order_stop},
-        {"move", "<enemy> <x> <y> <z> [peaceful] [arrive <metres>] | <enemy> <entity | me> [peaceful] [arrive <metres>]: "
-                 "the enemy walks there (its own way, jumps if its kind can); peaceful: it ignores players; arrive: "
-                 "how close counts as there (2 m; 0.5-50) (host)", cmd_move},
+        {"move", "<enemy> <x> <y> <z> [peaceful] [arrive <metres>] [clear] | <enemy> <entity | me> [peaceful] "
+                 "[arrive <metres>] [clear]: the enemy walks there (its own way, jumps if its kind can); peaceful: it "
+                 "ignores players; arrive: how close counts as there (2 m; 0.5-50); clear: only with no wall between it "
+                 "and the point (host)", cmd_move},
         {"move.stop", "<id>: end a move (host)", cmd_move_stop},
         {"vmove", "<villager> <x> <y> <z> | <villager> <entity | me> [hold <seconds | always>]: the villager walks there "
                   "inside its own area (30 m around its home for the game's villagers) and may hold there (host)",
@@ -1873,7 +1880,7 @@ bool add_builtin_commands(BuiltinContext& ctx) {
         {"stack", "<item name> <max 1-65535>: change an item's stack size until the game restarts (host)", cmd_stack},
         {"door", "<entity> [open|close|lock|unlock] [front|back]: a door's state, or open, close or lock it (host)",
          cmd_door},
-        {"path", "<x> <y> <z> [jumps] [doors] [closest] [nodes <1-20000>] [as <entity>]: a path from you on the game's path grid (as: from that creature, planned as it walks); a door point names its door (it moves nothing; host)",
+        {"path", "<x> <y> <z> [jumps] [doors] [closest] [nodes <1-20000>] [as <entity> [guard]]: a path from you on the game's path grid (as: from that creature, planned as it walks); a door point names its door (it moves nothing; host)",
          cmd_path},
         {"path.door", "<entity>: what the game's path grid knows about a door: whether it is in the grid's door table, "
                       "open or closed there, its box and door row, and the node in the row's middle (type, ground, "

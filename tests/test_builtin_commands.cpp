@@ -1637,7 +1637,7 @@ TEST_CASE("builtin commands: move walks an enemy to a point or to an entity (pea
     CHECK(bsaid("move 61: entity 70 walks to (100.0, 20.0, -30.5) (move.stop 61)"));
     CHECK(bsaid("move 62: entity 70 walks to (100.0, 20.0, -30.5), ignoring players (move.stop 62)"));
     CHECK(bsaid("entity 13 not moved: it has no enemy AI to move"));
-    CHECK(bsaid("usage: move <enemy> <x> <y> <z> [peaceful] [arrive <metres>] | move <enemy> <entity | me> [peaceful] [arrive <metres>]"));
+    CHECK(bsaid("usage: move <enemy> <x> <y> <z> [peaceful] [arrive <metres>] [clear] | move <enemy> <entity | me> [peaceful] [arrive <metres>] [clear]"));
     CHECK(bsaid("move 61 ended"));
     CHECK(bsaid("no move 7"));
     REQUIRE(g_moves.size() == 2u);
@@ -1668,8 +1668,12 @@ TEST_CASE("builtin commands: move takes arrive <metres> (GitHub #44), in any ord
     f.center.enqueue("move 70 1 2 3 arrive");      // no metres
     f.center.enqueue("move 70 1 2 3 arrive x");
     f.center.enqueue("move 70 1 2 3 arrive -1");
+    f.center.enqueue("move 70 100 20 -30.5 clear arrive 1 peaceful");  // 0.6.22: arrived only with no wall between
     f.run(iw.w);
-    REQUIRE(g_moves.size() == 3u);
+    REQUIRE(g_moves.size() == 4u);
+    CHECK(g_moves[3].o.flags == (EMF_MOVE_PEACEFUL | EMF_MOVE_CLEAR));
+    CHECK(g_moves[3].o.arrive == doctest::Approx(1.0f));
+    CHECK(bsaid("move 64: entity 70 walks to (100.0, 20.0, -30.5), ignoring players, arriving within 1 m with no wall between (move.stop 64)"));
     CHECK(g_moves[0].o.arrive == doctest::Approx(0.5f));
     CHECK(g_moves[0].o.flags == 0u);
     CHECK(g_moves[1].o.arrive == doctest::Approx(1.0f));
@@ -1853,15 +1857,17 @@ TEST_CASE("builtin commands (v37): path checks its words; with the feature off i
     f.center.enqueue("path 3740 845 1440 nodes");                // no count
     f.center.enqueue("path 3740 845 1440 nodes 0");
     f.center.enqueue("path 3740 845 1440 nodes 9000 8000");      // two counts
+    f.center.enqueue("path 3740 845 1440 as 60 guard");           // 0.6.22: planned as it walks in Guard
+    f.center.enqueue("path 3740 845 1440 guard");                 // guard without as
     f.run(rw.iw.w);
     size_t usage = 0, refused = 0;
     for (const auto& l : g_bout) {
-        usage += l.find("usage: path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000] [as <entity>]") !=
+        usage += l.find("usage: path <x> <y> <z> [jumps] [doors] [closest] [nodes 1-20000] [as <entity> [guard]]") !=
                  std::string::npos;
         refused += l.find("path not asked") != std::string::npos;
     }
-    CHECK(usage == 10u);
-    CHECK(refused == 7u);
+    CHECK(usage == 11u);
+    CHECK(refused == 8u);
     CHECK(bsaid("path not asked (see the log: path_find refused"));
     CHECK(bsaid("path: entity 999 has no position in this world"));
 }

@@ -39,6 +39,9 @@ struct Fake {
     std::vector<std::pair<uint32_t, uint32_t>> pending;  // the queue the emf_moves program sends at the next step
     std::map<uint32_t, bool> dead;
     bool spawn_ok = true;
+    bool walls = true;   // a wall check is there (EMF's block queries work)
+    bool wall = false;   // a building block on every line it is asked about
+    std::vector<std::pair<std::array<double, 3>, std::array<double, 3>>> lines;  // the lines asked
 
     template <class T>
     T& add(uint32_t e) {
@@ -85,6 +88,11 @@ struct Fake {
                           pending.end());
         };
         d.dead = [this](EmfWorld*, uint32_t e) { return dead.count(e) && dead[e]; };
+        if (walls)
+            d.wall_between = [this](EmfWorld*, const std::array<double, 3>& from, const std::array<double, 3>& to) {
+                lines.push_back({from, to});
+                return wall;
+            };
         return d;
     }
 };
@@ -917,4 +925,39 @@ TEST_CASE("move orders (0.6.12): creatures half a metre apart, walking, or fight
         }
         CHECK(n.list.empty());
     }
+}
+
+TEST_CASE("move orders (v49): EMF_MOVE_CLEAR counts a point as reached only with no building block between it and the creature (GitHub #44)") {
+    Fake f = world();  // the enemy at (0, 10, 0)
+    f.wall = true;
+    MoveOrders o(f.deps());
+    Done d;
+    std::string why;
+    REQUIRE(o.add(W(), kEnemy, pts({{1.5, 10, 0}}), 2.0, 60, EMF_MOVE_CLEAR, cb(d), &why) != 0u);  // 1.5 m: within 2
+    f.now += 500;
+    o.step(W());
+    CHECK(d.calls == 0);  // a wall between: not there yet, it walks on
+    REQUIRE_FALSE(f.lines.empty());
+    CHECK(f.lines.back().first == std::array<double, 3>{0, 11, 0});    // 1 m above its feet
+    CHECK(f.lines.back().second == std::array<double, 3>{1.5, 11, 0}); // 1 m above the point
+    f.wall = false;
+    f.now += 500;
+    o.step(W());
+    CHECK(d.status == EMF_MOVE_ARRIVED);
+
+    Fake g = world();  // without the flag the wall is not asked about: by distance alone, as before
+    g.wall = true;
+    MoveOrders o2(g.deps());
+    Done d2;
+    REQUIRE(o2.add(W(), kEnemy, pts({{1.5, 10, 0}}), 2.0, 60, 0, cb(d2), &why) != 0u);
+    g.now += 500;
+    o2.step(W());
+    CHECK(d2.status == EMF_MOVE_ARRIVED);
+    CHECK(g.lines.empty());
+
+    Fake h = world();  // no wall check here: the flag is refused, not ignored
+    h.walls = false;
+    MoveOrders o3(h.deps());
+    CHECK(o3.add(W(), kEnemy, pts({{1.5, 10, 0}}), 2.0, 60, EMF_MOVE_CLEAR, cb(d), &why) == 0u);
+    CHECK(why == "EMF_MOVE_CLEAR: EMF cannot look for walls on this game build");
 }

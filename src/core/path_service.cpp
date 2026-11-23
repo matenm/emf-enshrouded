@@ -36,12 +36,13 @@ constexpr int kCostFrom[20] = {0, 0, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 11, 11, 11, 
 
 namespace {
 // The query's costs from a behaviour's default cost factors.
-void put_costs(const emf::gen::ecs::PathNodeCostFactors& f, PathCreature* c) {
+void spread_costs(const emf::gen::ecs::PathNodeCostFactors& f, float out[20]) {
     float factors[17];
     static_assert(sizeof factors == sizeof f);
     std::memcpy(factors, &f, sizeof factors);
-    for (int i = 0; i < 20; ++i) c->cost[i] = factors[kCostFrom[i]];
+    for (int i = 0; i < 20; ++i) out[i] = factors[kCostFrom[i]];
 }
+void put_costs(const emf::gen::ecs::PathNodeCostFactors& f, PathCreature* c) { spread_costs(f, c->cost); }
 // Copies a template of type T when it is there and has T's size; false when it has another size.
 template <class T>
 bool take(const void* p, size_t size, T* out, bool* had) {
@@ -84,6 +85,10 @@ bool read_path_creature(const PathCreatureParts& p, PathCreature* out) {
         c.moves = static_cast<uint16_t>(EMF_PATH_WALK | t->enemy.movementSetup.defaultMoveTypes |
                                         (t->enemy.openDoorSetup.canOpenDoors ? EMF_PATH_OPEN_DOOR : 0));
         put_costs(t->enemy.pathNodeSetup.defaultCostFactors, &c);
+        // in the game's Guard state (game program, sampled live 2026-11-21): its extended moves and its roaming costs
+        c.enemy = true;
+        c.guard_moves = t->enemy.movementSetup.extendedMoveTypes;
+        spread_costs(t->enemy.pathNodeSetup.roamingCostFactors, c.roam_cost);
     } else if (has_wildlife) {
         c.moves = static_cast<uint16_t>(EMF_PATH_WALK | t->wildlife.movementSetup.defaultMoveTypes);
         put_costs(t->wildlife.pathNodeSetup.defaultCostFactors, &c);
@@ -131,7 +136,8 @@ std::string path_creature_of(uint32_t entity, const PathComponentFn& get, const 
 
 PathUsed path_used(const EmfPathQuery& in, const PathCreature* as) {
     PathUsed u;
-    u.moves = static_cast<uint16_t>(in.moves | EMF_PATH_WALK | (as ? as->moves : 0));
+    const bool guard = as && in.as_state == EMF_PATH_AS_GUARD;
+    u.moves = static_cast<uint16_t>(in.moves | EMF_PATH_WALK | (as ? as->moves : 0) | (guard ? as->guard_moves : 0));
     u.jump_up = in.max_jump_up;
     u.jump_down = in.max_jump_down;
     if (in.width > 0 || !as) u.across = half_metres(in.width);
@@ -165,7 +171,7 @@ void fill_path_query(uint8_t q[kPathQueryBytes], const EmfPathQuery& in, uint32_
         put_u32(0x60, as->forbidden);
         put_u32(0x64, as->required);  // the target follows the path's rules (as the game's without target rules)
         put_u32(0x68, as->forbidden);
-        put(0x6c, as->cost, sizeof as->cost);
+        put(0x6c, in.as_state == EMF_PATH_AS_GUARD ? as->roam_cost : as->cost, sizeof as->cost);
         if (as->has_finder) {
             put(0xbc, as->height_diff, sizeof as->height_diff);
             start_search[0] = (std::max)(start_search[0], as->start_search[0]);
@@ -260,6 +266,15 @@ std::string path_query_check(const EmfPathQuery& q) {
     if (dist(q.from, q.to) > kPathMaxDistance) return "from and to are more than 200 m apart (the game does not search that far)";
     if (q.moves & ~kKnownMoves) return "unknown move bits (EMF_PATH_*)";
     if (q.max_nodes > kPathMaxNodes) return "max_nodes over 20000";
+    if (q.as_state != EMF_PATH_AS_CALM && q.as_state != EMF_PATH_AS_GUARD) return "unknown as_state (EMF_PATH_AS_*)";
+    if (q.as_state && !q.as_entity) return "as_state needs as_entity (the creature whose state it plans in)";
+    return {};
+}
+
+std::string path_as_check(const EmfPathQuery& q, const PathCreature& as) {
+    if (q.as_state == EMF_PATH_AS_GUARD && !as.enemy)
+        return "as_entity " + std::to_string(q.as_entity) +
+               ": as_state guard needs an enemy (Enemy01BehaviorState): only enemies walk in the game's Guard state";
     return {};
 }
 

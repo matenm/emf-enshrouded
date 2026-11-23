@@ -1358,7 +1358,8 @@ if (!api()->enemy_move(world, &o, on_moved, nullptr)) EMF_LOG(mod, "no move: %s"
 Console: `move <enemy> <x> <y> <z> [peaceful] [arrive <metres>]`, `move <enemy> <entity | me> [peaceful] [arrive
 <metres>]` (0.6.22: `arrive` sets `arrive`) and `move.stop <id>` (never a tamed beast); the console says later how the
 move ended. "Arrived" goes by distance alone: a creature on the other side of a thin wall from its point, within
-`arrive` (or within its guard distance + 1 m once it guards the waypoint, about 4 m), has arrived too.
+`arrive` (or within its guard distance + 1 m once it guards the waypoint, about 4 m), has arrived too, unless the move
+has `EMF_MOVE_CLEAR` (v49; console `clear`).
 
 ## v43: the game's own permissions of a player
 
@@ -1560,6 +1561,42 @@ The result's `moves`, `jump_up`, `jump_down`, `width` and `height` say what the 
 `as_entity` and the query's own fields (on every v48 result, also without `as_entity`). Console: `path <x> <y> <z> ...
 as <entity>` plans from that creature's position as it; every `path` answer now has a second line with what it
 planned with.
+
+## v49: planning in the Guard state, arriving clear of walls
+
+The version only (no new function; GitHub #44). C++: `emf::has_v49()`. Lua 1.43.
+
+- **`EmfPathQuery.as_state`** (with `as_entity`): `EMF_PATH_AS_CALM` (0, as v48) or `EMF_PATH_AS_GUARD`: plan as that
+  enemy walks in the game's Guard state, as on an EMF move order or a raid's march. Its behaviour's extended moves
+  (`Enemy01BehaviorState` `movementSetup.extendedMoveTypes`: the Vukah warrior 0x1c, jumps up, down and across; the
+  brawler and the wolf 0x18, down and across) are added, and its roaming costs per ground type
+  (`pathNodeSetup.roamingCostFactors`: road 0.3, tar and mud 4 for a Vukah) replace the default ones, as the game's own
+  queries in Guard were seen to hold them. Jump heights stay the query's (0 = no limit, as the game's). The result's
+  `moves` shows the jumps. Refused without `as_entity`, for an unknown state, and for a creature without the enemy
+  behaviour (wildlife, villagers). An older core ignores the field (it plans calm): check the version. Lua:
+  `state = "guard"`; console: `path <x> <y> <z> ... as <entity> guard`.
+- **`EMF_MOVE_CLEAR`** (`enemy_move` only): a point counts as reached only when `find_wall` finds no building block on
+  the line from the creature (1 m above its feet) to the point (1 m above it). Without it a point is reached by distance
+  alone (within `arrive`, or the creature's guard distance + 1 m once it guards the waypoint, about 4 m), so a raider
+  just inside a wall from a point outside it has arrived; with it, it walks on or ends `STUCK`. Put the point at least
+  0.5 m off a wall (a point inside a wall's cell is never clear). Building blocks only, as `find_wall` (not the world's
+  ground or a ruin). An older core refuses the flag ("unknown flags"). Lua: `clear = true`; console: `move ... clear`.
+- Console (no API change): `move ... arrive <metres>` sets `arrive`; `path ... nodes <1-20000>` takes the word before
+  the count, as its usage line always said (a bare count still works).
+
+**A planned jump the creature does not make (a modder's tests, 0.6.21).** A Vukah warrior at a closed double door in a
+stone wall, the target 20 m behind it, planned with `jumps closest as_entity`:
+
+| above the door | `path` | a march (`move ... peaceful`) |
+|---|---|---|
+| nothing (a bare door) | reaches, one jump | stuck (no way on for 15 s) |
+| a lintel or a wall piece, one wall segment high | reaches, two jumps | arrived in 11 s, over the gate |
+| two wall segments | stops short, no jump | stuck |
+
+Only the bare door gives a false answer: the grid offers a jump there that the creature does not make (it needs
+something above the door to land on). In a fight it jumped over the wall next to the bare door instead. So for a march,
+do not trust a jump next to a closed door with nothing above it: plan with small jumps (`max_jump_up` and
+`max_jump_down` 1), or with `EMF_PATH_OPEN_DOOR` and no jumps, and check the door points.
 
 ## SDK headers (header-only C++, no ABI)
 

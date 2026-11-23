@@ -1,4 +1,4 @@
-/* EMF (Enshrouded Modding Framework) C API, version 48 (see EMF_API_VERSION).
+/* EMF (Enshrouded Modding Framework) C API, version 49 (see EMF_API_VERSION).
  *
  * A mod is a DLL in <game>/emf/mods/ that exports:
  *     extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api);
@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define EMF_API_VERSION 48
+#define EMF_API_VERSION 49
 
 /* World kinds (the byte at the entity storage + 8: world+0xE15DC8 on build 1273043, world+0xE179C8 on 1283531). */
 #define EMF_WORLD_SERVER 0
@@ -718,6 +718,8 @@ typedef struct EmfRemoveBuilding {
 #define EMF_PATH_JUMP_ACROSS 0x0010u
 #define EMF_PATH_OPEN_DOOR 0x0020u
 #define EMF_PATH_SWIM 0x0040u
+#define EMF_PATH_AS_CALM 0u  /* API v49 EmfPathQuery.as_state: as the creature walks when calm (v48's as_entity) */
+#define EMF_PATH_AS_GUARD 1u /* as an enemy walks in the game's Guard state (an EMF move order, a raid's march) */
 #define EMF_PATH_FOUND 1u     /* a path: see `reaches` (with `closest` it may end at the nearest reachable point) */
 #define EMF_PATH_NO_PATH 2u   /* it searched all the ground it could reach: the target is shut off for these moves */
 #define EMF_PATH_TOO_LONG 3u  /* spent max_nodes: ran out, not blocked (raise max_nodes, or ask on from nearer) */
@@ -764,12 +766,20 @@ typedef struct EmfPathQuery {
        templates: the room and node rules of its PathWalker (the game's own rule), its PathFinder's highest steps, and
        its behaviour's default moves (an enemy that can open doors: the door move too) and default costs per ground
        type. Calm walking: an enemy in the game's Guard state or a fight adds its extended moves (jumps), and a roaming
-       one its road costs; add jumps with `moves` to plan for that. On top: this query's from, to, closest and
+       one its road costs; as_state (v49) plans in Guard, or add jumps with `moves`. On top: this query's from, to, closest and
        max_nodes; `moves` is added; max_jump_up/down, width and height as given (width and height 0 = the creature's).
        With the door move the room across is 0 unless width is given (any room loses the door). Only from a world
        callback on the server world passed to path_find. Refused when the entity has no DynamicPathFinder or
        PathWalker (not a creature the game plans paths for). owner 0 = this creature. 0 = off. */
     uint32_t as_entity;
+    /* API v49 (0.6.22; an older core ignores it: check emf::has_v49()): with as_entity, the state it plans in.
+       EMF_PATH_AS_CALM (0) as v48. EMF_PATH_AS_GUARD: as an enemy walks in the game's Guard state, as on an EMF move
+       order or a raid's march: its behaviour's extended moves are added (Enemy01BehaviorState
+       movementSetup.extendedMoveTypes: jumps up, down and across for a Vukah warrior; down and across for a brawler or a
+       wolf) and its roaming costs per ground type replace the default ones, as the game's own query in Guard holds
+       them; jump heights stay as given (0 = no limit, as the game's). Refused without as_entity, for an unknown
+       state, and for a creature without the enemy behaviour. */
+    uint32_t as_state;
 } EmfPathQuery;
 typedef struct EmfPathPoint {
     float x, y, z;
@@ -807,6 +817,11 @@ typedef void (*EmfPathCallback)(EmfWorld* world, uint32_t id, const EmfPathResul
                                       players' beasts too): it only walks. A v40 core refuses it (unknown flags) */
 #define EMF_MOVE_HOLD 0x8u     /* API v46, villager_move only: after it arrives it holds at the last point until
                                   villager_move_cancel (see hold_seconds) */
+#define EMF_MOVE_CLEAR 0x10u   /* API v49, enemy_move only: a point counts as reached only when no building block lies
+                                  on the line from the creature (1 m above its feet) to the point (1 m above it): one
+                                  behind a wall from its point has not arrived (it walks on, or ends stuck). Put the
+                                  point at least 0.5 m off a wall. Building blocks only (find_wall's). An older core
+                                  refuses the flag */
 #define EMF_MOVE_ARRIVED 0u    /* EmfMoveCallback status: at the last point */
 #define EMF_MOVE_STUCK 1u      /* no metre of progress for 15 s (or stuck_seconds) while not fighting (a wall, no path,
                                   the game gave up) */

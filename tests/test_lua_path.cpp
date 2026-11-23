@@ -170,3 +170,43 @@ TEST_CASE("lua 1.41: as on a core older than v48 is an error (it would plan as a
     r.fake.paths[0].cb(kServer, 1, &res, nullptr, r.fake.paths[0].user);
     CHECK(logged("used nil"));
 }
+
+
+TEST_CASE("lua 1.43: state = 'guard' with as plans as the enemy walks in Guard; 'calm' as 1.41; misuse is an error") {
+    Rig r(L"lua_path_state");
+    add_script(r.dir, "ps",
+               "emf.command('go', '', function(w)\n"
+               "  emf.path_find(w, {1, 50, 2}, {30, 51, 4}, {as = 812, state = 'guard'}, function() end)\n"
+               "  emf.path_find(w, {1, 50, 2}, {30, 51, 4}, {as = 812, state = 'calm'}, function() end)\n"
+               "  local ok1, e1 = pcall(emf.path_find, w, {1, 50, 2}, {30, 51, 4}, {as = 812, state = 'combat'}, function() end)\n"
+               "  local ok2, e2 = pcall(emf.path_find, w, {1, 50, 2}, {30, 51, 4}, {state = 'guard'}, function() end)\n"
+               "  emf.log('bad ' .. tostring(ok1) .. ' ' .. tostring(e1))\n"
+               "  emf.log('noas ' .. tostring(ok2) .. ' ' .. tostring(e2))\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("ps.go");
+    REQUIRE(r.fake.paths.size() == 2u);
+    CHECK(r.fake.paths[0].q.as_state == EMF_PATH_AS_GUARD);
+    CHECK(r.fake.paths[1].q.as_state == EMF_PATH_AS_CALM);
+    CHECK(logged("bad false"));
+    CHECK(logged("state is \"calm\" or \"guard\""));
+    CHECK(logged("noas false"));
+    CHECK(logged("state needs as"));
+}
+
+TEST_CASE("lua 1.43: state on a core older than v49 is an error (it would plan calm)") {
+    Rig r(L"lua_path_state_old");
+    r.api.version = 48;
+    add_script(r.dir, "pso",
+               "emf.command('go', '', function(w)\n"
+               "  local ok, err = pcall(emf.path_find, w, {1, 50, 2}, {30, 51, 4}, {as = 812, state = 'guard'}, function() end)\n"
+               "  emf.log('old ' .. tostring(ok) .. ' ' .. tostring(err))\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("pso.go");
+    CHECK(logged("old false"));
+    CHECK(logged("state needs EMF 0.6.22 or newer (core API v49)"));
+    CHECK(r.fake.paths.empty());
+}

@@ -340,3 +340,22 @@ TEST_CASE("lua 1.39 (review M4): a cancel of a walking villager move still lets 
     r.fake.vmoves[0].cb(kServer, 1, EMF_MOVE_CANCELLED, r.fake.vmoves[0].user);
     CHECK(logged("heard cancelled"));
 }
+
+TEST_CASE("lua 1.43: emf.enemy_move takes clear = true (EMF_MOVE_CLEAR: arrived only with no wall between)") {
+    Rig r(L"lua_moves_clear");
+    add_script(r.dir, "mc",
+               "local function bad(f, ...) local ok, err = pcall(f, ...) return ok and 'ok' or err end\n"
+               "emf.command('go', '', function(w)\n"
+               "  emf.enemy_move(w, 70, {1, 2, 3}, {clear = true, peaceful = true})\n"
+               "  emf.enemy_move(w, 71, {1, 2, 3}, {clear = false})\n"
+               "  emf.log('b1 ' .. bad(emf.enemy_move, w, 70, {1, 2, 3}, {clear = 'yes'}))\n"
+               "end)\n");
+    Host host(&r.api, r.dir);
+    host.load_all();
+    r.run_command("mc.go");
+    REQUIRE(r.fake.moves.size() == 2u);
+    CHECK(r.fake.moves[0].o.flags == (EMF_MOVE_CLEAR | EMF_MOVE_PEACEFUL));
+    CHECK(r.fake.moves[1].o.flags == 0u);
+    CHECK(logged("b1 "));
+    CHECK_FALSE(logged("b1 ok"));
+}

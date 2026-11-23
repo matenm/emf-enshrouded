@@ -1043,6 +1043,7 @@ uint32_t api_path_find(EmfWorld* w, const EmfPathQuery* q, EmfPathCallback cb, v
         why = path_creature_of(
             e, [&](uint32_t hash, uint64_t* size) -> const void* { return api_get_component(w, hash, e, size); }, tpl,
             &as);
+        if (why.empty()) why = path_as_check(copy, as);  // v49: the state it plans in
         if (!why.empty()) return refuse(why);
     }
     uint32_t owner = path_default_owner(copy);
