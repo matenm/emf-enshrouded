@@ -1836,6 +1836,25 @@ TEST_CASE("stable: before a stable any beast can be called; after it only active
     CHECK(index_of(b.r.fake.wheels[0].items, "Call Rex") < 0);  // stored: not on the wheel
 }
 
+TEST_CASE("pack beast: `pack` calls the pack llama or sends it home; with a stable it is on the wheel and not in the stable's count") {
+    BeastRig b({{"call_cooldown_s", "0"}, {"call_mana_pct", "0"}});
+    CHECK(b.reply("beastmaster.pack").find("no pack beast") != std::string::npos);
+    write(b.data, "b 0x00000000000000aa wolf 0 0 Fang\nb 0x00000000000000aa boar 0 0 Tusk\n"
+                  "b 0x00000000000000aa hound 0 0 Rex\nb 0x00000000000000aa packllama 0 0 Pack llama\n");
+    b.r.fake.session = 2;
+    fire_load(1);
+    b.seconds(1);
+    b.spawnable(3);
+    at_stable(b);  // Fang and Tusk take the two active slots
+    b.seconds(1);
+    CHECK(b.reply("beastmaster.list").find("(2 active, 1/") != std::string::npos);  // Rex in the stable; the llama apart
+    CHECK(b.reply("beastmaster.pack").find("comes") != std::string::npos);
+    CHECK(b.reply("beastmaster.pack") == "Pack llama goes home.");
+    press(b, VK_F3);
+    REQUIRE(b.r.fake.wheels.size() == 1);
+    CHECK(index_of(b.r.fake.wheels[0].items, "Call Pack llama") >= 0);  // not an active beast, still on the wheel
+}
+
 TEST_CASE("stable: a beast tamed with no free slot leaves: home before a stable, to the stable after") {
     BeastRig home;
     set_level(home, 1, 5);  // one slot

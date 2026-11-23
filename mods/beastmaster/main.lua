@@ -465,6 +465,18 @@ function actions.call(world, player, account, key)
 	return pack:call(world, player, account, b)
 end
 
+-- The pack beast (species carrier): called when it is home, sent home when it is with its owner.
+function actions.pack(world, player, account)
+	if not account then return "Your account is not known yet." end
+	for _, b in ipairs(beasts:list(account)) do
+		if species.is_carrier(b.species) then
+			if b.out then return pack:dismiss(world, account, b) end
+			return pack:call(world, player, account, b)
+		end
+	end
+	return "You have no pack beast yet."
+end
+
 function actions.dismiss(world, player, account, key)
 	if not account then return "Your account is not known yet." end
 	if key == "all" or key == "" then
@@ -581,6 +593,11 @@ end)
 command("call", "<name or number>: call a beast of your collection to your side", function(world, args)
 	local player, account = who(world)
 	emf.reply(actions.call(world, player, account, table.concat(args, " ")))
+end)
+
+command("pack", ": call your pack llama, or send it home when it is with you", function(world, args)
+	local player, account = who(world)
+	emf.reply(actions.pack(world, player, account))
 end)
 
 command("dismiss", "[name, number or all]: send a beast home; nothing or all: every beast that is out", function(world, args)
@@ -850,7 +867,7 @@ local function wheel_items(world, player)
 	local shown = 0
 	local stabled = beasts:stabled()
 	for _, b in ipairs(list) do
-		if not b.out and shown < WHEEL_CALLS and (b.active or not stabled) then
+		if not b.out and shown < WHEEL_CALLS and (b.active or not stabled or species.is_carrier(b.species)) then
 			shown = shown + 1
 			local label
 			if b.rest > 0 then
