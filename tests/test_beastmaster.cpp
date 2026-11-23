@@ -190,6 +190,7 @@ TEST_CASE("beastmaster: a wolf at 20 % health in front of you is tamed after a 3
 TEST_CASE("beastmaster: a rat of houses and ruins is a beast too: known by its graph, its own bait, tamed like a wolf (GitHub #47)") {
     BeastRig b;
     const char* rat_graph = "57a2f080-1f1e-4d18-8170-2d80b756fe56";  // Enemy_Wildbeast_Rat_hook and its Coldheights kin
+    CHECK(b.reply("beastmaster.list").find(", rat,") != std::string::npos);  // "no beasts yet" names it among the kinds
     CHECK(b.reply(std::string("beastmaster.species ") + rat_graph + " 6") == "rat");
     CHECK(b.r.fake.settings["beastmaster.bait_rat"] == "Food_T1_raw_fruit_Red_Berries");  // a rat takes berries
     b.look(1, 0, 10.5, 0, 0);

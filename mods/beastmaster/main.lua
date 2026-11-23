@@ -365,7 +365,7 @@ command("list", ": your beasts", function(world, args)
 	local _, account = who(world)
 	local list = account and beasts:list(account) or {}
 	if #list == 0 then
-		emf.reply("You have no beasts yet. Tame one: beat a wild wolf, boar, sabretooth, hound, bear, aurochs or snake down, or feed it its bait.")
+		emf.reply("You have no beasts yet. Tame one: beat a wild wolf, boar, sabretooth, hound, rat, bear, aurochs or snake down, or feed it its bait.")
 		return
 	end
 	local head = string.format("Your beasts (%d/%d):", #list, setting("collection_max"))
