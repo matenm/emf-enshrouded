@@ -1,5 +1,6 @@
 #include "builtin_commands.h"
 
+#include "emf_settings.h"
 #include "key_list.h"
 #include "mod_registry.h"
 #include "settings.h"
@@ -921,7 +922,8 @@ void cmd_reset(EmfWorld*, int argc, const char* const* argv, void* u) {
         if (r == SettingsStore::SetResult::Ok || r == SettingsStore::SetResult::Unchanged) {
             for (const auto& d : defs)
                 if (d.key == key) {
-                    command_reply_line(id + "." + key + " = " + shown_value(d, c.settings->get(id, key)) + " (the default)" +
+                    const std::string now = id == kEmfSettingsId ? emf_unset_value(*c.settings, key) : c.settings->get(id, key);
+                    command_reply_line(id + "." + key + " = " + shown_value(d, now) + " (the default)" +
                                        (d.live || r == SettingsStore::SetResult::Unchanged
                                             ? ""
                                             : " (applies at the next game start)"));

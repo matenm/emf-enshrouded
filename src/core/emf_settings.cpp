@@ -175,6 +175,18 @@ std::vector<std::string> declare_emf_settings(SettingsStore& s, const std::wstri
     return lines;
 }
 
+std::string emf_unset_value(const SettingsStore& s, const std::string& key) {
+    if (s.get(kEmfSettingsId, "hud.style") == "boxed") {  // the values read_look_settings gives the boxed style
+        if (key == "hud.font") return "console";
+        if (key == "hud.colour") return "#dbdbcc";
+        if (key == "hud.notes_place") return "top_left";
+        if (key == "overlay.tabs_font") return "consolas";
+    }
+    for (const auto& d : s.defs(kEmfSettingsId))
+        if (d.key == key) return d.default_value;
+    return {};
+}
+
 LookSettings look_from_store(const SettingsStore& s, std::vector<std::string>* problems) {
     return read_look_settings(
         [&s](const char* section, const char* key) {

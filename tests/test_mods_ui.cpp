@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "core/emf_settings.h"
 #include "core/manifest.h"
 #include "core/overlay/console_model.h"
 #include "core/overlay/console_ui.h"
@@ -228,6 +229,21 @@ TEST_CASE("mods ui: reset ends a key capture, so the next key press does not und
     CHECK(ui.captured.empty());
     CHECK(ui.scan.step == ScanCapture::Step::Idle);
     CHECK(s.get("m", "key") == "F3");
+}
+
+TEST_CASE("mods ui: under the boxed style a reset look key names the style's own default (the console's font)") {
+    MemIni ini;
+    SettingsStore s(&ini);
+    declare_emf_settings(s, L"");
+    ModsUiState ui;
+    REQUIRE(apply_setting_edit(s, kEmfSettingsId, "hud.style", "boxed", ui));
+    REQUIRE(apply_setting_edit(s, kEmfSettingsId, "hud.font", "serif", ui));
+    CHECK(apply_setting_reset(s, kEmfSettingsId, "hud.font", ui));
+    CHECK(ui.message == "hud.font is back to its default (The console's font)");
+    REQUIRE(apply_setting_edit(s, kEmfSettingsId, "hud.style", "game", ui));
+    REQUIRE(apply_setting_edit(s, kEmfSettingsId, "hud.font", "console", ui));
+    CHECK(apply_setting_reset(s, kEmfSettingsId, "hud.font", ui));
+    CHECK(ui.message == "hud.font is back to its default (Serif (Alegreya))");
 }
 
 TEST_CASE("mods ui: the console's Mods tab draws every kind of setting and many mods without ImGui errors") {

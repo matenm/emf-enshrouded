@@ -28,6 +28,10 @@ std::vector<std::string> emf_font_files(const std::wstring& fonts_dir);
 // lines worth logging (a value that had to be clamped, a definition refused).
 std::vector<std::string> declare_emf_settings(SettingsStore& s, const std::wstring& fonts_dir);
 
+// The value one of EMF's settings has while nobody set it: under hud.style "boxed", hud.font, hud.colour,
+// hud.notes_place and overlay.tabs_font take that style's own (read_look_settings); any other its definition's default.
+std::string emf_unset_value(const SettingsStore& s, const std::string& key);
+
 // The look as the store holds EMF's settings now ([hud] and [overlay] keys; unset or undeclared ones: the defaults).
 LookSettings look_from_store(const SettingsStore& s, std::vector<std::string>* problems);
 

@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "../emf_settings.h"
 #include "emf/keys.hpp"
 #include "profiles_ui.h"
 
@@ -389,7 +390,9 @@ bool apply_setting_reset(SettingsStore& store, const std::string& mod, const std
     }
     for (const auto& d : store.defs(mod))
         if (d.key == key) {
-            ui.message = key + " is back to its default (" + setting_shown_value(d, store.get(mod, key)) + ")" +
+            // EMF's look keys under the boxed style: that style's own value, which is what the game then shows
+            const std::string now = mod == kEmfSettingsId ? emf_unset_value(store, key) : store.get(mod, key);
+            ui.message = key + " is back to its default (" + setting_shown_value(d, now) + ")" +
                          (d.live ? "" : ": applies at the next game start");
             ui.message_error = false;
         }
