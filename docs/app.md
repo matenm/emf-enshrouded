@@ -134,7 +134,10 @@ then EMF assumes it is this folder). Settings still save; the running game uses 
 setting says "From next start" then (the in-game Mods tab changes them at once: "Live in the in-game Mods tab").
 Settings are checked the same way as in the game: a value outside the mod's range is refused with the reason. A setting
 someone changed has a **Reset** button (back to the default: its line goes from the mod's ini), and **Reset all** above a
-mod's settings asks once, then puts every one back (never the mod's on/off switch).
+mod's settings asks once, then puts every one back (never the mod's on/off switch). A key bind that another switched-on mod
+uses too says so under it ("Also used by Pets (Wheel key): one press does both."), and the Warnings tab has a note for
+each such key. Keys a mod marks as shared on purpose (`"shared": true`, such as E at a stable and at a bounty board) get
+a quieter line and no note.
 Hovering a setting shows its default ("Default: on", an option's label, a key), as the in-game Mods tab does.
 
 ## Profiles

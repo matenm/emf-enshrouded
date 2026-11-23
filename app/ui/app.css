@@ -272,6 +272,8 @@ main { flex: 1; min-height: 0; position: relative; }
 .setting-group + .setting { border-top: 0; padding-top: 4px; }
 .setting.inactive .setting-label, .setting.inactive .setting-help, .setting.inactive .setting-control { opacity: 0.45; }
 .setting-cond { margin: 6px 0 0; color: var(--amber); font-size: 12.5px; }
+.setting-also { margin: 6px 0 0; color: var(--haze); font-size: 12.5px; }
+.setting-also.clash { color: var(--amber); }
 .setting-control input[type="color"] { width: 46px; height: 32px; padding: 2px; border: 1px solid var(--rim); border-radius: 8px; background: var(--dusk); cursor: pointer; }
 .setting-control input:disabled, .setting-control select:disabled { cursor: not-allowed; }
 .keybind {

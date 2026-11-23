@@ -562,6 +562,9 @@ function settingControl(m, s) {
     s.help ? el('p', { class: 'setting-help' }, s.help) : null,
     el('div', { class: 'setting-control' }, parts),
     off && s.when ? el('p', { class: 'setting-cond' }, sentence(s.when)) : null,
+    s.also ? el('p', { class: 'setting-also' + (s.also_clash ? ' clash' : '') }, s.also_clash
+      ? 'Also used by ' + s.also + ': one press does both.'
+      : 'Also the key of ' + s.also + ', on purpose: each acts only on its own object.') : null,
     settingErrors[errKey] ? el('div', { class: 'setting-error', role: 'alert' }, settingErrors[errKey]) : null);
 }
 

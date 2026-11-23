@@ -5,6 +5,7 @@
 #include <doctest.h>
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -865,6 +866,48 @@ TEST_CASE("app settings: reset puts one setting, or all of a mod's, back to its 
     CHECK(ini.find("enabled=1") != std::string::npos);  // never the switch
     CHECK_FALSE(reset_mod_setting(g.dir, "clock", "nokey").ok);
     CHECK_FALSE(reset_mod_setting(g.dir, "nomod", "").ok);
+}
+
+namespace {
+std::string key_mod(const char* id, const char* name, const char* key, bool shared = false) {
+    return std::string(R"({"id": ")") + id + R"(", "name": ")" + name + R"(", "version": "1.0.0", "settings": [
+        {"key": "wheel_key", "type": "keybind", "default": ")" + key + R"(", "label": "Wheel key", "live": true)" +
+           (shared ? R"(, "shared": true)" : "") + R"(}]})";
+}
+const ModSetting* key_setting(const FolderState& s, const char* id) {
+    const ModEntry* m = find(s, "emf", id);
+    return m && !m->settings.empty() ? &m->settings[0] : nullptr;
+}
+}  // namespace
+
+TEST_CASE("app keys: a key two switched-on mods share is a note, and each key bind says who else uses it") {
+    TempGame g(L"keyclash");
+    install_emf(g);
+    for (const char* id : {"wheels", "pets", "off_mod"}) g.write(L"emf\\mods\\" + std::wstring(id, id + std::strlen(id)) + L"\\" + std::wstring(id, id + std::strlen(id)) + L".dll", "dll");
+    g.write(L"emf\\mods\\wheels\\mod.json", key_mod("wheels", "Wheels", "F3"));
+    g.write(L"emf\\mods\\pets\\mod.json", key_mod("pets", "Pets", "f3"));
+    g.write(L"emf\\mods\\off_mod\\mod.json", key_mod("off_mod", "Off Mod", "F3"));
+    g.write(L"emf\\config\\off_mod.ini", "[off_mod]\r\nenabled=0\r\n");
+    const FolderState s = scan_game_folder(g.dir);
+    CHECK(has_warning(s, "info", "F3 is the key of two mods that are switched on: Pets (Wheel key) and Wheels (Wheel key)"));
+    CHECK_FALSE(has_warning(s, "info", "Off Mod"));  // switched off: it presses nothing
+    REQUIRE(key_setting(s, "wheels"));
+    CHECK(key_setting(s, "wheels")->also == "Pets (Wheel key)");
+    CHECK(key_setting(s, "wheels")->also_clash);
+    CHECK(key_setting(s, "off_mod")->also.empty());
+}
+
+TEST_CASE("app keys: keys shared on purpose are no note, but the key bind still names the other") {
+    TempGame g(L"keyshared");
+    install_emf(g);
+    for (const char* id : {"stable", "board"}) g.write(L"emf\\mods\\" + std::wstring(id, id + std::strlen(id)) + L"\\" + std::wstring(id, id + std::strlen(id)) + L".dll", "dll");
+    g.write(L"emf\\mods\\stable\\mod.json", key_mod("stable", "Stable", "E", true));
+    g.write(L"emf\\mods\\board\\mod.json", key_mod("board", "Board", "E", true));
+    const FolderState s = scan_game_folder(g.dir);
+    CHECK_FALSE(has_warning(s, "info", "is the key of two mods"));
+    REQUIRE(key_setting(s, "stable"));
+    CHECK(key_setting(s, "stable")->also == "Board (Wheel key)");
+    CHECK_FALSE(key_setting(s, "stable")->also_clash);
 }
 
 // ---- edge cases ----

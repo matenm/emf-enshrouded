@@ -16,6 +16,7 @@ struct KeyUse {
     bool scan = false;       // `key` is a scan code (EMF's console key), not a key's name
     bool on = true;          // its owner is switched on
     bool shared = false;     // shared with other keys on purpose ("shared": true in mod.json: it acts on its own object)
+    size_t ref = 0;          // the caller's own reference to the setting, carried through
 };
 
 struct KeyGroup {

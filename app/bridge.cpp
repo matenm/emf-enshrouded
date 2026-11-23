@@ -46,7 +46,7 @@ size_t utf8_length(const std::string& s, size_t i) {
 std::string setting_json(const ModSetting& s) {
     Obj o;
     o.str("key", s.def.key).str("type", core::setting_type_name(s.def.type)).str("label", s.def.label).str("help", s.def.help);
-    o.str("value", s.value).str("default", s.def.default_value).boolean("live", s.def.live).boolean("stored", s.stored);
+    o.str("value", s.value).str("default", s.def.default_value).boolean("live", s.def.live).str("also", s.also).boolean("also_clash", s.also_clash).boolean("stored", s.stored);
     // the default as the in-game Mods tab shows it on hover ("on", an option's label, a key's name)
     o.str("default_shown", core::setting_shown_value(s.def, s.def.default_value));
     if (s.def.has_min) o.num("min", s.def.min);

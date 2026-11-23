@@ -14,6 +14,7 @@
 #include "core/json.h"
 #include "core/known_tools.h"
 #include "core/mod_order.h"
+#include "core/key_list.h"
 #include "core/settings.h"
 #include "emf/emf_api.h"
 #include "loader/chain_list.h"
@@ -417,6 +418,51 @@ void apply_load_rules(FolderState& s, const std::vector<EmfLoadInfo>& infos) {
     for (size_t i = 0; i < infos.size(); ++i) {
         ModEntry& e = s.mods[infos[i].entry];
         if (!why[i].empty() && e.enabled && e.error.empty()) e.error = "Will not load: " + why[i];
+    }
+}
+
+// ---- keys two EMF mods use (the console's `keys` lists them too) ----
+void note_shared_keys(FolderState& s) {
+    std::vector<core::KeyUse> uses;
+    for (size_t i = 0; i < s.mods.size(); ++i) {
+        const ModEntry& m = s.mods[i];
+        if (m.source != "emf") continue;
+        for (size_t j = 0; j < m.settings.size(); ++j) {
+            const ModSetting& ms = m.settings[j];
+            if (ms.def.type != core::SettingType::Key) continue;
+            core::KeyUse k;
+            k.owner = m.id;
+            k.owner_name = m.name.empty() ? m.id : m.name;
+            k.label = ms.def.label.empty() ? ms.def.key : ms.def.label;
+            k.key = ms.value;
+            k.on = m.enabled && m.error.empty();
+            k.shared = ms.def.shared;
+            k.ref = i << 16 | j;
+            uses.push_back(std::move(k));
+        }
+    }
+    const auto said = [](const core::KeyUse& k) { return k.owner_name + " (" + k.label + ")"; };
+    for (const auto& g : core::group_keys(uses, [](unsigned scan) { return MapVirtualKeyW(scan, MAPVK_VSC_TO_VK); })) {
+        if (g.on_uses() < 2) continue;
+        std::vector<const core::KeyUse*> on;
+        for (const auto& u : g.uses)
+            if (u.on) on.push_back(&u);
+        std::sort(on.begin(), on.end(), [](const core::KeyUse* a, const core::KeyUse* b) { return a->owner_name < b->owner_name; });
+        for (const auto* u : on) {
+            std::string others;
+            for (const auto* o : on)
+                if (o != u) others += (others.empty() ? "" : ", ") + said(*o);
+            ModSetting& ms = s.mods[u->ref >> 16].settings[u->ref & 0xFFFF];
+            ms.also = others;
+            ms.also_clash = g.clash();
+        }
+        if (!g.clash()) continue;
+        std::string list;
+        for (size_t i = 0; i < on.size(); ++i)
+            list += (i == 0 ? "" : i + 1 == on.size() ? " and " : ", ") + said(*on[i]);
+        warn(s, "info", g.name + " is the key of " + (on.size() == 2 ? std::string("two") : std::to_string(on.size())) +
+                            " mods that are switched on: " + list +
+                            ". One press does both; change one of them in the mod's settings.");
     }
 }
 
@@ -1048,6 +1094,7 @@ FolderState scan_mod_folder(const std::wstring& game_in, ScanDepth depth) {
     scan_other(s, c);
     assign_keys(s);
     if (c.light) return s;  // no warnings: profiles read the switches only
+    note_shared_keys(s);
 
     // warnings that need the whole list
     std::vector<Warning> first;

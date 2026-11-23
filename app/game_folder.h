@@ -29,6 +29,10 @@ struct ModSetting {
     bool active = true;     // its "enabledWhen" holds (or it has none); the in-game Mods tab greys it out otherwise
     std::string when;       // "only while Show the line is on" ("" without "enabledWhen")
     bool controls = false;  // another setting's "enabledWhen" names this one (a change re-draws the others)
+    // A key bind: the other switched-on mods with the same key ("Pets (Wheel key), ..."), and whether that is a clash
+    // (one press does both) rather than keys shared on purpose
+    std::string also;
+    bool also_clash = false;
     bool stored = false;    // its line is in the mod's ini (someone set it): the page offers Reset
 };
 
