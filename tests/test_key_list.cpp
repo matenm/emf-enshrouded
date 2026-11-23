@@ -1,0 +1,75 @@
+// Every key EMF and its mods use, by key (GitHub #55): src/core/key_list.h.
+#include <doctest.h>
+
+#include <string>
+#include <vector>
+
+#include "core/key_list.h"
+
+using emf::core::group_keys;
+using emf::core::KeyGroup;
+using emf::core::KeyUse;
+
+namespace {
+KeyUse use(const char* owner, const char* name, const char* label, const char* key, bool on = true) {
+    KeyUse u;
+    u.owner = owner;
+    u.owner_name = name;
+    u.label = label;
+    u.key = key;
+    u.on = on;
+    return u;
+}
+// The key under Esc on a US layout (scan 0x29) is VK_OEM_3.
+uint32_t us_layout(unsigned scan) { return scan == 0x29 ? 0xC0u : 0u; }
+const KeyGroup* group(const std::vector<KeyGroup>& g, const std::string& name) {
+    for (const auto& k : g)
+        if (k.name == name) return &k;
+    return nullptr;
+}
+}  // namespace
+
+TEST_CASE("key list: keys are grouped as the key settings read them (f3 is F3); empty keys are left out") {
+    const auto g = group_keys({use("necromancer", "Necromancer", "Wheel key", "F2"),
+                               use("beastmaster", "Beastmaster", "Beasts wheel key", "f3"),
+                               use("companion", "Companion", "Order wheel key", "F6"),
+                               use("companion", "Companion", "Key: follow me", ""),
+                               use("bounty", "Bounty Board", "Read key", "F3")},
+                              us_layout);
+    REQUIRE(g.size() == 3);
+    const KeyGroup* f3 = group(g, "F3");
+    REQUIRE(f3 != nullptr);
+    CHECK(f3->uses.size() == 2);
+    CHECK(f3->clash());
+    CHECK_FALSE(group(g, "F2")->clash());
+    CHECK(group(g, "F6")->uses.size() == 1);  // the empty one is not a key in use
+}
+
+TEST_CASE("key list: a mod switched off uses its key but clashes with nothing") {
+    const auto g = group_keys({use("necromancer", "Necromancer", "Wheel key", "F2"),
+                               use("summoner", "Summoner", "Wheel key", "F2", false)},
+                              us_layout);
+    REQUIRE(g.size() == 1);
+    CHECK(g[0].uses.size() == 2);
+    CHECK(g[0].on_uses() == 1);
+    CHECK_FALSE(g[0].clash());
+}
+
+TEST_CASE("key list: EMF's console key is a scan code, named by where it is and grouped with the key it is") {
+    KeyUse console = use("emf", "EMF", "Console key", "0x29");
+    console.scan = true;
+    const auto g = group_keys({console, use("chatty", "Chatty", "Talk key", "0xc0")}, us_layout);
+    REQUIRE(g.size() == 1);
+    CHECK(g[0].name == "the key under Esc (0x29)");
+    CHECK(g[0].clash());
+}
+
+TEST_CASE("key list: the groups come sorted, the clashes first") {
+    const auto g = group_keys({use("a", "A", "x", "K"), use("b", "B", "y", "F9"), use("c", "C", "z", "F9"),
+                               use("d", "D", "w", "B")},
+                              us_layout);
+    REQUIRE(g.size() == 3);
+    CHECK(g[0].name == "F9");  // the clash
+    CHECK(g[1].name == "B");
+    CHECK(g[2].name == "K");
+}

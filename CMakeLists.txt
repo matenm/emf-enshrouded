@@ -130,6 +130,7 @@ add_library(emf_core_lib STATIC
   src/core/manifest.cpp
   src/core/mod_order.cpp
   src/core/settings.cpp
+  src/core/key_list.cpp
   src/core/emf_settings.cpp
   src/core/components_api.cpp
   src/core/component_service.cpp
@@ -409,7 +410,8 @@ set_target_properties(emf_test_needs_helper PROPERTIES RUNTIME_OUTPUT_DIRECTORY 
 add_library(emf_app_lib STATIC app/game_folder.cpp app/locate.cpp app/bridge.cpp app/archive.cpp app/install.cpp
   app/browse.cpp app/account_store.cpp app/nxm_handler.cpp app/args.cpp app/updates.cpp app/bridge_updates.cpp
   app/servers.cpp app/server_process.cpp app/server_bridge.cpp
-  src/core/json.cpp src/core/manifest.cpp src/core/settings.cpp src/core/known_tools.cpp src/core/mod_order.cpp)
+  src/core/json.cpp src/core/manifest.cpp src/core/settings.cpp src/core/key_list.cpp src/core/known_tools.cpp
+  src/core/mod_order.cpp)
 target_include_directories(emf_app_lib PUBLIC ${CMAKE_SOURCE_DIR} src sdk/include)
 # Browse and install: the Nexus library, and bcrypt for the SHA-256 of installed files
 target_link_libraries(emf_app_lib PUBLIC emf_nexus_lib bcrypt)
@@ -534,6 +536,7 @@ add_executable(emf_tests
   tests/test_setting_controls.cpp
   tests/test_mod_order.cpp
   tests/test_settings.cpp
+  tests/test_key_list.cpp
   tests/test_emf_settings.cpp
   tests/test_components_api.cpp
   tests/test_component_service.cpp

@@ -1,5 +1,6 @@
 #include "builtin_commands.h"
 
+#include "key_list.h"
 #include "mod_registry.h"
 #include "settings.h"
 
@@ -952,6 +953,46 @@ void cmd_reset(EmfWorld*, int argc, const char* const* argv, void* u) {
                                        : id + ":";
     if (!failed.empty()) line += (done.empty() ? " refused: " : "; refused: ") + failed;
     command_reply_line(line);
+// keys: every key EMF and the mods use, by key (key settings and EMF's own keys), the ones two running users share first
+void cmd_keys(EmfWorld*, int, const char* const*, void* u) {
+    auto& c = ctx_of(u);
+    if (!c.settings) {
+        command_reply_line("no settings here");
+        return;
+    }
+    std::vector<KeyUse> uses;
+    std::vector<std::string> ids = c.settings->mods();
+    // EMF first, then the mods by id
+    std::stable_partition(ids.begin(), ids.end(), [](const std::string& id) { return id == kEmfSettingsId; });
+    for (const auto& id : ids) {
+        const bool emf = id == kEmfSettingsId;
+        const auto rec = emf || !c.registry ? std::nullopt : c.registry->find(id);
+        for (const auto& d : c.settings->defs(id)) {
+            if (d.type != SettingType::Key && d.type != SettingType::ScanCode) continue;
+            KeyUse k;
+            k.owner = id;
+            k.owner_name = emf ? "EMF" : rec && !rec->name.empty() ? rec->name : id;
+            k.label = d.label.empty() ? d.key : d.label;
+            k.key = c.settings->get(id, d.key);
+            k.scan = d.type == SettingType::ScanCode;
+            // running this session (a mod switched off, or one that failed, presses nothing)
+            k.on = emf || (rec && (rec->status == ModStatus::Loaded || rec->status == ModStatus::Script));
+            uses.push_back(std::move(k));
+        }
+    }
+    const auto groups = group_keys(uses, [](unsigned scan) { return MapVirtualKeyW(scan, MAPVK_VSC_TO_VK); });
+    if (groups.empty()) {
+        command_reply_line("no keys in use");
+        return;
+    }
+    for (const auto& g : groups) {
+        std::string line = g.name + (g.clash() ? " (used twice: one press does both):" : ":");
+        for (size_t i = 0; i < g.uses.size(); ++i) {
+            const auto& k = g.uses[i];
+            line += (i ? ", " : " ") + k.owner_name + " (" + k.label + (k.on ? "" : ", not running") + ")";
+        }
+        command_reply_line(line);
+    }
 }
 
 // items [words]: the items whose names hold every word (in any order, a part of a word is enough), best match first
@@ -1763,6 +1804,7 @@ bool add_builtin_commands(BuiltinContext& ctx) {
         {"set", "<mod> <key> <value>: change a mod's setting (saved in emf/config/<mod>.ini)", cmd_set},
         {"reset", "<mod> [key]: put a setting, or every setting of the mod (not its switch), back to its default",
          cmd_reset},
+        {"keys", ": every key EMF and the mods use, by key (the ones two running mods share first)", cmd_keys},
         {"items", "[words]: find the game's items by name (words in any order, part of a word is enough)", cmd_items},
         {"give", "<item name> [count]: drop items at your feet (host)", cmd_give},
         {"put", "<item name> [count 1-65535] [entity] [level] [rarity 0-4]: put items straight into an inventory, yours by "
@@ -1819,6 +1861,7 @@ bool add_builtin_commands(BuiltinContext& ctx) {
         const bool anywhere = std::strcmp(d.name, "help") == 0 || std::strcmp(d.name, "mods") == 0 ||
                               std::strcmp(d.name, "settings") == 0 || std::strcmp(d.name, "set") == 0 ||
                               std::strcmp(d.name, "reset") == 0 ||
+                              std::strcmp(d.name, "keys") == 0 ||
                               std::strcmp(d.name, "hooks") == 0 || std::strcmp(d.name, "pattern") == 0;  // need no world
         // help is for every player (it lists only what they may run)
         const uint32_t flags = std::strcmp(d.name, "help") == 0 ? kCommandForPlayers : 0u;

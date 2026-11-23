@@ -478,7 +478,7 @@ Kinds:
 
 Typed into the in-game console (key under Esc), the bridge's console command, or <game>\emf\commands.txt
 (read about once a second while a world runs). (host) = needs a world you host.
-help, mods, settings, set, reset, hooks, pattern, map.where, map.act, markers, markers.test, screen, hud.list, hud.move, hud.scale, hud.hide, hud.show, hud.reset, hud.layout, hud.swap, hud.order, hud.colour, hud.grow, profile, saves.backup, saves.list also work at the main menu.
+help, mods, settings, set, reset, keys, hooks, pattern, map.where, map.act, markers, markers.test, screen, hud.list, hud.move, hud.scale, hud.hide, hud.show, hud.reset, hud.layout, hud.swap, hud.order, hud.colour, hud.grow, profile, saves.backup, saves.list also work at the main menu.
 
 - help [page]: list the commands (in the chat 8 per page)
 - mods: list the mods and what became of them
@@ -487,6 +487,7 @@ help, mods, settings, set, reset, hooks, pattern, map.where, map.act, markers, m
 - pattern <bytes> [.section]: test a byte pattern against the game exe (found once?)
 - set <mod> <key> <value>: change a mod's setting (saved in emf/config/<mod>.ini)
 - reset <mod> [key]: put a setting, or every setting of the mod (not its switch), back to its default
+- keys: every key EMF and the mods use, by key (the ones two running mods share first)
 - items [words]: find the game's items by name (words in any order, part of a word is enough)
 - give <item name> [count]: drop items at your feet (host)
 - put <item name> [count 1-65535] [entity] [level] [rarity 0-4]: put items straight into an inventory, yours by default (host)

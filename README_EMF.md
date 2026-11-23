@@ -360,7 +360,8 @@ stamina is not full).
   dedicated server has no HUD editor at all.
 
 ### Keys
-EMF's keys by default:
+EMF's keys by default (`keys` in the console lists the keys in use now, with your changes, and marks a key two running
+mods share: then one press does both):
 
 | Key | What it does |
 |---|---|
@@ -432,6 +433,7 @@ end the game; use `commands.txt` then.)
 | `settings <mod>` | a mod's settings: value, kind, range, default, and whether a change applies at once (works on the main menu too) |
 | `set <mod> <key> <value>` | changes a mod's setting and saves it in `emf\config\<mod>.ini`, like the Mods tab; `set <mod> enabled 0` / `1` switches the mod off / on from the next game start (works on the main menu too) |
 | `reset <mod> [key]` | puts one setting, or every setting of the mod (never its on/off switch), back to its default: its line goes from the ini, so a later version's default applies (works on the main menu too) |
+| `keys` | every key EMF and the mods use (key settings and EMF's own keys), by key; a key two running mods share comes first, marked "used twice: one press does both" (works on the main menu too) |
 | `profile` | the mod profiles in `emf\profiles` (the on/off state of every mod under a name, as EMF.exe's Mods tab keeps them), the current one and whether the mods changed since (works on the main menu too) |
 | `profile save <name> [--settings] [--replace]` | saves the switches of every mod (EMF, EML, the DLLs in `dinput8-chain.ini`; others as read-only) as a profile; `--settings` also saves the EMF mods' settings; another profile with that name is replaced only with `--replace` (e.g. `profile save "Big Base" --settings`) |
 | `profile load <name>` | switches every mod the profile lists to its state (through the same switches as EMF.exe) and reports what it did, what failed, what is missing (with Nexus ids) and what is not in the profile, and says what will still differ; restart the game to apply. A profile's settings apply at once in the Mods tab. The answer comes a moment later: the work runs on a thread of its own |

@@ -1981,3 +1981,31 @@ TEST_CASE("builtin commands: destroy ends the god of the entity it destroys at o
     f.run(iw.w);
     CHECK(bsaid("god: nobody has it"));
 }
+
+TEST_CASE("builtin commands: keys lists every key in use by key, the ones two switched-on users share first") {
+    BFixture f;
+    FakeWorld w;
+    SettingDef wheel;
+    wheel.key = "key";
+    wheel.type = SettingType::Key;
+    wheel.default_value = "F6";
+    wheel.label = "Order wheel key";
+    REQUIRE(f.settings->declare("companion", wheel));
+    SettingDef other = wheel;
+    other.label = "Stack key";
+    other.default_value = "f6";
+    REQUIRE(f.settings->declare("big_stacks", other));  // switched off (its manifest's default), same key
+    SettingDef bulk = wheel;
+    bulk.label = "Craft key";
+    bulk.default_value = "F8";
+    REQUIRE(f.settings->declare("sample_mod", bulk));
+    SettingDef dup = wheel;
+    dup.key = "key2";
+    dup.label = "Second key";
+    dup.default_value = "F8";
+    REQUIRE(f.settings->declare("companion", dup));
+    f.center.enqueue("keys");
+    f.run(w);
+    CHECK(bsaid("F8 (used twice: one press does both): Companion (Second key), sample_mod (Craft key)"));
+    CHECK(bsaid("F6: Big Stacks (Stack key, not running), Companion (Order wheel key)"));
+}
