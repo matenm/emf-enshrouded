@@ -7723,3 +7723,211 @@ TEST_CASE("critters: a beast's own fight against a rat is cleared every step; on
     b.seconds(1);
     CHECK(still_fighting(b, 1234));
 }
+
+// ---- our animals in the wild (replace.lua, the wilds pack) ----
+namespace {
+constexpr const char* kSabreGraph = "9c1b120e-4901-495c-9cc0-5de134fbe140";
+constexpr const char* kGoatGraph = "1fc6e01e-f25b-4aeb-a5a0-2d3fb2c727f5";
+constexpr const char* kFoxTemplate = "2e377d42-ff1e-4e6e-b77a-1596e9404afd";          // wilds_fox
+constexpr const char* kArcticFoxTemplate = "9c54a6f2-8075-4688-8668-533b44fddd8c";    // wilds_fox_arctic
+constexpr const char* kBlackBearTemplate = "797eac81-cf61-413b-8ae4-81297aac0ae6";    // wilds_bear_black
+constexpr const char* kSnowBearTemplate = "8027e2cc-db55-4242-9977-a0dcf5fabbb6";     // wilds_bear_snow
+constexpr const char* kWildsGoatTemplate = "2d1e9269-b64b-44b5-94c5-7543f5be2ae6";    // wilds_goat
+constexpr const char* kSnowSabretoothModel = "3d555869-f7ef-4462-b341-06cad1b2d7e6";  // the game's render model
+constexpr int kWildlife = 5, kScavenger = 4;
+
+// An entity's component as it is now (component<T>() makes a new, zeroed one).
+template <class T>
+T& stored(RollRig& b, uint32_t id) {
+    auto& v = b.r.fake.components[{T::kHash, id}];
+    REQUIRE(v.size() >= sizeof(T));
+    return *reinterpret_cast<T*>(v.data());
+}
+// A rig past the first walk of the world (what it found stays the game's), with the next spawn ready. The players have
+// the game's Faction (7, Player) as in game.
+RollRig& walked(RollRig& b) {
+    for (uint32_t p : {1u, 2u}) component<ecs::Faction>(b.r.fake, p).faction = static_cast<emf::gen::FactionType>(7);
+    b.seconds(11);
+    b.spawnable(2);
+    return b;
+}
+// A game wolf (no ScaleComponent) at level 17 that turns up at (x, 10, z), facing +x.
+void game_wolf(RollRig& b, uint32_t id, double x, double z) {
+    b.beast(id, kWolfGraph, x, z, kWildBeast, 100, 100);
+    component<ecs::Level>(b.r.fake, id).dataStorage[0] = 17;
+    auto& t = stored<ecs::CurrentTransform>(b, id);
+    t.transform.orientation.y = 0.70710678f;  // a quarter turn about the up axis: facing +x (yaw 90)
+    t.transform.orientation.w = 0.70710678f;
+}
+bool swapped(RollRig& b, uint32_t id) { return contains(b.r.fake.destroyed, id); }
+}  // namespace
+
+TEST_CASE("wilds swap: a game wolf that turns up 40 m away is now and then a fox in its place: its level, facing its way") {
+    RollRig b;
+    walked(b);
+    b.roll(0.10);  // over the 4 % of the colours, under 4 + 15: one of the wolf's animals (the fox)
+    game_wolf(b, 50, 0, -40);
+    b.seconds(12);  // the next walk finds it; no client world answers for its model within a second: the plain wolf
+    REQUIRE(b.r.fake.spawns.size() == 1);
+    CHECK(guid_text(b.r.fake.spawns[0].guid) == kFoxTemplate);
+    CHECK(std::abs(b.r.fake.spawns[0].x - 0.0) + std::abs(b.r.fake.spawns[0].z + 40.0) < 0.01);
+    CHECK(b.r.fake.spawns[0].facing);
+    CHECK(std::abs(b.r.fake.spawns[0].yaw - 90.0f) < 0.5f);
+    CHECK(swapped(b, 50));
+    CHECK(stored<ecs::Level>(b, 1234).dataStorage[0] == 17);
+    b.seconds(30);
+    CHECK(b.r.fake.spawns.size() == 1);  // once
+}
+
+TEST_CASE("wilds swap: a creature rolled once stays the game's for good; settings at 0 swap nothing") {
+    RollRig b;
+    walked(b);
+    b.roll(0.5);
+    game_wolf(b, 50, 0, -40);
+    b.seconds(12);
+    b.roll(0.01);
+    b.seconds(30);
+    CHECK(b.r.fake.spawns.empty());
+    CHECK(!swapped(b, 50));
+
+    RollRig off({{"wild_replace_pct", "0"}, {"wild_coat_pct", "0"}});
+    walked(off);
+    off.roll(0.0);
+    game_wolf(off, 50, 0, -40);
+    off.seconds(30);
+    CHECK(off.r.fake.spawns.empty());
+    CHECK(!swapped(off, 50));
+}
+
+TEST_CASE("wilds swap: a colour version now and then (4 %): stronger by wild_coat_strength (125 %), health and damage") {
+    RollRig b;
+    walked(b);
+    b.roll(0.01);
+    game_wolf(b, 50, 0, -40);
+    auto& dm = component<ecs::DamageMod>(b.r.fake, 1234);
+    dm.dataStorage[2] = 2.0f;
+    b.seconds(12);
+    REQUIRE(b.r.fake.spawns.size() == 1);
+    CHECK(guid_text(b.r.fake.spawns[0].guid) == kArcticFoxTemplate);
+    auto& h = component<ecs::Health>(b.r.fake, 1234);
+    h.dataStorage[2] = 40;
+    b.seconds(2);
+    CHECK(h.dataStorage[3] == 10);  // 40 + 10 = 1.25 x 40
+    CHECK(std::abs(dm.dataStorage[2] - 2.5f) < 0.001f);
+    b.seconds(5);
+    CHECK(std::abs(dm.dataStorage[2] - 2.5f) < 0.001f);  // once
+}
+
+TEST_CASE("wilds swap: never in view (25 m of a player), near a base, hurt, one of our packs' (a size), or not wild") {
+    RollRig b;
+    flame_altar(b, 900, -100, 0);
+    b.seconds(32);  // the stables' search of the world (every 30 s) knows the altar
+    walked(b);
+    b.roll(0.01);
+    game_wolf(b, 50, 0, -20);  // 20 m from player 1
+    game_wolf(b, 51, -100, -30);  // 30 m from the altar
+    game_wolf(b, 52, 0, -60);
+    b.r.fake.attrs[{52, EMF_ATTR_HEALTH}] = 60;  // hurt (in a fight)
+    game_wolf(b, 53, 0, -80);
+    component<ecs::ScaleComponent>(b.r.fake, 53).uniformScale = 1.4f;  // the bear pack's bear runs the wolf's graph
+    b.beast(54, kWolfGraph, 0, -100, kScavenger, 100, 100);  // a scavengers' hound
+    b.seconds(25);
+    CHECK(b.r.fake.spawns.empty());
+    CHECK(b.r.fake.destroyed.empty());
+}
+
+TEST_CASE("wilds swap: what the world had when it loaded stays the game's") {
+    RollRig b;
+    for (uint32_t p : {1u, 2u}) component<ecs::Faction>(b.r.fake, p).faction = static_cast<emf::gen::FactionType>(7);
+    b.roll(0.01);
+    game_wolf(b, 50, 0, -40);  // there when the world loads
+    b.r.fake.session = 2;
+    fire_load(1);
+    b.spawnable(1);
+    b.seconds(30);
+    CHECK(b.r.fake.spawns.empty());
+}
+
+TEST_CASE("wilds swap: without the wilds pack nothing is taken out, and it stops trying (one log line)") {
+    RollRig b;
+    walked(b);
+    b.roll(0.10);
+    b.r.fake.missing_templates.insert(guid_bytes(kFoxTemplate));
+    game_wolf(b, 50, 0, -40);
+    b.seconds(12);
+    CHECK(!swapped(b, 50));
+    game_wolf(b, 51, 0, -60);
+    b.seconds(12);
+    CHECK(!swapped(b, 51));
+    CHECK(logged(b.r.fake, "wilds pack") == 1);
+}
+
+TEST_CASE("wilds swap: the fox in a wolf's place is tamed as a fox; a creature at a fox's size it did not put there is not") {
+    RollRig b;
+    walked(b);
+    b.roll(0.10);
+    game_wolf(b, 50, 0, -40);
+    b.seconds(12);
+    REQUIRE(swapped(b, 50));
+    b.beast(1234, kWolfGraph, 0, 5, kWildBeast, 20, 100);  // beaten down, in front of player 1 (it runs the wolf's graph)
+    component<ecs::ScaleComponent>(b.r.fake, 1234).uniformScale = 0.65f;
+    b.look(1, 0, 10.5, 0, 0);
+    REQUIRE(b.reply("beastmaster.tame").find("Taming") != std::string::npos);
+    b.seconds(4);
+    CHECK(b.reply("beastmaster.list").find("1. Fox - fox, loyalty 1, out") != std::string::npos);
+
+    BeastRig c;  // the same creature that no swap made (a script reload forgot the list): nothing to tame
+    c.beast(60, kWolfGraph, 0, 5, kWildBeast, 20, 100);
+    component<ecs::ScaleComponent>(c.r.fake, 60).uniformScale = 0.65f;
+    c.look(1, 0, 10.5, 0, 0);
+    CHECK(c.reply("beastmaster.tame").find("Taming") == std::string::npos);
+}
+
+TEST_CASE("wilds swap: a fox from beastmaster.spawn can be tamed too (the list knows it)") {
+    BeastRig b;
+    b.spawnable(1);
+    REQUIRE(b.reply("beastmaster.spawn fox").find("entity 1234") != std::string::npos);
+    CHECK(guid_text(b.r.fake.spawns[0].guid) == kFoxTemplate);
+    b.beast(1234, kWolfGraph, 0, 5, kWildBeast, 20, 100);
+    component<ecs::ScaleComponent>(b.r.fake, 1234).uniformScale = 0.65f;
+    b.look(1, 0, 10.5, 0, 0);
+    REQUIRE(b.reply("beastmaster.tame").find("Taming") != std::string::npos);
+    b.seconds(4);
+    CHECK(b.reply("beastmaster.list").find("1. Fox - fox, loyalty 1, out") != std::string::npos);
+}
+
+TEST_CASE("wilds swap: a game goat is now and then our goat, which is never tamed (it cannot fight)") {
+    RollRig b;
+    walked(b);
+    b.roll(0.10);
+    b.beast(50, kGoatGraph, 0, -40, kWildlife, 100, 100);
+    b.seconds(12);
+    REQUIRE(b.r.fake.spawns.size() == 1);
+    CHECK(guid_text(b.r.fake.spawns[0].guid) == kWildsGoatTemplate);
+    b.beast(1234, kGoatGraph, 0, 5, kWildlife, 20, 100);
+    component<ecs::ScaleComponent>(b.r.fake, 1234).uniformScale = 1.0f;
+    b.look(1, 0, 10.5, 0, 0);
+    CHECK(b.reply("beastmaster.tame").find("Taming") == std::string::npos);
+}
+
+TEST_CASE("wilds swap: on the host the client world's model tells a snow sabretooth from a sabretooth") {
+    // the server world has no render models for creatures; the host's client world has, on the same entity ids
+    auto run = [](bool snow) {
+        RollRig b;
+        walked(b);
+        b.roll(0.01);
+        b.beast(50, kSabreGraph, 0, -40, kWildBeast, 100, 100);
+        const auto model = guid_bytes(kSnowSabretoothModel);
+        for (int i = 0; i < 15 * 60; ++i) {
+            if (snow) b.r.fake.templates[{ecs::ModelResource::kHash, 50}] = model;
+            b.host->tick(kClient);
+            b.r.fake.templates.erase({ecs::ModelResource::kHash, 50});
+            b.r.fake.tick += 1;
+            b.host->tick(kServer);
+        }
+        REQUIRE(b.r.fake.spawns.size() == 1);
+        return guid_text(b.r.fake.spawns[0].guid);
+    };
+    CHECK(run(true) == kSnowBearTemplate);    // the snow sabretooth's colours: snow bear, snow leopard, snow lynx
+    CHECK(run(false) == kBlackBearTemplate);  // no model known: the sabretooth's (black bear first)
+}

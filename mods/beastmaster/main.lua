@@ -7,6 +7,7 @@ local pack_mod = require("pack")
 local aim = require("aim")
 local health_mod = require("health")
 local wild_mod = require("wild")
+local replace_mod = require("replace")
 local rare_mod = require("rare")
 local loyalty = require("loyalty")
 local slots = require("slots")
@@ -160,6 +161,12 @@ trainees = home_mod.new({
 -- rare wild bears, aurochs and snakes (with their content packs)
 local wild = wild_mod.new({ setting = setting, now = now, on_spawn = spawned })
 
+-- our animals now and then in place of the game's wolves, sabretooths and goats (the wilds pack); taming asks it first
+-- (the server cannot tell its fox from a wolf by anything else)
+local replace = replace_mod.new({ setting = setting, now = now, on_spawn = spawned,
+	altars = function() return stables.altars end })
+tame_mod.known = function(world, id) return replace:species_of(world, id) end
+
 -- the slayer's bonus for a wild rare snake
 local rare = rare_mod.new()
 
@@ -176,6 +183,7 @@ emf.on_world_data(function(world, text)
 	trainees:reset()
 	health:reset()
 	wild:reset()
+	replace:reset()
 	rare:reset()
 	taming:reset()
 	last_hit = {}
@@ -958,6 +966,7 @@ emf.on_event("EntityDiedEvent", function(world, e)
 	home:on_died(world, e.deadEntityId)
 	trainees:on_died(world, e.deadEntityId)
 	rare:on_died(world, e.deadEntityId)
+	replace:on_died(e.deadEntityId)
 end)
 
 local client_steps = 0  -- client world steps since the server world's last (more than stable_mod.CLIENT_STEPS: joined)
@@ -969,6 +978,7 @@ emf.on_tick(function(world)
 				client:step(world)  -- someone else's game
 			else
 				stables:client_step(world)
+				replace:client_step(world)
 			end
 		end
 		return
@@ -982,6 +992,7 @@ emf.on_tick(function(world)
 	trainees:step(world)
 	training:step(world)
 	wild:step(world)
+	replace:step(world)
 	health:step(world)
 	if pending then
 		local p = pending
@@ -1034,6 +1045,17 @@ emf.command("stable", "mark | unmark | list: the prop you look at is a stable; t
 	else
 		emf.reply("beastmaster.stable mark | unmark | list")
 	end
+end)
+
+-- For live checks: a wild wolf, sabretooth or goat swapped for one of our animals now.
+emf.command("wild_swap", "<entity> [roll 0-1]: a wild wolf, sabretooth or goat becomes one of our animals now (a roll " ..
+	"under wild_coat_pct: a colour version; for live checks)", function(world, args)
+	local id = tonumber(args[1] or "")
+	if not id then
+		emf.reply("beastmaster.wild_swap <entity> [roll 0-1]")
+		return
+	end
+	emf.reply(replace:roll_now(world, id, tonumber(args[2] or "") or 0.5))
 end)
 
 -- The monsters Beastmaster holds on you or your beasts now (for live checks).
@@ -1145,6 +1167,7 @@ emf.command("spawn", "<species>: a wild beast 5 m in front of you, to try taming
 		emf.reply("not spawned" .. (s.pack and (" (it needs " .. s.pack .. ")") or " (see the log)"))
 		return
 	end
+	if s.wilds then replace:adopt(id, s) end  -- known only by the list of the animals put into the world
 	emf.reply(string.format("a wild %s (entity %d) in front of you: beat it under 25 %% health, then Tame (hold F3)",
 		s.name, id))
 end)

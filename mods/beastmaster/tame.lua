@@ -35,13 +35,21 @@ local function alive(world, id)
 	return cur ~= nil and cur > 0
 end
 
--- The species of a living, wild (not Faction 11) creature that is not a player, or nil: by the animation graph its
--- template runs, its faction and its scale (species.lua).
+-- Asked first for a creature's species (main.lua: replace.lua's animals): a species entry, false (one of its animals
+-- that is no beast), or nil (not one it knows).
+M.known = nil
+
+-- The species of a living, wild (not Faction 11) creature that is not a player, or nil: M.known's answer, else by the
+-- animation graph its template runs, its faction and its scale (species.lua).
 function M.species_of(world, id)
 	if world:get("PlayerState", id) then return nil end
 	local f = world:get("Faction", id)
 	if not f or f.faction == PLAYER_ALLY then return nil end
 	if not alive(world, id) then return nil end
+	if M.known then
+		local k = M.known(world, id)
+		if k ~= nil then return k or nil end
+	end
 	local g = world:template("AnimationGraphResourceComponent2", id)
 	if not g then return nil end
 	local sc = world:get("ScaleComponent", id)
