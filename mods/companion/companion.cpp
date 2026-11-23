@@ -108,7 +108,7 @@ void note(emf::World w, const Owner& o, const std::string& text) {
         return;
     }
     if (!o.player) return;
-    if (o.remote && g_net) {  // their own Companion shows it as a note
+    if (g_net && emf::api()->net_peer(w.raw(), o.player, remote::kChannel) == remote::kVersion) {  // their Companion
         const std::string m = remote::encode_note(text);
         if (emf::api()->net_to_player(w.raw(), o.player, remote::kChannel, m.data(), static_cast<uint32_t>(m.size())))
             return;
@@ -272,7 +272,8 @@ void lose(emf::World w, Owner& o, uint64_t now, uint32_t id, companion::LostNoti
     EMF_LOG(kMod, "companion %u %s: %s", id, how,
             !armed ? "lost too often in 2 minutes, it stays away until called"
                    : staying ? "it comes back at its stay spot once you are near it" : "a new one comes to you");
-    note(w, o, companion::lost_notice(what, armed, staying, key));
+    // a joined player chose their own key in their game: their note names none
+    note(w, o, companion::lost_notice(what, armed, staying, o.host ? key : companion::call_key_text("")));
 }
 
 // A new companion in place of the current one, on the player's own spot (its gear and order stay: they are the
@@ -823,9 +824,9 @@ void open_order_wheel(emf::World w, Owner& o) {
     if (!ok) emf::api()->notify("The companion wheel could not open (the console may be open; the log says why)");
 }
 
-// What a key does for a player's own companion (the host's keys, or a key a joined player's game sent).
-void run_key(emf::World w, Owner& o, remote::Key key, uint64_t now, const char* why) {
-    const bool active = o.companion.phase() == companion::Companion::Phase::Active;
+// What a key does for a player's own companion (the host's keys, or a key a joined player's game sent). `active`:
+// whether it was out before this step's keys acted (a press that summons it does not let another key order it).
+void run_key(emf::World w, Owner& o, remote::Key key, uint64_t now, const char* why, bool active) {
     switch (key) {
         case remote::Key::Wheel:
             switch (companion::wheel_press(o.companion.phase())) {
@@ -861,8 +862,9 @@ KeyRead g_keys[] = {{&g_key_wheel, remote::Key::Wheel},   {&g_key_follow, remote
 
 // The host's keys order the host's own companion.
 void read_keys(emf::World w, Owner& o, uint64_t now) {
+    const bool active = o.companion.phase() == companion::Companion::Phase::Active;
     for (auto& k : g_keys)
-        if (k.hotkey->edge.pressed(emf::keys::down(k.hotkey->vk))) run_key(w, o, k.key, now, "wheel key");
+        if (k.hotkey->edge.pressed(emf::keys::down(k.hotkey->vk))) run_key(w, o, k.key, now, "wheel key", active);
 }
 
 // ---- the companion/ui channel (players who joined: remote.h) ----
@@ -899,7 +901,8 @@ void on_server_message(EmfWorld* raw, const EmfNetFrom* from, const void* data, 
         return;
     }
     if (!g_presses.allow(from->account, now)) return;  // a held key or a macro
-    run_key(w, *o, m->key, now, "wheel key (their game)");
+    run_key(w, *o, m->key, now, "wheel key (their game)",
+            o->companion.phase() == companion::Companion::Phase::Active);
 }
 
 // A joined player's game: the server's notes and wheels (the client world's thread, after its step).
@@ -931,14 +934,20 @@ void on_player_message(EmfWorld*, const EmfNetFrom* from, const void* data, uint
     if (!ok) emf::api()->notify("The companion wheel could not open (the console may be open; the log says why)");
 }
 
-// A joined player's game, each client world step: their keys go to the server's Companion.
+// A joined player's game, each client world step: their keys go to the server's Companion. The key states are the
+// client tick's own (the host's server tick keeps its own on its thread) and start over while the game hosts.
 uint64_t g_no_server_said = 0;
+emf::keys::Edge g_client_edges[sizeof(g_keys) / sizeof(g_keys[0])];
 void client_keys(emf::World) {
-    if (++g_client_steps <= kClientSteps) return;  // the host's own game: its server tick reads the keys
+    if (++g_client_steps <= kClientSteps) {  // the host's own game: its server tick reads the keys
+        for (auto& e : g_client_edges) e = {};
+        return;
+    }
     if (!g_net) return;
     const uint64_t now = GetTickCount64();
-    for (auto& k : g_keys) {
-        if (!k.hotkey->edge.pressed(emf::keys::down(k.hotkey->vk))) continue;  // only with the game window in front
+    for (size_t i = 0; i < sizeof(g_keys) / sizeof(g_keys[0]); ++i) {
+        const auto& k = g_keys[i];
+        if (!g_client_edges[i].pressed(emf::keys::down(k.hotkey->vk))) continue;  // only with the game window in front
         if (emf::api()->net_peer(nullptr, 0, remote::kChannel) != remote::kVersion) {
             if (!g_no_server_said || now - g_no_server_said > 10000) {
                 g_no_server_said = now;
