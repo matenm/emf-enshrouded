@@ -101,6 +101,20 @@ What this means for players with ShroudForge and EMF:
 - Plain EML (and ShroudForge set to "eml") stops with "Errors loading some mods" when a folder in `mods\` has no
   `mod.json`: a DLL folder there needs one, or belongs elsewhere.
 
+## Kiln
+
+Kiln runs EMF mods itself (its `kiln-emf` layer is its own implementation of EMF's C and Lua APIs, see
+[hosting.md](hosting.md)), so EMF is not needed next to it for that. What its layer offers depends on Kiln's version;
+Kiln's own notes list what is not there yet.
+
+- With Kiln alone, an EMF mod's log lines go to `kiln\logs\kiln.log`, each with an `[emf:<mod id>]` prefix; there is
+  no `emf\emf_core.log`.
+- With EMF's loader chain-loaded next to Kiln, Kiln's layer steps aside and EMF runs the EMF mods. EMF's whole game
+  folder brings its `emf\mods` folder too: every mod there runs as it is set there (switch off the ones you do not want
+  in EMF.exe or the in-game Mods list).
+- EMF leaves EML content to Kiln: with `kiln\kiln.json` in the game folder it never builds the EML mods itself, since
+  Kiln applies them (its EML layer and ShroudForge) and two builds of the game data would undo each other's.
+
 ## For authors of DLL mods
 
 - Your mod keeps working as `dinput8.dll` without EMF. With EMF it runs under another name: do not depend on your own

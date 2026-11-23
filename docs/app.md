@@ -799,7 +799,7 @@ times, the mods' `mod.json`, `emf\content\client\emf_content_state.json` and `sh
   start** (with why, as far as the last build's mods and the files' times tell: never built, a mod new or changed, the
   game or `emf_content.dll` changed, the copy gone, a build the game stopped in), **Failed** (the same files failed
   before, with the message; EMF tries again when a mod, the game or `emf_content.dll` changes), **Off** (the loader's
-  reason: `[content] mode=off`, no EML mod EMF can build, no base), **Applied by** EML or ShroudForge, **Not installed**
+  reason: `[content] mode=off`, no EML mod EMF can build, no base), **Applied by** EML, ShroudForge or Kiln, **Not installed**
   (no `emf\emf_content.dll`). Under it, the loader's decision for the next start (`decide_content`'s reason;
   `emf_loader.log` words a start that uses or builds the copy in its own way). A dedicated server's folder gets the
   same card for the server's own files and its copy, `emf\content\server\`. Every status is checked against the loader's
