@@ -68,7 +68,7 @@ std::string mod_json(const ModEntry& m) {
     o.str("key", m.key).str("source", m.source).str("id", m.id).str("name", m.name).str("version", m.version).strs("authors", m.authors);
     o.str("description", m.description).str("loaded_by", m.loaded_by).boolean("enabled", m.enabled);
     o.boolean("can_toggle", m.can_toggle).str("toggle_note", m.toggle_note).str("path", utf8(m.path));
-    o.str("readme", m.readme).str("error", m.error).str("status", m.status).str("note", m.note);
+    o.str("readme", m.readme).boolean("readme_md", m.readme_markdown).str("error", m.error).str("status", m.status).str("note", m.note);
     o.str("nexus_id", m.nexus_id).str("game_build", m.game_build).strs("depends", m.depends).boolean("is_loader", m.is_loader);
     o.str("install_key", m.install_key).str("install_root", m.install_root);
     o.str("side", m.side).boolean("side_declared", m.side_declared).str("server_note", m.server_note).str("server_level", m.server_level);

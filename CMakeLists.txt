@@ -427,7 +427,7 @@ target_link_libraries(emf_app PRIVATE emf_app_lib ${CMAKE_SOURCE_DIR}/third_part
 target_compile_definitions(emf_app PRIVATE EMF_VERSION="${EMF_VERSION}" EMF_VER_MAJOR=${PROJECT_VERSION_MAJOR}
   EMF_VER_MINOR=${PROJECT_VERSION_MINOR} EMF_VER_PATCH=${PROJECT_VERSION_PATCH})
 set_target_properties(emf_app PROPERTIES OUTPUT_NAME EMF RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/app)
-foreach(f index.html app.css app.js saves.js content.js)
+foreach(f index.html app.css app.js saves.js content.js markdown.js)
   configure_file(app/ui/${f} ${CMAKE_BINARY_DIR}/app/ui/${f} COPYONLY)
 endforeach()
 configure_file(src/core/known_tools.txt ${CMAKE_BINARY_DIR}/app/known_tools.txt COPYONLY)  # for folders without EMF

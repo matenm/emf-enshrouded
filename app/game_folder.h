@@ -48,6 +48,7 @@ struct ModEntry {
     std::string toggle_note;  // why it cannot, or how it is switched
     std::wstring path;        // its folder or file
     std::string readme;       // the README next to it, if any
+    bool readme_markdown = false;  // it is README.md: the page formats it
     std::string error;        // what is wrong (an unreadable mod.json, a missing DLL): shown, never hidden
     std::string status;       // chain: "started", "missing", "failed N", "kept aside", "" (not started yet)
     std::string note;

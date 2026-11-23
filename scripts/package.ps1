@@ -47,7 +47,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $Build "emf_sigcheck.exe"))) { throw
 $contentDll = Join-Path $Build "content\emf_content.dll"
 if (-not (Test-Path -LiteralPath $contentDll)) { throw "missing build output $contentDll (configure with EMF_CONTENT on, the default, and build first)" }
 # EMF.exe, the desktop mod manager, with its page (docs/app.md)
-$appFiles = @("EMF.exe", "ui\index.html", "ui\app.css", "ui\app.js", "ui\saves.js", "ui\content.js")
+$appFiles = @("EMF.exe", "ui\index.html", "ui\app.css", "ui\app.js", "ui\saves.js", "ui\content.js", "ui\markdown.js")
 foreach ($f in $appFiles) { if (-not (Test-Path -LiteralPath (Join-Path $Build "app\$f"))) { throw "missing build output $Build\app\$f (run scripts\test.sh first)" } }
 # The core must be built from this VERSION: the build bakes it into emf_core.dll as "emf_core <version>" (the first
 # line of emf_core.log), and a build that missed a VERSION change would ship under the new name with the old number.

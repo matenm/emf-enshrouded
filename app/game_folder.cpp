@@ -119,11 +119,13 @@ void trim_partial_utf8(std::string& s) {
 }
 
 // The README next to a mod, as UTF-8 text ("" when there is none).
-std::string read_readme(const std::wstring& folder) {
+std::string read_readme(const std::wstring& folder, bool* markdown) {
+    if (markdown) *markdown = false;
     for (const wchar_t* name : {L"README.md", L"README.txt", L"README"}) {
         std::string text;
         if (!read_file(folder + L"\\" + name, text, kReadmeMax)) continue;
         if (text.size() == kReadmeMax) trim_partial_utf8(text);  // cut at the limit, maybe inside a character
+        if (markdown) *markdown = std::wstring(name) == L"README.md";
         return to_utf8_text(strip_bom(text));
     }
     return {};
@@ -502,7 +504,7 @@ void scan_emf_mods(FolderState& s, const Context& c) {
         }
         std::string text;
         if (!read_file(e.path + L"\\mod.json", text, core::kMaxManifestBytes + 1)) continue;  // not a mod folder
-        if (!c.light) e.readme = read_readme(e.path);
+        if (!c.light) e.readme = read_readme(e.path, &e.readme_markdown);
         const auto r = core::parse_manifest(text);
         if (!r.manifest) {
             e.id = make_id(utf8(d.name));
@@ -614,7 +616,7 @@ void scan_eml_mods(FolderState& s, Context& c) {
                     e.error = "mod.json is " + why;
                 }
             }
-            if (!c.light) e.readme = read_readme(e.path);
+            if (!c.light) e.readme = read_readme(e.path, &e.readme_markdown);
         }
         const bool extended = d.dir && exists(e.path + L"\\extended.mod.json");
         if (s.shroudforge_active && d.dir) {  // ShroudForge ignores zips: EML's rule applies to them
@@ -828,7 +830,7 @@ void scan_other(FolderState& s, const Context& c) {
                 e.error = "mod.json is " + why;
             }
         }
-        if (!c.light) e.readme = read_readme(e.path);
+        if (!c.light) e.readme = read_readme(e.path, &e.readme_markdown);
         s.mods.push_back(std::move(e));
     }
 

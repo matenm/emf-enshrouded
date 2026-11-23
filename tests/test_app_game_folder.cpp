@@ -811,6 +811,22 @@ TEST_CASE("app settings: saving one setting leaves the mod's other values in the
     CHECK(ini.find("place=0") != std::string::npos);
 }
 
+TEST_CASE("app README: the page is told when the README is Markdown (README.md), not for README.txt or README") {
+    TempGame g(L"readmemd");
+    install_emf(g);
+    g.write(L"emf\\mods\\clock\\mod.json", kClock);
+    g.write(L"emf\\mods\\clock\\clock.dll", "dll");
+    g.write(L"emf\\mods\\clock\\README.md", "# Clock");
+    const FolderState md = scan_game_folder(g.dir);
+    REQUIRE(find(md, "emf", "clock"));
+    CHECK(find(md, "emf", "clock")->readme_markdown);
+    DeleteFileW((g.dir + L"\\emf\\mods\\clock\\README.md").c_str());
+    g.write(L"emf\\mods\\clock\\README.txt", "# not a heading");
+    const FolderState txt = scan_game_folder(g.dir);
+    CHECK(find(txt, "emf", "clock")->readme == "# not a heading");
+    CHECK_FALSE(find(txt, "emf", "clock")->readme_markdown);
+}
+
 TEST_CASE("app README: a long README cut in the middle of a character stays UTF-8") {
     TempGame g(L"readme");
     install_emf(g);

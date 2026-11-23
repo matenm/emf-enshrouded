@@ -249,6 +249,24 @@ main { flex: 1; min-height: 0; position: relative; }
 .d-list { margin: 0; padding: 0; list-style: none; color: var(--haze); font-size: 13px; }
 .d-list li { padding: 2px 0; font-family: var(--mono); font-size: 12.5px; }
 .readme { margin: 0; padding: 12px 14px; max-height: 340px; overflow: auto; border: 1px solid var(--rim-soft); border-radius: 10px; background: var(--abyss); white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.55 var(--body); color: var(--haze); }
+.readme.md { max-height: 560px; white-space: normal; }
+.readme.md > :first-child { margin-top: 0; }
+.readme.md p, .readme.md .md-list, .readme.md .md-quote, .readme.md .md-table, .readme.md .md-code { margin: 0 0 10px; }
+.readme.md .md-h { margin: 14px 0 6px; color: var(--mist); font: 600 14px/1.3 var(--body); }
+.readme.md h4.md-h { font-size: 16px; }
+.readme.md strong { color: var(--mist); }
+.readme.md code { padding: 1px 5px; border-radius: 5px; background: var(--dusk); font: 12px/1.4 Consolas, monospace; }
+.readme.md .md-code { padding: 10px 12px; overflow: auto; border-radius: 8px; background: var(--night); white-space: pre; }
+.readme.md .md-code code { padding: 0; background: none; }
+.readme.md .md-list { padding-left: 22px; }
+.readme.md .md-quote { margin-left: 0; padding-left: 12px; border-left: 3px solid var(--rim); }
+.readme.md .md-table { overflow-x: auto; }
+.readme.md table { border-collapse: collapse; }
+.readme.md th, .readme.md td { padding: 4px 10px; border: 1px solid var(--rim-soft); text-align: left; vertical-align: top; }
+.readme.md th { color: var(--mist); }
+.readme.md .md-rule { border: 0; border-top: 1px solid var(--rim-soft); margin: 12px 0; }
+.md-link { padding: 0; border: 0; background: none; color: var(--ember-hot); font: inherit; text-decoration: underline; cursor: pointer; }
+.md-link:hover { color: var(--ember); }
 
 .setting { padding: 12px 0; border-top: 1px solid var(--rim-soft); }
 .setting:first-of-type { border-top: 0; padding-top: 2px; }

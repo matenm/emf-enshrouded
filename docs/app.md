@@ -45,7 +45,9 @@ account features are switched off, and a tester setting switches them on ("Nexus
   settings (controls from the `mod.json` setting types: switches, number boxes and sliders with their steps, lists,
   colour pickers, key binds that take the next key press, text with its length limit; under their `group` headings,
   in the in-game Mods tab's order, and greyed out with the reason while their `enabledWhen` does not hold) and its
-  Nexus page (`nexus_id`; it opens in the browser).
+  Nexus page (`nexus_id`; it opens in the browser). A `README.md` is shown formatted (headings, lists, tables, code,
+  bold and italic); HTML in it stays text, only `https://` links are links (they open in the browser), and relative
+  links and pictures stay text, so nothing is loaded. `README.txt` and `README` stay plain text.
 - **Will not load**: an EMF mod that is switched on but that EMF's core would not load says why, from the core's own
   rules (`mod_order.cpp` and the switches in `mods.cpp`): a dependency missing or outside its version range (too old
   or too new), a newer EMF API, a dependency cycle, an id taken twice, a dependency or a Lua mod's script host (`lua`)
@@ -918,7 +920,7 @@ Command line:
 | `--capture <out.png>` | with `--smoke`: also save a picture of the page. Needs `EMF_TEST=1` |
 | `--select <source>:<id>`, `--page <mods\|browse\|saves\|warnings\|emf>` | open that mod's details and that tab (for pictures) |
 | `--eval <script>` | with `--smoke`: run a script in the page after the first drawing; a second later `out.json` gets `probe` (the script's `window.emfProbe` and the page's address). Needs `EMF_TEST=1` |
-| `--probe-wait <ms>` | with `--eval`: wait that long instead of a second (100 to 10000). Needs `EMF_TEST=1` |
+| `--probe-wait <ms>` | with `--eval`: wait that long instead of a second (100 to 30000; it ends when the script sets `window.emfDone`). Needs `EMF_TEST=1` |
 | `--nexus-fixture <dir>` | answer the Browse page from recorded Nexus replies in `<dir>` (`search.json` or `search_<offset>.json`, `mod_<id>.json`, `files_<id>.json`, `contents_<mod>_<file>.json`; a missing listing is an empty one; `updates.json` and `changelogs.json` for Check for updates, where a mod `updates.json` does not mention is one Nexus does not have) and its pictures from `<dir>\images\<file name>`, with no network at all. `tests\fixtures\nexus_app` is such a folder (real replies recorded from Nexus, with invented text in place of the mod authors' descriptions, summaries and changelogs; placeholder pictures drawn for EMF). The API v1 and the CDN come from there too: `v1_validate.json` (a key starting with `bad` gets a 401), `v1_file_<mod>_<file>.json`, `v1_link_<mod>_<file>.json`, and the files in `<dir>\downloads\`. Needs `EMF_TEST=1` |
 | `--devtools` | allow the browser's developer tools (F12) and context menu. Needs `EMF_TEST=1` |
 
@@ -1127,7 +1129,7 @@ player's, and counts only a stand-in game running from the folder shown.
 | `app/bridge_saves.cpp`, `src/saves/` | the Saves tab's commands (`saves_list`, `saves_backup`, `saves_restore`, `saves_delete`, `saves_open`, `saves_auto`), the starter at the first start; the backup engine and `save-info.json` (shared with the core) |
 | `app/content_panel.cpp` | the EML content card's model: the loader's own rules (`src/loader/content_*.h`, `eml_mods.h`) run on the folder for the next start; never loads `emf_content.dll` |
 | `app/bridge_content.cpp` | the card's commands (`content`, `content_rebuild`, `content_remove`, `content_mode`, `content_take_over`, `content_give_back`) |
-| `app/ui/` | the page (`saves.js`: the Saves tab; `content.js`: the EML content card) |
+| `app/ui/` | the page (`saves.js`: the Saves tab; `content.js`: the EML content card; `markdown.js`: READMEs formatted) |
 
 The host sends a fresh state after each change and checks the folder every 3 seconds (a game start or stop shows up).
 That check reads the folder each time.

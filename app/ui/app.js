@@ -709,7 +709,9 @@ function renderDetails(force) {
       settingSearchBox(m),
       state.game_running ? el('p', { class: 'd-note' }, 'The game is running: what you save here applies at its next start. The in-game Mods tab changes settings at once.') : null,
       settingList(m)) : null,
-    m.readme ? el('div', { class: 'd-section' }, el('h3', {}, 'Readme'), el('pre', { class: 'readme' }, m.readme)) : null);
+    m.readme ? el('div', { class: 'd-section' }, el('h3', {}, 'Readme'), m.readme_md && typeof markdownNodes === 'function'
+      ? el('div', { class: 'readme md' }, markdownNodes(m.readme))  // markdown.js: text nodes only, https links through the host
+      : el('pre', { class: 'readme' }, m.readme)) : null);
   d.scrollTop = scroll;
   if (focusWas) {
     const again = d.querySelector('[data-focus="' + CSS.escape(focusWas) + '"]');

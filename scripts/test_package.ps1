@@ -778,7 +778,7 @@ try {
             Copy-Item -LiteralPath $f.FullName -Destination $to
         }
         Copy-Item -LiteralPath (Join-Path $realBuild "emf_sigcheck.exe") -Destination (Join-Path $fb "emf_sigcheck.exe")
-        foreach ($f in @("EMF.exe", "ui\index.html", "ui\app.css", "ui\app.js", "ui\saves.js", "ui\content.js")) {  # EMF.exe and its page
+        foreach ($f in @("EMF.exe", "ui\index.html", "ui\app.css", "ui\app.js", "ui\saves.js", "ui\content.js", "ui\markdown.js")) {  # EMF.exe and its page
             New-Item -ItemType Directory -Force (Split-Path (Join-Path $fb "app\$f")) | Out-Null
             Copy-Item -LiteralPath (Join-Path $realBuild "app\$f") -Destination (Join-Path $fb "app\$f")
         }
@@ -1004,7 +1004,7 @@ try {
                          "game\emf\mods\loot_magnet\loot_magnet.dll",
                          "game\emf\mods\champion\main.lua", "game\emf\mods\champion\README.md",
                          "mods\loot_magnet\magnet_logic.h",
-                         "docs\components.txt", "docs\saves.md", "game\emf\EMF.exe", "game\emf\ui\index.html", "game\emf\ui\app.js", "game\emf\ui\saves.js", "game\emf\ui\content.js",
+                         "docs\components.txt", "docs\saves.md", "game\emf\EMF.exe", "game\emf\ui\index.html", "game\emf\ui\app.js", "game\emf\ui\saves.js", "game\emf\ui\content.js", "game\emf\ui\markdown.js",
                          "game\emf\ui\app.css", "licenses\WebView2-LICENSE.txt", "game\emf\tools\emf_scenario.py",
                          "game\emf\tools\emf_mcp.py", "docs\modding\llms.txt", "docs\modding\ai_agents.md")) {
             Check (Test-Path (Join-Path $pkg $f)) "package has $f"
