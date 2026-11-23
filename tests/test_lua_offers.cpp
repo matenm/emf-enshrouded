@@ -24,6 +24,11 @@ const char* kStable =
     "  emf.reply(tostring(emf.spawn_offer(w, '503fa1d1-dce2-45a1-85a5-185a22666d33', 1, 2, 3, {verb = 0x0C2E4515})))\n"
     "end)\n"
     "emf.command('off', '', function(w, args) emf.reply(tostring(emf.offer_remove(w, tonumber(args[1])))) end)\n"
+    "emf.command('chest', '', function(w, args)\n"
+    "  emf.reply(tostring(emf.offer(w, tonumber(args[1]), {verb = 'Open', sequence = 'chest'}, function() end)))\n"
+    "  local ok, e = pcall(emf.offer, w, 5002, {sequence = 'trade'})\n"
+    "  emf.reply(tostring(ok) .. ' ' .. tostring(e))\n"
+    "end)\n"
     "emf.command('bad', '', function(w)\n"
     "  local ok, e = pcall(emf.offer, w, 5000, {verb = 'Dance'})\n"
     "  local ok2, e2 = pcall(emf.offer, w, 5000, {nosuch = 1})\n"
@@ -52,6 +57,13 @@ TEST_CASE("lua 1.14: emf.offer passes the verb, sequence, range and flags; an ac
     REQUIRE(o.cb);
     o.cb(kServer, 1, 5000, o.user);
     CHECK(logged("accept 1 5000 true"));
+
+    r.run_command("bm.chest 5003");  // 1.42: the game's storage screen of the entity's own inventory
+    REQUIRE(r.fake.offers.size() == 2u);
+    CHECK(r.fake.offers[1].o.sequence == EMF_SEQUENCE_CHEST);
+    CHECK(EMF_SEQUENCE_CHEST == 0x3E49C160u);
+    CHECK(r.fake.replies.back().find("sequence is \"touch\", \"button\" or \"chest\"") != std::string::npos);  // any other: refused
+    r.fake.offers.pop_back();
 
     r.run_command("bm.words 5001");
     REQUIRE(r.fake.offers.size() == 2u);

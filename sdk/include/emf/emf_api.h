@@ -980,6 +980,8 @@ typedef struct EmfProgramDef {
 /* What the player does on E (an action sequence's hash). */
 #define EMF_SEQUENCE_TOUCH  0x3E5189BFu /* Interaction_TouchDevice: a short touch, no screen (the default) */
 #define EMF_SEQUENCE_BUTTON 0xAF614FD8u /* Interaction_ButtonPress */
+#define EMF_SEQUENCE_CHEST  0x3E49C160u /* Interaction_InventoryUi_StorageChest: the game's storage screen of the
+                                           entity's own inventory (InventorySetup) */
 #define EMF_OFFER_LOW_PRIORITY 1u /* another target near the crosshair wins a tie */
 #define EMF_OFFER_BUILD_MODE   2u /* offered in build mode too */
 typedef struct EmfOffer {

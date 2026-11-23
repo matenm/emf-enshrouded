@@ -2803,7 +2803,7 @@ constexpr VerbName kVerbs[] = {
     {"take", EMF_VERB_TAKE},       {"collect", EMF_VERB_COLLECT}, {"rest", EMF_VERB_REST}, {"release", EMF_VERB_RELEASE},
 };
 
-// The options table {verb = "Open" | id, text = "...", sequence = "touch" | "button" | id, range = m, low_priority = b,
+// The options table {verb = "Open" | id, text = "...", sequence = "touch" | "button" | "chest", range = m, low_priority = b,
 // build_mode = b} as an EmfOffer; an unknown key or verb name is an error. `text` keeps the words alive for the call.
 EmfOffer offer_options(lua_State* L, int opts, std::string& text) {
     EmfOffer o{};
@@ -2829,11 +2829,12 @@ EmfOffer offer_options(lua_State* L, int opts, std::string& text) {
             const char* t = luaL_checklstring(L, -1, &n);
             if (n == 0 || n > 63) luaL_error(L, "emf.offer: text must be 1 to 63 bytes");
             text.assign(t, n);
-        } else if (key == "sequence") {  // only the neutral ones: a script never plays an arbitrary sequence for players
+        } else if (key == "sequence") {  // only named ones: a script never plays an arbitrary sequence for players
             const std::string seq = luaL_checkstring(L, -1);
             if (seq == "touch") o.sequence = EMF_SEQUENCE_TOUCH;
             else if (seq == "button") o.sequence = EMF_SEQUENCE_BUTTON;
-            else luaL_error(L, "emf.offer: sequence is \"touch\" or \"button\"");
+            else if (seq == "chest") o.sequence = EMF_SEQUENCE_CHEST;  // 1.42: the entity's own inventory on screen
+            else luaL_error(L, "emf.offer: sequence is \"touch\", \"button\" or \"chest\"");
         } else if (key == "range") {
             const lua_Integer m = luaL_checkinteger(L, -1);
             if (m < 1 || m > 255) luaL_error(L, "emf.offer: range is 1 to 255 metres");
