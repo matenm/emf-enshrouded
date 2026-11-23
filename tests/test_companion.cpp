@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "../mods/companion/companion_logic.h"
+#include "../mods/companion/owners.h"
 #include "emf/emf_api.h"
 #include "game_bindings.h"
 #include "test_scratch.h"
@@ -398,6 +399,30 @@ TEST_CASE("orders: follow guards the player once; stay spawns one marker and gua
     CHECK(first(a, Act::DestroyMarker)->id == 900);
     CHECK(count_kind(a, Act::GuardPlayer) == 1);
     CHECK(o.guard_target() == 0);
+}
+
+TEST_CASE("orders: the companion leaving for now hands over its markers and keeps the order (a stay gets a new marker)") {
+    Orders o;
+    OrderWorld w;
+    o.stay({5, 0, 3});
+    REQUIRE(count_kind(o.tick(0, kPlayer, w.fn()), Act::SpawnMarker) == 1);
+    o.on_marker_spawned(900);
+    CHECK(o.release_markers_keep_order() == std::vector<uint32_t>{900});
+    CHECK(o.mode() == companion::Mode::Stay);
+    CHECK(o.guard_target() == 0);
+    o.on_companion_spawned();  // the next companion
+    CHECK(count_kind(o.tick(100, kPlayer, w.fn()), Act::SpawnMarker) == 1);
+    o.on_marker_spawned(901);
+    o.follow();  // the old marker waits for the next tick to be destroyed...
+    o.stay({6, 0, 3});
+    REQUIRE(count_kind(o.tick(200, kPlayer, w.fn()), Act::DestroyMarker) == 1);
+    o.on_marker_spawned(902);
+    o.follow();
+    CHECK(o.release_markers_keep_order() == std::vector<uint32_t>{902});  // ...and is handed over with the rest
+    CHECK(o.mode() == companion::Mode::Follow);
+    o.attack(50, 300);  // an attack ends: the next companion follows
+    CHECK(o.release_markers_keep_order().empty());
+    CHECK(o.mode() == companion::Mode::Follow);
 }
 
 TEST_CASE("orders: a marker that disappears while staying is spawned again at the same spot") {
@@ -1159,4 +1184,118 @@ TEST_CASE("companion: every key is a setting (no key of its own in the code, so 
     CHECK(src.find("VK_F") == std::string::npos);
     CHECK(src.find("GetAsyncKeyState") == std::string::npos);
     CHECK(src.find("g_f6") == std::string::npos);
+}
+
+// ---- one companion per player (owners.h, GitHub #51) ----
+using companion::Owner;
+using companion::Owners;
+
+TEST_CASE("owners: the host's companion file is the old <slot>.txt; another player's has their account in its name") {
+    CHECK(Owners::file_name(0x0001, 0xAAull, true) == L"0001.txt");
+    CHECK(Owners::file_name(0x0001, 0xBBull, false) == L"0001-00000000000000bb.txt");
+    CHECK(Owners::file_name(0x00a3, 0x0123456789abcdefull, false) == L"00a3-0123456789abcdef.txt");
+}
+
+TEST_CASE("owners: two players' companions never mix: whose a companion is, its death, its order, its gear and file") {
+    Owners all;
+    Owner& a = all.get(0xAA, true, {}, companion::CatchUp{});
+    Owner& b = all.get(0xBB, false, {}, companion::CatchUp{});
+    CHECK(&all.get(0xAA, true, {}, companion::CatchUp{}) == &a);  // the same owner again
+    CHECK(all.size() == 2);
+    a.begin(1, 0);
+    b.begin(1, 0);
+    a.companion.on_spawned(50, 1, 0, 0x1000);
+    b.companion.on_spawned(60, 2, 0, 0x1000);
+    CHECK(all.owner_of_companion(60) == &b);
+    CHECK(all.owner_of_companion(50) == &a);
+    CHECK(all.owner_of_companion(70) == nullptr);
+    CHECK(all.owner_of_companion(0) == nullptr);
+    all.owner_of_companion(50)->companion.on_died(50);
+    CHECK(a.companion.phase() == Companion::Phase::None);
+    CHECK(b.companion.phase() == Companion::Phase::Active);
+    b.orders.stay({1, 2, 3});
+    CHECK(a.orders.mode() == companion::Mode::Follow);
+    REQUIRE(b.gear.give(sword(12), 0).ok);
+    b.gear.on_take_result(Slot::Weapon, true, 10);
+    CHECK(a.gear.held().empty());
+    CHECK(a.saved().gear.empty());
+    CHECK(!b.saved().gear.empty());
+    CHECK(b.saved().order != a.saved().order);
+    a.threats.push(50, 1, 900);  // one player's attack target never reaches another's companion
+    CHECK(b.threats.take(60, 1).empty());
+    CHECK(a.threats.take(50, 1) == std::vector<uint32_t>{900});
+}
+
+TEST_CASE("owners: the server's limit counts every player's companion out or coming; 0 is no limit") {
+    Owners all;
+    Owner& a = all.get(0xAA, true, {}, companion::CatchUp{});
+    Owner& b = all.get(0xBB, false, {}, companion::CatchUp{});
+    a.begin(1, 0);
+    b.begin(1, 0);
+    CHECK(all.out_count() == 0);
+    CHECK(all.may_summon(1, false));
+    a.companion.on_spawned(50, 1, 0, 0x1000);
+    a.policy.on_summoned(true);
+    CHECK(all.out_count() == 1);
+    CHECK(!all.may_summon(1, false));  // b may not: the server holds one
+    CHECK(all.may_summon(2, false));
+    CHECK(all.may_summon(0, false));
+    b.load(companion::parse_saved("out 1\n"), 0);  // b's companion comes back after the load: counted already
+    CHECK(all.out_count() == 2);
+    CHECK(all.may_summon(2, true));
+    CHECK(!all.may_summon(2, false));
+}
+
+TEST_CASE("owners: a player's file brings back their gear and order, and their companion when it was out") {
+    Owners all;
+    Owner& b = all.get(0xBB, false, {}, companion::CatchUp{});
+    b.begin(3, 1000);
+    CHECK(!b.loaded);
+    Owner tmp(0xCC, false, {}, companion::CatchUp{});
+    tmp.begin(1, 0);
+    REQUIRE(tmp.gear.give(sword(7), 0).ok);
+    tmp.gear.on_take_result(Slot::Weapon, true, 10);
+    tmp.orders.stay({4, 5, 6});
+    tmp.companion.on_spawned(80, 3, 0, 0x1000);
+    const std::string text = companion::serialize(tmp.saved());
+    b.load(companion::parse_saved(text), 2000);
+    CHECK(b.loaded);
+    CHECK(b.gear.held().size() == 1);
+    CHECK(b.orders.mode() == companion::Mode::Stay);
+    CHECK(b.policy.coming());
+    CHECK(!b.policy.due(2000));
+    CHECK(b.policy.due(2000 + companion::kSettleMs));
+}
+
+TEST_CASE("owners: a player who leaves has their companion dismissed and back when they return, as after a reload") {
+    Owners all;
+    Owner& b = all.get(0xBB, false, {}, companion::CatchUp{});
+    b.begin(1, 0);
+    b.player = 2;
+    b.companion.on_spawned(60, 2, 0, 0x1000);
+    b.policy.on_summoned(true);
+    b.orders.stay({1, 2, 3});
+    REQUIRE(!b.orders.tick(0, {0, 0, 0}, [](uint32_t) -> std::optional<companion::EntityState> { return std::nullopt; })
+                 .empty());  // asks for its marker
+    b.orders.on_marker_spawned(77);
+    CHECK(b.on_left() == std::vector<uint32_t>{77});  // its stay marker goes with it
+    CHECK(b.orders.mode() == companion::Mode::Stay);  // the order stays, as after a reload
+    CHECK(b.player == 0);
+    CHECK(b.companion.phase() == Companion::Phase::Stopping);
+    CHECK(b.saved().out);  // the file says it was out, so a restart while they are away brings it back too
+    uint32_t guard = 0, guarded = 0;
+    REQUIRE(b.companion.take_stop(&guard, &guarded));
+    CHECK(b.companion.take_destroy() == 60);
+    CHECK(b.saved().out);
+    b.on_back(9, 10000);  // a new entity for the same account
+    CHECK(b.player == 9);
+    CHECK(b.policy.lost_pending());  // it comes to them once they stand still
+    CHECK(b.policy.due(10000 + companion::SummonPolicy::kLostSettleMs));
+    Owner& c = all.get(0xCC, false, {}, companion::CatchUp{});  // one with no companion out: nothing to bring back
+    c.begin(1, 0);
+    c.player = 3;
+    CHECK(c.on_left().empty());
+    CHECK(!c.saved().out);
+    c.on_back(4, 10000);
+    CHECK(!c.policy.coming());
 }

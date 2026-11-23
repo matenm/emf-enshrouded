@@ -90,6 +90,21 @@ public:
         old_marker_ = 0;
         return m;
     }
+    // The companion leaves for now (its player left the world): every marker (the stay marker, and one still waiting to
+    // be destroyed) is handed to the caller to destroy now, while the ids are still theirs. The order stays, as after a
+    // reload: a stay puts a new marker down for the next companion; an attack ends.
+    std::vector<uint32_t> release_markers_keep_order() {
+        std::vector<uint32_t> out;
+        if (marker_) out.push_back(marker_);
+        if (old_marker_) out.push_back(old_marker_);
+        marker_ = old_marker_ = 0;
+        waiting_marker_ = guard_marker_ = false;
+        marker_fails_ = 0;
+        next_marker_ms_ = 0;
+        if (mode_ == Mode::Stay) need_marker_ = true;
+        if (mode_ == Mode::Attack) follow();
+        return out;
+    }
     // A (new) companion entity: tell it the current order again.
     void on_companion_spawned() {
         if (mode_ != Mode::Stay)
