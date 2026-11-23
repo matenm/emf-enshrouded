@@ -7638,7 +7638,7 @@ constexpr const char* kRatGraph = "57a2f080-1f1e-4d18-8170-2d80b756fe56";  // En
 }  // namespace
 
 // A player's idea: their wolf killed every rat in an old house; they liked the rats running around.
-TEST_CASE("critters: an aggressive beast leaves a rat alone; a rat that bites its owner is fair game for 30 s") {
+TEST_CASE("critters: an aggressive beast leaves a rat alone; a rat that bites its owner is hunted; 30 s later the hunt ends") {
     BeastRig b;
     wolf_out(b);
     b.beast(72, kRatGraph, 5, 20, kWildBeast, 30, 30);
@@ -7649,6 +7649,21 @@ TEST_CASE("critters: an aggressive beast leaves a rat alone; a rat that bites it
     deliver(b.r.fake, "HitEvent", hit_event(72, 1));  // it bites the player
     b.seconds(3);
     CHECK(ordered(b, 1234) == 72u);
+    b.seconds(29);  // 30 s after the bite it is spared again: the hunt ends and no new one picks it
+    CHECK(ordered(b, 1234) == 0u);
+}
+
+TEST_CASE("critters: Attack on a rat is the player's call: the order holds and its fight is not cleared") {
+    BeastRig b;
+    wolf_out(b);
+    b.beast(72, kRatGraph, 0, 10, kWildBeast, 30, 30);
+    armed(b, 1234);
+    b.look(1, 0, 10.5, 0, 0);  // right at the rat
+    CHECK(b.reply("beastmaster.attack") == "Your beasts attack (1).");
+    fighting(b, 1234, 72);
+    b.seconds(2);
+    CHECK(ordered(b, 1234) == 72u);
+    CHECK(still_fighting(b, 1234));
 }
 
 TEST_CASE("critters: a beast's own fight against a rat is cleared every step; one that bit it is fought for 30 s; with the setting off a rat is a foe") {

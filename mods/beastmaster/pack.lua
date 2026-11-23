@@ -136,8 +136,9 @@ function M.fightable(world, id)
 	return cur ~= nil and cur > 0
 end
 
--- Small critters (the rats of houses and ruins): the animation graphs they run (template data on the server world).
-local CRITTER_GRAPHS = { ["57a2f080-1f1e-4d18-8170-2d80b756fe56"] = true }  -- Enemy_Wildbeast_Rat_hook and its variants
+-- Small critters (the rats of houses and ruins): the animation graphs they run (template data on the server world; the
+-- game's data lists this one for Enemy_Wildbeast_Rat_hook and Enemy_Wildbeast_Rat_Coldheights_Variation_hook).
+local CRITTER_GRAPHS = { ["57a2f080-1f1e-4d18-8170-2d80b756fe56"] = true }
 local PROVOKED_S = 30  -- s: a critter that bit a player or a beast is fair game this long
 
 -- A small critter (a rat): with the setting spare_critters, beasts leave it alone unless it bites (P:spared).
@@ -600,12 +601,13 @@ function P:attack(world, account, target, hunting)
 end
 
 -- Each check: an order holds while its time runs and its target may be fought (alive, and not turned friendly: a
--- creature being tamed becomes an ally at once); a hunt also ends when the game pacifies its quarry (the player's own
--- Attack on a pacified creature holds).
+-- creature being tamed becomes an ally at once); a hunt also ends when the game pacifies its quarry or its quarry is a
+-- critter the beasts spare again (the player's own Attack on either holds).
 function P:keep_order(world, id, now)
 	local target = self.orders[id]
 	if not target then return end
-	if now >= (self.sent[id] or 0) or not M.fightable(world, target) or (self.hunts[id] and M.pacified(world, target)) then
+	if now >= (self.sent[id] or 0) or not M.fightable(world, target)
+		or (self.hunts[id] and (M.pacified(world, target) or self:spared(world, target, now))) then
 		self:end_order(world, id)
 	else
 		order(world, id, target)
@@ -620,12 +622,11 @@ local function nearest_foe(world, owner, range, skip)
 	local best, best_d
 	for _, id in ipairs(world:entities()) do
 		local f = world:get("Faction", id)
-		if f and HOSTILE[f.faction] and not world:get("PlayerState", id) and not M.pacified(world, id)
-			and not (skip and skip(id)) then
+		if f and HOSTILE[f.faction] and not world:get("PlayerState", id) and not M.pacified(world, id) then
 			local x, y, z = world:position(id)
 			local d = x and math.sqrt((x - ox) ^ 2 + (y - oy) ^ 2 + (z - oz) ^ 2)
 			if d and d <= range and (not best_d or d < best_d) and not world:get("Boss", id)
-				and not world:get("BossHealthBar", id) then
+				and not world:get("BossHealthBar", id) and not (skip and skip(id)) then
 				local cur = emf.health(world, id)
 				if cur and cur > 0 then best, best_d = id, d end
 			end
@@ -729,6 +730,7 @@ end
 function P:on_died(id, world)
 	local hitters = self.hits[id]
 	self.hits[id] = nil
+	self.provoked[id] = nil  -- the game gives the id out again: a new creature on it has bitten nobody
 	if hitters and world then
 		local now = self.env.now(world)
 		for entity, at in pairs(hitters) do
@@ -881,12 +883,13 @@ function P:step(world)
 	end
 	-- every step: passive beasts (unless Attack sent them) and beasts coming back from a chase fight nothing; the others
 	-- nothing the game keeps pacified, but for the creature an order sent them at
+	local spared = function(e) return self:spared(world, e, now) end
 	for id, e in pairs(self.ids) do
 		local passive = self.env.mode and self.env.mode(e.account) == "passive" and now >= (self.sent[id] or 0)
 		if passive or now < (self.recall[id] or 0) then
 			calm(world, id)
 		else
-			calm(world, id, "pacified", self.orders[id], function(e) return self:spared(world, e, now) end)
+			calm(world, id, "pacified", self.orders[id], spared)
 		end
 		if self.speeds[id] then self:set_speed(world, id, e.beast) end
 	end
@@ -906,6 +909,9 @@ function P:step(world)
 			if now - at > KILL_HIT_S then hitters[entity] = nil end
 		end
 		if next(hitters) == nil then self.hits[target] = nil end
+	end
+	for id, until_s in pairs(self.provoked) do
+		if now >= until_s then self.provoked[id] = nil end
 	end
 	local present = players(world)
 	self.present = present
