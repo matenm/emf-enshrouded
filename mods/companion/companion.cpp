@@ -1,13 +1,15 @@
 // companion: an EMF mod. The order wheel key (F6 by default; host) spawns a companion next to you that follows you and
 // fights at your side, through the game's own guard system (StartGuardingEvent); the same key then opens its order
-// wheel. Needs
+// wheel. Every player in the world can have their own (owners.h): on a game you host your guests too, on a dedicated
+// server every player; they order theirs with `companion.as` from the console until their own game sends their keys.
+// Needs
 // emf/config/companion.ini:
 //   [companion]
 //   enabled=1
 //   guid=d5d05217-52dc-467a-9192-26b4f661d8d9   (default: Enemy_Vukah_Melee, a melee Vukah warrior)
 //   faction=11          (default 11 = PlayerAlly: written on the companion right after it spawns, so it guards you and
 //                        fights at full damage; 7 = Player hits for 0; -1 keeps the template's faction)
-//   auto_summon=0       (1: summon one by itself once a world you host is running)
+//   auto_summon=0       (1: every player in a world this game or server hosts gets one by itself)
 //   respawn_seconds=0   (N: after it dies, a new one comes N seconds later; 0: press the order wheel key)
 //   follow_distance=6   (optional, metres: how close it stays; changes the TEMPLATE's guardSetup, so with an enemy body
 //                        every wild Vukah of that template in this session uses it too)
@@ -16,19 +18,22 @@
 //   key_follow= key_stay= key_attack= key_dismiss=   (optional single-key orders; empty = off)
 //   marker_guid=0ce28db1-522f-4455-b358-3888fb5e089b (what "Stay here" puts down for it to guard: a small barrel)
 //   gear_bonus_max=10   (the most levels gear can add on top of the player's level)
+//   max_companions=8    (companions out at once in the world, every player's together; 0 = no limit)
 // Plain enemy01 actors without PlayerInput work as templates; see docs/engine_parts/re_companions.md. The game does
-// not save the companion; the mod writes whether it is out, its order and its gear to
-// emf/config/companion/<world slot>.txt and brings it back when that world is loaded again (reload or restart).
+// not save the companions; the mod writes whether one is out, its order and its gear to
+// emf/config/companion/<world slot>.txt (the host's) or <world slot>-<account>.txt (another player's) and brings it
+// back when that world is loaded again (reload or restart) or the player joins again.
 #include <windows.h>
 
 #include <atomic>
 #include <cmath>
+#include <cstdarg>
 #include <cstdint>
 #include <cstdlib>
-#include <string>
-
 #include <mutex>
 #include <optional>
+#include <set>
+#include <string>
 #include <vector>
 
 #include "companion_logic.h"
@@ -36,11 +41,14 @@
 #include "emf/emf.hpp"
 #include "emf/generated/components.hpp"
 #include "emf/keys.hpp"
+#include "emf/query.hpp"
 #include "emf/teleport.hpp"
 #include "gear.h"
 #include "orders.h"
+#include "owners.h"
 
 namespace gen = emf::gen;
+using companion::Owner;
 
 namespace {
 constexpr const char* kMod = "companion";
@@ -48,27 +56,19 @@ constexpr const char* kDefaultGuid = "d5d05217-52dc-467a-9192-26b4f661d8d9";  //
 constexpr double kFixed = 4294967296.0;                                        // WorldPosition: 32.32 fixed point
 constexpr int kActorReadyForGameplay = 50;                                     // keen::actor::StateFlag
 
-companion::Companion g_companion;
 uint8_t g_guid[16] = {};
 uint64_t g_last_check_ms = 0;
-uint64_t g_last_report_ms = 0;
 float g_follow_distance = 0.0f;   // 0 = the template's own guard distances
-uint32_t g_follow_applied = 0;    // the companion whose template was last changed
 int g_faction = 11;               // keen FactionType written on the companion (-1 = keep the template's)
-companion::SummonPolicy g_policy;  // auto summon / respawn / back after a reload (server tick only)
-std::atomic<bool> g_died{false};   // set by the program when the companion died; taken by the server tick
-companion::Orders g_orders;        // follow / stay / attack (server tick only)
-companion::GearBook g_gear;        // what it wears (server tick only; the world's, see the design rulings)
+companion::SummonPolicy g_policy_defaults;  // auto_summon and respawn_ms from the ini: each player's policy starts so
+companion::CatchUp g_catch_defaults;        // follow_distance's limits: each player's catch-up starts so
 uint32_t g_gear_bonus_max = 10;    // ini gear_bonus_max
+uint32_t g_max_companions = 8;     // ini max_companions (0: no limit)
+bool g_dedicated = false;          // inside enshrouded_server.exe: nobody is the host
 std::atomic<uint16_t> g_slot{0};   // world slot of the loaded save (0 = none yet this session)
-uint32_t g_file_session = 0;       // the session whose file was read
-std::string g_saved_text;          // what the file holds now
-uint64_t g_last_level_ms = 0;
-bool g_return_after_load = false;  // pieces left "returning" by a crash are put back once the player exists
-// The data entity of the last item taken for the companion and when to check that the game removed it
-// (docs/engine_parts/re_take_items.md: the commit destroys it).
-std::atomic<uint32_t> g_taken_pide{0};
-uint64_t g_taken_check_ms = 0;
+std::atomic<uint32_t> g_loaded_session{0};  // the server session whose save has loaded (on_load)
+uint32_t g_owners_session = 0;     // the session the owners belong to (server tick only)
+companion::Owners g_owners;        // one set per player (owners.h)
 uint8_t g_marker_guid[16] = {};    // what "Stay here" spawns for the companion to guard
 constexpr const char* kDefaultMarker = "0ce28db1-522f-4455-b358-3888fb5e089b";  // Prop_Deco_Steppeprops_Barrel_01
 constexpr uint32_t kActiveNpcStateHash = 0x1a8b5909u;  // villagers' template data
@@ -81,26 +81,36 @@ struct Hotkey {
 Hotkey g_key_wheel, g_key_follow, g_key_stay, g_key_attack, g_key_dismiss;
 // What calls the companion, for notes and log lines: the order wheel key's name.
 std::string call_key() { return companion::call_key_text(g_key_wheel.vk ? g_key_wheel.name : std::string()); }
-std::mutex g_m;                    // guards the two below (server tick <-> the program's worker thread)
-companion::ThreatBox g_threats;   // targets to send AddThreatTargetEvent for (per companion and session)
+std::mutex g_m;                    // guards the owners' threat boxes and g_dead (server tick <-> the program's thread)
 companion::DeathLog g_dead;       // entities whose EntityDiedEvent was seen, per session (attack targets end on them)
-std::atomic<uint32_t> g_loaded_session{0};  // the server session whose save has loaded (on_load)
-uint32_t g_client_checked = 0;     // the companion whose client-world faction was last checked (client tick only)
-uint32_t g_client_session = 0;     // the session g_client_checked belongs to (client tick only)
-companion::CatchUp g_catch;        // left behind or stuck: moved to the player (server tick only)
-uint32_t g_companion_session = 0;  // the session g_catch belongs to
-uintptr_t g_body_tpl = 0;          // the companion's template data at its spawn (who it is: ids are reused)
-int g_body_faction = -1;           // its faction right after the spawn (-1: it has none)
+uint32_t g_client_session = 0;     // the session the owners' client checks belong to (client tick only)
+
+std::string format(const char* fmt, ...) {
+    char b[512];
+    va_list a;
+    va_start(a, fmt);
+    vsnprintf(b, sizeof(b), fmt, a);
+    va_end(a);
+    return b;
+}
+// A note for the companion's player: on the host's screen as before, for another player a line only they see.
+void note(emf::World w, const Owner& o, const std::string& text) {
+    if (o.host) {
+        emf::api()->notify("%s", text.c_str());
+        return;
+    }
+    if (!o.player) return;
+    const std::string head = "Companion: ";
+    emf::tell(w, o.player, "[Companion] " + (text.rfind(head, 0) == 0 ? text.substr(head.size()) : text), true);
+}
 
 // Writes the configured faction on the companion in world `w` (server: authoritative; client: what your own screen
 // shows). Logs each change.
-uint32_t g_no_faction_said = 0;  // the companion whose missing Faction was logged (one line per companion)
-
-void apply_faction(emf::World w, uint32_t id, const char* world_name) {
+void apply_faction(emf::World w, Owner& o, uint32_t id, const char* world_name) {
     auto* f = w.get<gen::ecs::Faction>(id);
     if (!f) {
-        if (g_faction >= 0 && w.is_server() && g_no_faction_said != id) {
-            g_no_faction_said = id;
+        if (g_faction >= 0 && w.is_server() && o.no_faction_said != id) {
+            o.no_faction_said = id;
             EMF_LOG(kMod, "companion %u has no Faction component: faction=%d cannot be applied to this body", id,
                     g_faction);
         }
@@ -115,11 +125,11 @@ void apply_faction(emf::World w, uint32_t id, const char* world_name) {
 
 // Logs the companion template's guard distances and, with follow_distance set, changes them (template data: shared
 // by every entity of the template in this world, until the game restarts).
-void apply_follow(emf::World w, uint32_t id) {
+void apply_follow(emf::World w, Owner& o, uint32_t id) {
     auto* tpl = w.get_template<gen::ecs::Enemy01BehaviorState>(id);
     if (!tpl) {
         EMF_LOG(kMod, "companion %u: no Enemy01BehaviorState template data (get_template_component)", id);
-        g_follow_applied = id;
+        o.follow_applied = id;
         return;
     }
     const auto& g = tpl->guardSetup;
@@ -134,7 +144,7 @@ void apply_follow(emf::World w, uint32_t id) {
                     g.startDistance, g.targetDistance);
         }
     }
-    g_follow_applied = id;
+    o.follow_applied = id;
 }
 
 bool entity_pos(emf::World w, uint32_t id, double out[3]) {
@@ -151,63 +161,74 @@ double distance(const double a[3], const double b[3]) {
     return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
-// ECS program on the server world (game worker thread): sends the requested events, watches deaths.
+// ECS program on the server world (game worker thread): sends each player's requested events, watches deaths.
 void guard_program(void* ctx) {
-    uint32_t guard = 0, guarded = 0;
-    if (g_companion.take_start(&guard, &guarded)) {
-        if (auto* e = emf::emit<gen::ecs::StartGuardingEvent>(ctx)) {
-            e->guardingEntityId.id = guard;
-            e->guardedEntityId.id = guarded;
-            EMF_LOG(kMod, "StartGuardingEvent sent: entity %u guards %u", guard, guarded);
-        } else {
-            EMF_LOG(kMod, "StartGuardingEvent could not be sent (see the core log)");
-        }
-    }
-    if (g_companion.take_stop(&guard, &guarded)) {
-        if (auto* e = emf::emit<gen::ecs::StopGuardingEvent>(ctx)) {
-            e->guardingEntityId.id = guard;
-            e->guardedEntityId.id = guarded;
-            EMF_LOG(kMod, "StopGuardingEvent sent: entity %u stops guarding %u", guard, guarded);
-        }
-    }
-    const uint32_t mine = g_companion.entity();
-    if (!mine) return;
     const uint32_t session = emf::server_session();
-    std::vector<uint32_t> threats;
-    {
-        std::lock_guard<std::mutex> l(g_m);
-        threats = g_threats.take(mine, session);  // a target queued for an earlier companion or session is dropped
-    }
-    for (uint32_t target : threats)
-        if (auto* e = emf::emit<gen::ecs::AddThreatTargetEvent>(ctx)) {
-            e->attackerId.id = mine;
-            e->targetId.id = target;
-            e->threatValue = 1000.0f;
+    auto lock = g_owners.lock();
+    g_owners.each([&](Owner& o) {
+        uint32_t guard = 0, guarded = 0;
+        if (o.companion.take_start(&guard, &guarded)) {
+            if (auto* e = emf::emit<gen::ecs::StartGuardingEvent>(ctx)) {
+                e->guardingEntityId.id = guard;
+                e->guardedEntityId.id = guarded;
+                EMF_LOG(kMod, "StartGuardingEvent sent: entity %u guards %u", guard, guarded);
+            } else {
+                EMF_LOG(kMod, "StartGuardingEvent could not be sent (see the core log)");
+            }
         }
-    emf::read<gen::ecs::EntityDiedEvent>(ctx, [mine, session](const gen::ecs::EntityDiedEvent& e) {
-        if (e.deadEntityId.id != mine) {
+        if (o.companion.take_stop(&guard, &guarded)) {
+            if (auto* e = emf::emit<gen::ecs::StopGuardingEvent>(ctx)) {
+                e->guardingEntityId.id = guard;
+                e->guardedEntityId.id = guarded;
+                EMF_LOG(kMod, "StopGuardingEvent sent: entity %u stops guarding %u", guard, guarded);
+            }
+        }
+        const uint32_t mine = o.companion.entity();
+        if (!mine) return;
+        std::vector<uint32_t> threats;
+        {
             std::lock_guard<std::mutex> l(g_m);
-            g_dead.record(session, e.deadEntityId.id);
+            threats = o.threats.take(mine, session);  // a target queued for an earlier companion or session is dropped
+        }
+        for (uint32_t target : threats)
+            if (auto* e = emf::emit<gen::ecs::AddThreatTargetEvent>(ctx)) {
+                e->attackerId.id = mine;
+                e->targetId.id = target;
+                e->threatValue = 1000.0f;
+            }
+    });
+    emf::read<gen::ecs::EntityDiedEvent>(ctx, [session](const gen::ecs::EntityDiedEvent& e) {
+        const uint32_t dead = e.deadEntityId.id;
+        Owner* o = g_owners.owner_of_companion(dead);
+        if (!o) {
+            std::lock_guard<std::mutex> l(g_m);
+            g_dead.record(session, dead);
             return;
         }
-        g_companion.on_died(mine);
-        g_died = true;
-        EMF_LOG(kMod, "companion %u died", mine);
+        o->companion.on_died(dead);
+        o->died = true;
+        EMF_LOG(kMod, "companion %u died", dead);
     });
 }
 
-enum class Summon { Ok, NoPlayer, Failed };
+enum class Summon { Ok, NoPlayer, Failed, Limit };
 
-// Spawns a companion and makes it an ally: at `at` (metres), else 2 m from the local player. `by_hand`: the player
-// called it (the order wheel key). NoPlayer (logged when `loud`) while the player's position is unknown, Failed (logged) when the game
-// refused the spawn.
-Summon summon(emf::World w, uint64_t now, const char* why, bool loud,
+// Spawns a companion for `o`'s player and makes it an ally: at `at` (metres), else 2 m from the player. `by_hand`:
+// the player called it. NoPlayer (logged when `loud`) while the player's position is unknown, Failed (logged) when the
+// game refused the spawn, Limit (a note when `loud`) when the world holds max_companions already.
+Summon summon(emf::World w, Owner& o, uint64_t now, const char* why, bool loud,
               const std::optional<emf::aim::Vec3>& at = std::nullopt, bool by_hand = false) {
-    const uint32_t player = emf::local_player();
+    const uint32_t player = o.player;
     double p[3];
     if (!player || !entity_pos(w, player, p)) {
         if (loud) EMF_LOG(kMod, "%s: player position unknown", why);
         return Summon::NoPlayer;
+    }
+    if (!g_owners.may_summon(g_max_companions, o.policy.coming())) {
+        EMF_LOG(kMod, "%s: %u companions are out in this world (max_companions): none for player %u", why,
+                g_max_companions, player);
+        if (loud) note(w, o, format("Companion: this world allows %u companions at once", g_max_companions));
+        return Summon::Limit;
     }
     const emf::aim::Vec3 spot = at ? *at : emf::aim::Vec3{p[0] + 2.0, p[1], p[2]};
     const uint32_t id = emf::api()->spawn(w.raw(), g_guid, spot.x, spot.y, spot.z);
@@ -215,15 +236,15 @@ Summon summon(emf::World w, uint64_t now, const char* why, bool loud,
         EMF_LOG(kMod, "%s: spawn failed (see the core log)", why);
         return Summon::Failed;
     }
-    apply_faction(w, id, "server");  // before its AI picks targets
-    g_body_tpl = reinterpret_cast<uintptr_t>(
+    apply_faction(w, o, id, "server");  // before its AI picks targets
+    o.body_tpl = reinterpret_cast<uintptr_t>(
         emf::api()->get_template_component(w.raw(), gen::ecs::Enemy01BehaviorState::kHash, id, nullptr));
     const auto* f = w.get<gen::ecs::Faction>(id);
-    g_body_faction = f ? static_cast<int>(f->faction) : -1;
-    g_companion.on_spawned(id, player, now, reinterpret_cast<uintptr_t>(w.raw()));
-    g_policy.on_summoned(by_hand);
-    g_catch.reset();
-    g_orders.on_companion_spawned();  // the current order (e.g. stay) applies to the new companion too
+    o.body_faction = f ? static_cast<int>(f->faction) : -1;
+    o.companion.on_spawned(id, player, now, reinterpret_cast<uintptr_t>(w.raw()));
+    o.policy.on_summoned(by_hand);
+    o.catch_up.reset();
+    o.orders.on_companion_spawned();  // the current order (e.g. stay) applies to the new companion too
     EMF_LOG(kMod, "%s: companion %u spawned at (%.1f, %.1f, %.1f), player %u at (%.1f, %.1f, %.1f)", why, id, spot.x,
             spot.y, spot.z, player, p[0], p[1], p[2]);
     return Summon::Ok;
@@ -231,66 +252,69 @@ Summon summon(emf::World w, uint64_t now, const char* why, bool loud,
 
 // The companion is gone without dying (or could not come back): it comes back by itself (where: come_back()), or stays
 // away after too many losses. One note for the player either way.
-void lose(uint64_t now, uint32_t id, companion::LostNotice what, const char* how) {
-    const bool armed = g_policy.on_lost(now);
-    const bool staying = g_orders.mode() == companion::Mode::Stay;
+void lose(emf::World w, Owner& o, uint64_t now, uint32_t id, companion::LostNotice what, const char* how) {
+    const bool armed = o.policy.on_lost(now);
+    const bool staying = o.orders.mode() == companion::Mode::Stay;
     const std::string key = call_key();
     EMF_LOG(kMod, "companion %u %s: %s", id, how,
             !armed ? "lost too often in 2 minutes, it stays away until called"
                    : staying ? "it comes back at its stay spot once you are near it" : "a new one comes to you");
-    emf::api()->notify("%s", companion::lost_notice(what, armed, staying, key).c_str());
+    note(w, o, companion::lost_notice(what, armed, staying, key));
 }
 
 // A new companion in place of the current one, on the player's own spot (its gear and order stay: they are the
-// world's). Said once when it cannot come now; it then comes back as a lost one.
-void replace_companion(emf::World w, uint64_t now) {
-    const uint32_t old = g_companion.entity();
+// player's). Said once when it cannot come now; it then comes back as a lost one.
+void replace_companion(emf::World w, Owner& o, uint64_t now) {
+    const uint32_t old = o.companion.entity();
     if (!old) return;
     emf::api()->destroy(w.raw(), old);
-    g_companion.on_gone();
+    o.companion.on_gone();
     double p[3];
     std::optional<emf::aim::Vec3> at;
-    if (entity_pos(w, emf::local_player(), p)) at = companion::return_spot({p[0], p[1], p[2]});
-    if (summon(w, now, "catch-up", true, at) != Summon::Ok)
-        lose(now, old, companion::LostNotice::ReplaceFailed, "could not be replaced next to you");
+    if (entity_pos(w, o.player, p)) at = companion::return_spot({p[0], p[1], p[2]});
+    if (summon(w, o, now, "catch-up", true, at) != Summon::Ok)
+        lose(w, o, now, old, companion::LostNotice::ReplaceFailed, "could not be replaced next to you");
 }
 
-// Moves the companion next to the player (left behind or stuck): the game's own teleport (API v20), near the player so
+// Moves the companion next to its player (left behind or stuck): the game's own teleport (API v20), near the player so
 // the game keeps it. On an older core, or when the teleport fails, a new companion comes in its place.
-void catch_up(emf::World w, uint64_t now, uint32_t id, const double from[3], const double player[3]) {
-    EMF_LOG(kMod, "companion %u is %.0f m from you (left behind or stuck): bringing it to you", id, distance(from, player));
-    emf::TeleportOptions o;
-    o.ground = true;
+void catch_up(emf::World w, Owner& o, uint64_t now, uint32_t id, const double from[3], const double player[3]) {
+    EMF_LOG(kMod, "companion %u is %.0f m from its player (left behind or stuck): bringing it to them", id,
+            distance(from, player));
+    emf::TeleportOptions opts;
+    opts.ground = true;
     const uint32_t session = emf::server_session();
-    const bool queued = emf::teleport(w, id, companion::catch_up_target({player[0], player[1], player[2]}), o,
-                                      [id, session](emf::World w2, const emf::TeleportResult& r) {
-        if (r.session_ended || session != emf::server_session() || g_companion.entity() != id) return;
+    const uint64_t account = o.account;
+    const bool queued = emf::teleport(w, id, companion::catch_up_target({player[0], player[1], player[2]}), opts,
+                                      [id, session, account](emf::World w2, const emf::TeleportResult& r) {
+        Owner* me = g_owners.find(account);
+        if (r.session_ended || session != emf::server_session() || !me || me->companion.entity() != id) return;
         if (r.moved()) {
-            EMF_LOG(kMod, "companion %u is with you again (%.1f m from the spot)", id, r.distance);
+            EMF_LOG(kMod, "companion %u is with its player again (%.1f m from the spot)", id, r.distance);
             return;
         }
         EMF_LOG(kMod, "companion %u could not be moved (%s): a new one comes in its place", id, r.reason.c_str());
-        replace_companion(w2, GetTickCount64());
+        replace_companion(w2, *me, GetTickCount64());
     });
-    if (!queued) replace_companion(w, now);
+    if (!queued) replace_companion(w, o, now);
 }
 
-void summon_or_dismiss(emf::World w, uint64_t now, const char* why) {
-    if (g_companion.phase() == companion::Companion::Phase::Active) {
-        g_companion.request_stop();
-        g_policy.on_dismissed();
-        if (const uint32_t marker = g_orders.release_marker())  // a stay marker goes with it, now (its id is still ours)
+void summon_or_dismiss(emf::World w, Owner& o, uint64_t now, const char* why) {
+    if (o.companion.phase() == companion::Companion::Phase::Active) {
+        o.companion.request_stop();
+        o.policy.on_dismissed();
+        if (const uint32_t marker = o.orders.release_marker())  // a stay marker goes with it, now (its id is still ours)
             emf::api()->destroy(w.raw(), marker);
-        EMF_LOG(kMod, "%s: dismissing companion %u", why, g_companion.entity());
+        EMF_LOG(kMod, "%s: dismissing companion %u", why, o.companion.entity());
         return;
     }
-    if (g_companion.phase() != companion::Companion::Phase::None) return;  // a dismissal is in progress
-    summon(w, now, why, true, std::nullopt, true);
+    if (o.companion.phase() != companion::Companion::Phase::None) return;  // a dismissal is in progress
+    summon(w, o, now, why, true, std::nullopt, true);
 }
 
-void check_companion(emf::World w, uint64_t now) {
-    const uint32_t id = g_companion.entity();
-    if (!id || g_companion.phase() != companion::Companion::Phase::Active) return;
+void check_companion(emf::World w, Owner& o, uint64_t now) {
+    const uint32_t id = o.companion.entity();
+    if (!id || o.companion.phase() != companion::Companion::Phase::Active) return;
     auto* ai = w.get<gen::ecs::DynamicEnemy01BehaviorState>(id);
     companion::BodySeen seen;  // a death resets the companion first (the program reads EntityDiedEvent)
     seen.exists = w.get<gen::ecs::CurrentTransform>(id) != nullptr;
@@ -300,32 +324,33 @@ void check_companion(emf::World w, uint64_t now) {
     seen.ai = ai != nullptr;
     if (const auto* nh = w.get<gen::ecs::NetworkHealth>(id)) seen.health = nh->health;
     else if (const auto* h = w.get<gen::ecs::Health>(id)) seen.health = h->dataStorage[0];
-    switch (companion::presence(seen, g_body_tpl, g_body_faction)) {
+    switch (companion::presence(seen, o.body_tpl, o.body_faction)) {
         case companion::Presence::Ours: break;
         case companion::Presence::Dead: {
-            g_companion.on_gone();
-            const bool again = g_policy.on_died(now);  // its body is there, dead: a death after all
+            o.companion.on_gone();
+            const bool again = o.policy.on_died(now);  // its body is there, dead: a death after all
             EMF_LOG(kMod, "companion %u died: %s", id,
-                    companion::death_message(again, g_policy.respawn_ms / 1000ull, call_key()).c_str());
+                    companion::death_message(again, o.policy.respawn_ms / 1000ull, call_key()).c_str());
             return;
         }
         case companion::Presence::Gone:
-            g_companion.on_gone();
-            lose(now, id, companion::LostNotice::Lost, "is gone (the game removes a companion left far from every player)");
+            o.companion.on_gone();
+            lose(w, o, now, id, companion::LostNotice::Lost,
+                 "is gone (the game removes a companion left far from every player)");
             return;
         case companion::Presence::Taken:  // never touched: another creature has the id now
-            g_companion.on_gone();
-            lose(now, id, companion::LostNotice::Lost, "is gone (its id holds another creature now, left alone)");
+            o.companion.on_gone();
+            lose(w, o, now, id, companion::LostNotice::Lost, "is gone (its id holds another creature now, left alone)");
             return;
         case companion::Presence::Body:
             emf::api()->destroy(w.raw(), id);  // our body without its AI: removed, so no second one stands around
-            g_companion.on_gone();
-            lose(now, id, companion::LostNotice::Lost, "lost its AI (its body was removed)");
+            o.companion.on_gone();
+            lose(w, o, now, id, companion::LostNotice::Lost, "lost its AI (its body was removed)");
             return;
     }
-    if (g_companion.on_player(emf::local_player(), now))
-        EMF_LOG(kMod, "your player is entity %u now: companion %u guards it", g_companion.player(), id);
-    apply_faction(w, id, "server");  // in case the game set it back
+    if (o.companion.on_player(o.player, now))
+        EMF_LOG(kMod, "its player is entity %u now: companion %u guards it", o.companion.player(), id);
+    apply_faction(w, o, id, "server");  // in case the game set it back
     // An "automated player" template (Player_Vukah_Melee) has PlayerInput. The game marks such an actor ready for
     // gameplay (Actor IsReadyForGameplay, without which its AI never leaves Spawning) only once that input says the
     // client is ready. There is no client, so say it for it.
@@ -333,27 +358,27 @@ void check_companion(emf::World w, uint64_t now) {
         input->fromClientIsReadyForGameplay = true;
         EMF_LOG(kMod, "companion %u has player input: marked it ready for gameplay", id);
     }
-    if (g_follow_applied != id) apply_follow(w, id);
+    if (o.follow_applied != id) apply_follow(w, o, id);
     const uint32_t target = ai->guardEntityId.id;
-    if (g_companion.wants_regard(target, now))
-        EMF_LOG(kMod, "companion %u guards %u, not the player: sending StartGuardingEvent again", id, target);
+    if (o.companion.wants_regard(target, now))
+        EMF_LOG(kMod, "companion %u guards %u, not its player: sending StartGuardingEvent again", id, target);
     double at[3], you[3];
-    if (entity_pos(w, id, at) && entity_pos(w, g_companion.player(), you)) {
+    if (entity_pos(w, id, at) && entity_pos(w, o.companion.player(), you)) {
         companion::CatchUp::Look look;
         look.now_ms = now;
         look.companion = {at[0], at[1], at[2]};
         look.player = {you[0], you[1], you[2]};
-        look.following = g_orders.mode() != companion::Mode::Stay;
+        look.following = o.orders.mode() != companion::Mode::Stay;
         look.fighting = ai->state == gen::enemy01::State::Combat;
-        if (g_catch.tick(look)) {
-            catch_up(w, now, id, at, you);
+        if (o.catch_up.tick(look)) {
+            catch_up(w, o, now, id, at, you);
             return;
         }
     }
-    if (now - g_last_report_ms >= 5000) {
-        g_last_report_ms = now;
+    if (now - o.last_report_ms >= 5000) {
+        o.last_report_ms = now;
         double a[3], b[3];
-        const uint32_t player = g_companion.player();
+        const uint32_t player = o.companion.player();
         const bool have = entity_pos(w, id, a) && entity_pos(w, player, b);
         auto* actor = w.get<gen::ecs::Actor>(id);
         const bool ready = actor && ((actor->currentState >> kActorReadyForGameplay) & 1);
@@ -363,21 +388,23 @@ void check_companion(emf::World w, uint64_t now) {
     }
 }
 
-// Client world (the host's own screen): the faction the client copy of the companion has; written there too when it
-// differs, so your own targeting and health bars treat it as an ally.
+// Client world (the host's own screen; entity ids are shared with the server world): the faction each companion's
+// client copy has; written there too when it differs, so your own targeting and health bars treat it as an ally.
 void check_client(emf::World w) {
     const uint32_t session = emf::server_session();
-    if (session != g_client_session) {  // ids are reused across sessions
-        g_client_session = session;
-        g_client_checked = 0;
-    }
-    const uint32_t id = g_companion.entity();
-    if (!id || id == g_client_checked) return;
-    auto* f = w.get<gen::ecs::Faction>(id);
-    if (!f) return;  // not replicated to the client world yet
-    g_client_checked = id;
-    EMF_LOG(kMod, "companion %u: client world faction %d", id, static_cast<int>(f->faction));
-    apply_faction(w, id, "client");
+    const bool fresh = session != g_client_session;  // ids are reused across sessions
+    g_client_session = session;
+    auto lock = g_owners.lock();
+    g_owners.each([&](Owner& o) {
+        if (fresh) o.client_checked = 0;
+        const uint32_t id = o.companion.entity();
+        if (!id || id == o.client_checked) return;
+        auto* f = w.get<gen::ecs::Faction>(id);
+        if (!f) return;  // not replicated to the client world yet
+        o.client_checked = id;
+        EMF_LOG(kMod, "companion %u: client world faction %d", id, static_cast<int>(f->faction));
+        apply_faction(w, o, id, "client");
+    });
 }
 
 std::wstring state_dir() {
@@ -386,10 +413,8 @@ std::wstring state_dir() {
     std::wstring dir(exe);
     return dir.substr(0, dir.find_last_of(L"\\/")) + L"\\emf\\config\\companion";
 }
-std::wstring state_file(uint16_t slot) {
-    wchar_t name[16];
-    swprintf(name, 16, L"\\%04x.txt", slot);
-    return state_dir() + name;
+std::wstring state_file(uint16_t slot, const Owner& o) {
+    return state_dir() + L"\\" + companion::Owners::file_name(slot, o.account, o.host);
 }
 std::string read_file(const std::wstring& path) {
     std::string text;
@@ -402,66 +427,60 @@ std::string read_file(const std::wstring& path) {
     }
     return text;
 }
-// Writes the world's file when its contents changed (server tick, every second).
-void save_state() {
+// Writes a player's file when its contents changed (server tick, every second, and after a give or a take).
+void save_state(Owner& o) {
     const uint16_t slot = g_slot;
-    if (!companion::world_file_known(slot, g_file_session, emf::server_session())) return;  // never another world's file
-    companion::SavedCompanion s;
-    s.out = g_companion.phase() == companion::Companion::Phase::Active || g_policy.coming();
-    s.order = g_orders.serialize();
-    s.gear = g_gear.serialize();
-    const std::string text = companion::serialize(s);
-    if (text == g_saved_text) return;
+    if (!o.loaded || !slot) return;  // never another world's file, nor one not read yet
+    const std::string text = companion::serialize(o.saved());
+    if (text == o.saved_text) return;
     CreateDirectoryW(state_dir().c_str(), nullptr);
-    if (companion::write_text_atomic(state_file(slot), text))
-        g_saved_text = text;
+    if (companion::write_text_atomic(state_file(slot, o), text))
+        o.saved_text = text;
     else
-        EMF_LOG(kMod, "could not write %ls", state_file(slot).c_str());
+        EMF_LOG(kMod, "could not write %ls", state_file(slot, o).c_str());
 }
-// Once per session, when its save has loaded: the world's file decides gear, order and whether one comes back.
-void load_state() {
+// Once per session for each player, when the world's save has loaded and they are in it: their file decides gear,
+// order and whether one comes back.
+void load_state(Owner& o, uint64_t now) {
     const uint16_t slot = g_slot;
-    const std::string text = slot ? read_file(state_file(slot)) : std::string();
-    g_saved_text = text;
+    const std::string text = slot ? read_file(state_file(slot, o)) : std::string();
+    o.saved_text = text;
     const auto s = companion::parse_saved(text);
-    g_gear.load(s.gear);
-    if (!g_orders.parse(s.order)) g_orders.follow();
-    if (s.out) g_policy.want_on_load();
-    g_return_after_load = !g_gear.unreturned().empty();
+    o.load(s, now);
     if (!text.empty())
-        EMF_LOG(kMod, "world slot %04x: %s, order %s, %zu gear piece(s)", slot, s.out ? "a companion was out" : "none out",
-                s.order.c_str(), g_gear.held().size());
+        EMF_LOG(kMod, "world slot %04x, %s: %s, order %s, %zu gear piece(s)", slot,
+                o.host ? "the host" : format("account %016llx", static_cast<unsigned long long>(o.account)).c_str(),
+                s.out ? "a companion was out" : "none out", s.order.c_str(), o.gear.held().size());
 }
 
-uint32_t player_level(emf::World w) {
-    auto* l = w.get<gen::ecs::Level>(emf::local_player());
+uint32_t player_level(emf::World w, const Owner& o) {
+    auto* l = w.get<gen::ecs::Level>(o.player);
     return l ? l->dataStorage[0] : 1;
 }
-// The companion's level: the player's level plus its gear bonus (written only on the player's side).
-void apply_level(emf::World w) {
-    const uint32_t id = g_companion.entity();
+// The companion's level: its player's level plus its gear bonus (written only on the player's side).
+void apply_level(emf::World w, Owner& o) {
+    const uint32_t id = o.companion.entity();
     auto* l = w.get<gen::ecs::Level>(id);
     auto* f = w.get<gen::ecs::Faction>(id);
-    auto* pl_level = w.get<gen::ecs::Level>(emf::local_player());
+    auto* pl_level = w.get<gen::ecs::Level>(o.player);
     if (!l || !pl_level) return;  // the player's level is not readable (yet): keep the companion's as it is
     const uint32_t pl = pl_level->dataStorage[0];
-    const uint32_t target = companion::companion_level(pl, g_gear.bonus(pl, g_gear_bonus_max));
+    const uint32_t target = companion::companion_level(pl, o.gear.bonus(pl, g_gear_bonus_max));
     const bool ally = f && static_cast<int>(f->faction) == kFactionPlayerAlly;
     const auto value = companion::level_to_write(l->dataStorage[0], target, ally);
     if (!value) return;
     const uint32_t before = l->dataStorage[0];
     l->dataStorage[0] = *value;
     if (auto* d = w.get<gen::ecs::DynamicEnemyScaling>(id)) d->nextUpdateTime.value = 0;  // rescale health now
-    EMF_LOG(kMod, "companion %u: level %u -> %u (you %u + gear %u)", id, before, *value, pl,
-            g_gear.bonus(pl, g_gear_bonus_max));
+    EMF_LOG(kMod, "companion %u: level %u -> %u (player %u + gear %u)", id, before, *value, pl,
+            o.gear.bonus(pl, g_gear_bonus_max));
 }
 
 // Runs the order logic's actions (server tick).
-void run_orders(emf::World w, uint64_t now) {
-    const uint32_t player = emf::local_player();
+void run_orders(emf::World w, Owner& o, uint64_t now) {
     double pp[3] = {};
-    if (!player || !entity_pos(w, player, pp)) return;
-    const auto actions = g_orders.tick(now, {pp[0], pp[1], pp[2]}, [&](uint32_t id) -> std::optional<companion::EntityState> {
+    if (!o.player || !entity_pos(w, o.player, pp)) return;
+    const auto actions = o.orders.tick(now, {pp[0], pp[1], pp[2]}, [&](uint32_t id) -> std::optional<companion::EntityState> {
         double p[3];
         if (!id || !entity_pos(w, id, p)) return std::nullopt;
         std::lock_guard<std::mutex> l(g_m);
@@ -469,33 +488,33 @@ void run_orders(emf::World w, uint64_t now) {
     });
     for (const auto& a : actions) {
         switch (a.kind) {
-            case companion::OrderAction::GuardPlayer: g_companion.request_guard(0, now); break;
-            case companion::OrderAction::GuardEntity: g_companion.request_guard(a.id, now); break;
+            case companion::OrderAction::GuardPlayer: o.companion.request_guard(0, now); break;
+            case companion::OrderAction::GuardEntity: o.companion.request_guard(a.id, now); break;
             case companion::OrderAction::SpawnMarker: {
                 const uint32_t id = emf::api()->spawn(w.raw(), g_marker_guid, a.pos.x, a.pos.y, a.pos.z);
                 if (id) {
-                    g_orders.on_marker_spawned(id);
+                    o.orders.on_marker_spawned(id);
                 } else {
                     EMF_LOG(kMod, "the stay marker could not be spawned (marker_guid?): following instead");
-                    g_orders.follow();
+                    o.orders.follow();
                 }
                 break;
             }
             case companion::OrderAction::DestroyMarker: emf::api()->destroy(w.raw(), a.id); break;
             case companion::OrderAction::Threat: {
                 std::lock_guard<std::mutex> l(g_m);
-                g_threats.push(g_companion.entity(), emf::server_session(), a.id);
+                o.threats.push(o.companion.entity(), emf::server_session(), a.id);
                 break;
             }
-            case companion::OrderAction::Notice: emf::api()->notify("%s", a.text.c_str()); break;
+            case companion::OrderAction::Notice: note(w, o, a.text); break;
         }
     }
 }
 
-// The creature under the crosshair within 40 m that the companion may attack: has Health, is not the player, the
-// companion, a villager, or on the player's side.
-std::optional<uint32_t> attack_target(emf::World w) {
-    const uint32_t player = emf::local_player();
+// The creature under the player's crosshair within 40 m that the companion may attack: has Health, is not a player,
+// the companion, a villager, or on the players' side.
+std::optional<uint32_t> attack_target(emf::World w, const Owner& o) {
+    const uint32_t player = o.player;
     double pp[3];
     if (!player || !entity_pos(w, player, pp)) return std::nullopt;
     const auto ray = emf::aim::camera_ray(w, player);
@@ -503,7 +522,7 @@ std::optional<uint32_t> attack_target(emf::World w) {
     const emf::aim::Vec3 from{pp[0], pp[1], pp[2]};
     std::vector<uint32_t> ids;
     std::vector<emf::aim::Vec3> points;
-    const uint32_t mine = g_companion.entity();
+    const uint32_t mine = o.companion.entity();
     w.for_each_entity([&](uint32_t id) {
         if (id == player || id == mine) return;
         double p[3];
@@ -524,31 +543,31 @@ std::optional<uint32_t> attack_target(emf::World w) {
     return ids[*i];
 }
 
-void order_follow() {
-    g_orders.follow();
-    emf::api()->notify("Companion: following you");
+void order_follow(emf::World w, Owner& o) {
+    o.orders.follow();
+    note(w, o, "Companion: following you");
 }
-void order_stay(emf::World w) {
+void order_stay(emf::World w, Owner& o) {
     double p[3];
-    if (!entity_pos(w, g_companion.entity(), p)) {
-        emf::api()->notify("Companion: its position is not known yet: try Stay again in a moment");
+    if (!entity_pos(w, o.companion.entity(), p)) {
+        note(w, o, "Companion: its position is not known yet: try Stay again in a moment");
         return;
     }
-    g_orders.stay({p[0], p[1], p[2]});
-    emf::api()->notify("Companion: staying here");
+    o.orders.stay({p[0], p[1], p[2]});
+    note(w, o, "Companion: staying here");
 }
-void order_attack(emf::World w, uint64_t now) {
-    const auto t = attack_target(w);
+void order_attack(emf::World w, Owner& o, uint64_t now) {
+    const auto t = attack_target(w, o);
     if (!t) {
-        emf::api()->notify("Companion: nothing to attack there (look at a creature within 40 m)");
+        note(w, o, "Companion: nothing to attack there (look at a creature within 40 m)");
         return;
     }
-    g_orders.attack(*t, now);
-    emf::api()->notify("Companion: attacking entity %u", *t);
+    o.orders.attack(*t, now);
+    note(w, o, format("Companion: attacking entity %u", *t));
 }
 
-uint32_t companion_level(emf::World w) {
-    auto* l = w.get<gen::ecs::Level>(g_companion.entity());
+uint32_t companion_level(emf::World w, const Owner& o) {
+    auto* l = w.get<gen::ecs::Level>(o.companion.entity());
     return l ? l->dataStorage[0] : 0;
 }
 
@@ -607,47 +626,48 @@ std::vector<GearCandidate> gear_candidates(emf::World w, uint32_t player) {
 }
 
 // What putting a piece back came to, as a note.
-void note_put_outcome(companion::PutOutcome outcome, const std::string& name) {
+void note_put_outcome(emf::World w, const Owner& o, companion::PutOutcome outcome, const std::string& name) {
     switch (outcome) {
-        case companion::PutOutcome::Returned: emf::api()->notify("Companion: %s is back in your inventory", name.c_str()); break;
-        case companion::PutOutcome::WornAgain:
-            emf::api()->notify("Companion: no room for %s; it keeps wearing it", name.c_str());
-            break;
+        case companion::PutOutcome::Returned: note(w, o, "Companion: " + name + " is back in your inventory"); break;
+        case companion::PutOutcome::WornAgain: note(w, o, "Companion: no room for " + name + "; it keeps wearing it"); break;
         case companion::PutOutcome::Waiting:
-            emf::api()->notify("Companion: no room for %s; make room and use Take all gear back", name.c_str());
+            note(w, o, "Companion: no room for " + name + "; make room and use Take all gear back");
             break;
         case companion::PutOutcome::Unknown: break;
     }
 }
 // Puts a returning piece back into the player's inventory as a new item with its level and rarity.
-void return_piece(emf::World w, const companion::Piece& p) {
+void return_piece(emf::World w, Owner& o, const companion::Piece& p) {
     const uint32_t item = p.item, token = p.token;
     const std::string name = item_name(w, item);
-    const bool queued = emf::put_items_ex(w, emf::local_player(), item, 1, p.level, p.rarity,
-                                          [token, name](emf::World, uint32_t added) {
-                                              note_put_outcome(g_gear.on_put_result(token, added > 0, GetTickCount64()),
+    const uint64_t account = o.account;
+    const bool queued = emf::put_items_ex(w, o.player, item, 1, p.level, p.rarity,
+                                          [token, name, account](emf::World w2, uint32_t added) {
+                                              Owner* me = g_owners.find(account);
+                                              if (!me) return;
+                                              note_put_outcome(w2, *me,
+                                                               me->gear.on_put_result(token, added > 0, GetTickCount64()),
                                                                name);
-                                              save_state();
+                                              save_state(*me);
                                           });
     if (!queued) {  // refused at once (the log says why): not a matter of room
-        g_gear.on_put_result(token, false, GetTickCount64());
-        emf::api()->notify("Companion: could not give %s back right now (the log says why); it keeps it",
-                           name.c_str());
-        save_state();
+        o.gear.on_put_result(token, false, GetTickCount64());
+        note(w, o, "Companion: could not give " + name + " back right now (the log says why); it keeps it");
+        save_state(o);
     }
 }
 
 // Takes the chosen piece from the player's inventory (that exact slot first); worn once the game confirmed it.
-void give_piece(emf::World w, const GearCandidate& c) {
-    if (!companion::world_file_known(g_slot, g_file_session, emf::server_session())) {
-        emf::api()->notify("Companion: gear cannot be given until this world's companion file is known (see the log)");
+void give_piece(emf::World w, Owner& o, const GearCandidate& c) {
+    if (!o.loaded || !g_slot) {
+        note(w, o, "Companion: gear cannot be given until this world's companion file is known (see the log)");
         EMF_LOG(kMod, "a give was refused: the world slot is not known (no on_load on this game build?), so it could "
                       "not be saved");
         return;
     }
     auto* inv = w.get<gen::ecs::Inventory>(c.inventory);
     if (!inv || inv->slots[c.slot_index].id.value != c.item || inv->slots[c.slot_index].data.pide.id != c.pide) {
-        emf::api()->notify("Companion: %s is no longer in that slot", c.name.c_str());
+        note(w, o, "Companion: " + c.name + " is no longer in that slot");
         return;
     }
     companion::Piece p;
@@ -655,48 +675,48 @@ void give_piece(emf::World w, const GearCandidate& c) {
     p.level = c.level;
     p.rarity = c.rarity;
     p.slot = c.slot;
-    if (!g_gear.give(p, GetTickCount64()).ok) {
-        emf::api()->notify("Companion: already handing over something for that slot");
+    if (!o.gear.give(p, GetTickCount64()).ok) {
+        note(w, o, "Companion: already handing over something for that slot");
         return;
     }
-    save_state();
+    save_state(o);
     const companion::Slot slot = c.slot;
     const std::string name = c.name;
     const uint64_t from = (static_cast<uint64_t>(c.slot_index) << 32) | c.inventory;
     const uint32_t pide = c.pide;
-    const bool queued = emf::take_items(w, emf::local_player(), c.item, 1, from, [slot, name, pide](emf::World w,
-                                                                                               uint32_t taken) {
-        const auto back = g_gear.on_take_result(slot, taken > 0, GetTickCount64());
+    const uint64_t account = o.account;
+    const bool queued = emf::take_items(w, o.player, c.item, 1, from, [slot, name, pide, account](emf::World w2,
+                                                                                                uint32_t taken) {
+        Owner* me = g_owners.find(account);
+        if (!me) return;
+        const auto back = me->gear.on_take_result(slot, taken > 0, GetTickCount64());
         if (taken && pide) {
-            g_taken_pide = pide;
-            g_taken_check_ms = GetTickCount64() + 3000;
+            me->taken_pide = pide;
+            me->taken_check_ms = GetTickCount64() + 3000;
         }
-        if (taken)
-            emf::api()->notify("Companion: now wears %s", name.c_str());
-        else
-            emf::api()->notify("Companion: could not take %s from your inventory", name.c_str());
-        for (const auto& old : back) return_piece(w, old);
-        save_state();
+        note(w2, *me, taken ? "Companion: now wears " + name : "Companion: could not take " + name + " from your inventory");
+        for (const auto& old : back) return_piece(w2, *me, old);
+        save_state(*me);
     }, true);  // that slot only: never another copy of the item
     if (!queued) {
-        g_gear.on_take_result(slot, false, GetTickCount64());
-        emf::api()->notify("Companion: taking items is not available (the log says why)");
+        o.gear.on_take_result(slot, false, GetTickCount64());
+        note(w, o, "Companion: taking items is not available (the log says why)");
     }
 }
 
-void take_back_gear(emf::World w) {
-    const auto back = g_gear.take_back_all(GetTickCount64());
+void take_back_gear(emf::World w, Owner& o) {
+    const auto back = o.gear.take_back_all(GetTickCount64());
     if (back.empty()) {
-        emf::api()->notify("Companion: it wears no gear");
+        note(w, o, "Companion: it wears no gear");
         return;
     }
-    for (const auto& p : back) return_piece(w, p);
-    save_state();
+    for (const auto& p : back) return_piece(w, o, p);
+    save_state(o);
 }
 
-void open_gear_wheel(emf::World w) {
-    const uint32_t player = emf::local_player();
-    const auto cands = gear_candidates(w, player);
+// The gear wheel, on the host's screen (the host's own companion).
+void open_gear_wheel(emf::World w, Owner& o) {
+    const auto cands = gear_candidates(w, o.player);
     std::vector<std::string> pieces;
     for (const auto& c : cands) {
         char b[160];
@@ -704,52 +724,142 @@ void open_gear_wheel(emf::World w) {
         pieces.push_back(b);
     }
     const std::vector<std::string> labels = companion::gear_wheel_labels(pieces);
-    const uint32_t pl = player_level(w);
+    const uint32_t pl = player_level(w, o);
     char title[64];
-    snprintf(title, sizeof(title), "Gear (+%u levels, %zu worn)", g_gear.bonus(pl, g_gear_bonus_max), g_gear.held().size());
-    const bool ok = emf::wheel(title, labels, g_key_wheel.vk, EMF_WORLD_SERVER, [cands](emf::World w, int choice) {
-        if (choice < 0) return;
+    snprintf(title, sizeof(title), "Gear (+%u levels, %zu worn)", o.gear.bonus(pl, g_gear_bonus_max), o.gear.held().size());
+    const uint64_t account = o.account;
+    const bool ok = emf::wheel(title, labels, g_key_wheel.vk, EMF_WORLD_SERVER, [cands, account](emf::World w2, int choice) {
+        Owner* me = g_owners.find(account);
+        if (choice < 0 || !me) return;
         if (static_cast<size_t>(choice) >= companion::gear_wheel_offered(cands.size())) {
-            take_back_gear(w);
+            take_back_gear(w2, *me);
             return;
         }
-        give_piece(w, cands[static_cast<size_t>(choice)]);
+        give_piece(w2, *me, cands[static_cast<size_t>(choice)]);
     });
     if (!ok) emf::api()->notify("The gear wheel could not open (the log says why)");
 }
 
-void open_order_wheel(emf::World w) {
+// The order wheel, on the host's screen (the host's own companion).
+void open_order_wheel(emf::World w, Owner& o) {
     char title[64];
-    snprintf(title, sizeof(title), "Companion (level %u)", companion_level(w));
+    snprintf(title, sizeof(title), "Companion (level %u)", companion_level(w, o));
+    const uint64_t account = o.account;
     const bool ok = emf::wheel(title, {"Follow me", "Stay here", "Attack (what you look at)", "Gear", "Dismiss"},
-                               g_key_wheel.vk, EMF_WORLD_SERVER, [](emf::World w, int choice) {
-                                   if (g_companion.phase() != companion::Companion::Phase::Active) return;
+                               g_key_wheel.vk, EMF_WORLD_SERVER, [account](emf::World w2, int choice) {
+                                   Owner* me = g_owners.find(account);
+                                   if (!me || me->companion.phase() != companion::Companion::Phase::Active) return;
                                    const uint64_t now = GetTickCount64();
                                    switch (choice) {
-                                       case 0: order_follow(); break;
-                                       case 1: order_stay(w); break;
-                                       case 2: order_attack(w, now); break;
-                                       case 3: open_gear_wheel(w); break;
-                                       case 4: summon_or_dismiss(w, now, "wheel"); break;
+                                       case 0: order_follow(w2, *me); break;
+                                       case 1: order_stay(w2, *me); break;
+                                       case 2: order_attack(w2, *me, now); break;
+                                       case 3: open_gear_wheel(w2, *me); break;
+                                       case 4: summon_or_dismiss(w2, *me, now, "wheel"); break;
                                        default: break;
                                    }
                                });
     if (!ok) emf::api()->notify("The companion wheel could not open (the console may be open; the log says why)");
 }
 
-void read_keys(emf::World w, uint64_t now) {
-    const bool active = g_companion.phase() == companion::Companion::Phase::Active;
+// The host's keys order the host's own companion.
+void read_keys(emf::World w, Owner& o, uint64_t now) {
+    const bool active = o.companion.phase() == companion::Companion::Phase::Active;
     if (g_key_wheel.edge.pressed(emf::keys::down(g_key_wheel.vk))) {
-        switch (companion::wheel_press(g_companion.phase())) {
-            case companion::WheelPress::OpenWheel: open_order_wheel(w); break;
-            case companion::WheelPress::Summon: summon(w, now, "wheel key", true, std::nullopt, true); break;
+        switch (companion::wheel_press(o.companion.phase())) {
+            case companion::WheelPress::OpenWheel: open_order_wheel(w, o); break;
+            case companion::WheelPress::Summon: summon(w, o, now, "wheel key", true, std::nullopt, true); break;
             case companion::WheelPress::Nothing: break;  // a dismissal is under way
         }
     }
-    if (g_key_follow.edge.pressed(emf::keys::down(g_key_follow.vk)) && active) order_follow();
-    if (g_key_stay.edge.pressed(emf::keys::down(g_key_stay.vk)) && active) order_stay(w);
-    if (g_key_attack.edge.pressed(emf::keys::down(g_key_attack.vk)) && active) order_attack(w, now);
-    if (g_key_dismiss.edge.pressed(emf::keys::down(g_key_dismiss.vk)) && active) summon_or_dismiss(w, now, "dismiss key");
+    if (g_key_follow.edge.pressed(emf::keys::down(g_key_follow.vk)) && active) order_follow(w, o);
+    if (g_key_stay.edge.pressed(emf::keys::down(g_key_stay.vk)) && active) order_stay(w, o);
+    if (g_key_attack.edge.pressed(emf::keys::down(g_key_attack.vk)) && active) order_attack(w, o, now);
+    if (g_key_dismiss.edge.pressed(emf::keys::down(g_key_dismiss.vk)) && active) summon_or_dismiss(w, o, now, "dismiss key");
+}
+
+// The players in the server world now: a set for each one first seen (their file read once the world's save has
+// loaded), a new entity for one who came back, and a companion dismissed for one who left (it comes back with them).
+void update_players(emf::World w, uint64_t now, uint32_t session) {
+    const uint32_t host = g_dedicated ? 0 : emf::local_player();
+    if (!g_dedicated && !host) return;  // the host's own player is not known yet: whose file is the old one waits
+    const bool world_loaded = g_loaded_session == session;
+    std::set<uint64_t> present;
+    for (uint32_t p : emf::players(w)) {
+        const uint64_t account = emf::player_account(w, p);
+        if (!account) continue;
+        present.insert(account);
+        Owner* o = g_owners.find(account);
+        if (!o) {
+            o = &g_owners.get(account, p == host, g_policy_defaults, g_catch_defaults);
+            o->begin(session, now);
+            o->player = p;
+            EMF_LOG(kMod, "player %u (%s) is in the world", p,
+                    o->host ? "the host" : format("account %016llx", static_cast<unsigned long long>(account)).c_str());
+        } else if (o->player != p) {
+            if (!o->player) {
+                o->on_back(p, now);
+                EMF_LOG(kMod, "player %u (account %016llx) is back in the world", p, static_cast<unsigned long long>(account));
+            } else {
+                o->player = p;
+            }
+        }
+        if (world_loaded && !o->loaded) load_state(*o, now);
+    }
+    g_owners.each([&](Owner& o) {
+        if (!o.player || present.count(o.account)) return;
+        const uint32_t was = o.player;
+        for (const uint32_t marker : o.on_left()) emf::api()->destroy(w.raw(), marker);
+        EMF_LOG(kMod, "player %u (account %016llx) left: %s", was, static_cast<unsigned long long>(o.account),
+                o.away_out ? "their companion goes and comes back with them" : "no companion out");
+        save_state(o);
+    });
+}
+
+// Each player's set, once a second: the body checks, gear, level, file and a companion coming back.
+void check_owner(emf::World w, Owner& o, uint64_t now) {
+    check_companion(w, o, now);
+    o.gear.tick(now);
+    if (o.taken_pide && now >= o.taken_check_ms) {
+        const uint32_t pide = o.taken_pide.exchange(0);
+        if (w.get<gen::ecs::ItemState>(pide)) {
+            EMF_LOG(kMod, "the taken item's data entity %u is still there (the game did not remove it, or the id was "
+                          "reused at once)", pide);
+            note(w, o, format("Companion: the game kept the taken item's data (entity %u); see the log", pide));
+        } else {
+            EMF_LOG(kMod, "the taken item's data entity %u was removed by the game", pide);
+        }
+    }
+    if (o.return_after_load && o.player) {
+        o.return_after_load = false;
+        for (const auto& p : o.gear.unreturned()) return_piece(w, o, p);
+    }
+    if (o.companion.phase() == companion::Companion::Phase::Active && now - o.last_level_ms >= 2000) {
+        o.last_level_ms = now;
+        apply_level(w, o);
+    }
+    save_state(o);
+    double you[3];
+    const bool here = o.player && entity_pos(w, o.player, you);
+    if (here) o.catch_up.watch_player(now, {you[0], you[1], you[2]});
+    if (o.companion.phase() == companion::Companion::Phase::None && here) {
+        // a lost one comes to its player's own spot once they stand (never into the air beside them while they glide),
+        // or, when it was staying, at its stay spot once they are back near it
+        const bool lost = o.policy.lost_pending();
+        const bool staying = o.orders.mode() == companion::Mode::Stay;
+        const emf::aim::Vec3 player{you[0], you[1], you[2]};
+        const emf::aim::Vec3 spot = o.orders.stay_pos();
+        const auto where =
+            companion::come_back(lost, staying, o.catch_up.player_settled(), emf::aim::length(emf::aim::sub(spot, player)));
+        std::optional<emf::aim::Vec3> at;
+        if (where == companion::ComeBack::AtStaySpot) at = emf::aim::Vec3{spot.x, spot.y + 0.5, spot.z};
+        else if (lost) at = companion::return_spot(player);
+        if (where != companion::ComeBack::Wait && o.policy.due(now)) {
+            const Summon s = summon(w, o, now, !lost ? "auto" : at && staying ? "back at its stay spot" : "back after it got lost",
+                                    false, at);
+            if (s == Summon::Failed || s == Summon::Limit) o.policy.on_spawn_failed(now);  // try again after a back-off
+        }
+    }
 }
 
 void on_tick(emf::World w) {
@@ -760,76 +870,85 @@ void on_tick(emf::World w) {
     if (!w.is_server()) return;
     const uint64_t now = GetTickCount64();
     const uint32_t session = emf::server_session();
-    if (session != g_companion_session) {  // a new session: nothing of the old one's companion carries over
-        g_companion_session = session;
-        g_catch.reset();
+    if (session != g_owners_session) {  // a new session (another world, a reload): nobody's set carries over
+        g_owners_session = session;
+        g_owners.clear();
+        g_last_check_ms = 0;
     }
-    g_companion.on_session(session);  // a new session (a reload keeps the world's address) forgets the old companion
-    g_policy.on_session(session, now);
-    g_orders.on_session(session);  // marker ids of the old world mean nothing now
-    if (session != g_file_session && g_loaded_session != session && g_slot) {  // a new world: its own file decides
-        g_slot = 0;
-        g_gear = companion::GearBook{};
-    }
-    if (g_loaded_session == session && g_file_session != session) {
-        g_file_session = session;
-        load_state();
-    }
-    if (g_loaded_session == session) g_policy.on_loaded(now);
-    if (g_died.exchange(false)) {
-        const bool again = g_policy.on_died(now);
-        EMF_LOG(kMod, "the companion died: %s",
-                companion::death_message(again, g_policy.respawn_ms / 1000ull, call_key()).c_str());
-    }
-    read_keys(w, now);
-    if (g_companion.phase() == companion::Companion::Phase::Active) run_orders(w, now);
-    if (const uint32_t dead = g_companion.take_destroy()) {
-        const bool ok = emf::api()->destroy(w.raw(), dead);
-        EMF_LOG(kMod, "companion %u dismissed (%s)", dead, ok ? "destroyed" : "destroy FAILED");
-    }
-    if (now - g_last_check_ms >= 1000) {
-        g_last_check_ms = now;
-        check_companion(w, now);
-        g_gear.tick(now);
-        if (g_taken_pide && now >= g_taken_check_ms) {
-            const uint32_t pide = g_taken_pide.exchange(0);
-            if (w.get<gen::ecs::ItemState>(pide)) {
-                EMF_LOG(kMod, "the taken item's data entity %u is still there (the game did not remove it, or the id was "
-                              "reused at once)", pide);
-                emf::api()->notify("Companion: the game kept the taken item's data (entity %u); see the log", pide);
-            } else {
-                EMF_LOG(kMod, "the taken item's data entity %u was removed by the game", pide);
-            }
+    g_owners.each([&](Owner& o) {
+        o.companion.on_session(session);
+        if (o.died.exchange(false)) {
+            const bool again = o.policy.on_died(now);
+            EMF_LOG(kMod, "the companion of player %u died: %s", o.player,
+                    companion::death_message(again, o.policy.respawn_ms / 1000ull, call_key()).c_str());
         }
-        if (g_return_after_load && emf::local_player()) {
-            g_return_after_load = false;
-            for (const auto& p : g_gear.unreturned()) return_piece(w, p);
+        if (o.host && o.player) read_keys(w, o, now);
+        if (o.companion.phase() == companion::Companion::Phase::Active) run_orders(w, o, now);
+        if (const uint32_t dead = o.companion.take_destroy()) {
+            const bool ok = emf::api()->destroy(w.raw(), dead);
+            EMF_LOG(kMod, "companion %u dismissed (%s)", dead, ok ? "destroyed" : "destroy FAILED");
         }
-        if (g_companion.phase() == companion::Companion::Phase::Active && now - g_last_level_ms >= 2000) {
-            g_last_level_ms = now;
-            apply_level(w);
+    });
+    if (now - g_last_check_ms < 1000) return;
+    g_last_check_ms = now;
+    update_players(w, now, session);
+    g_owners.each([&](Owner& o) { check_owner(w, o, now); });
+}
+
+// companion.as <player entity> <word>: a player's order run from the console (for tests and admins).
+void as_command(emf::World w, const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        EMF_REPLY("companion.as <player entity> summon|dismiss|follow|stay|attack|gear");
+        return;
+    }
+    const uint32_t player = static_cast<uint32_t>(std::strtoul(args[0].c_str(), nullptr, 10));
+    const uint64_t account = player ? emf::player_account(w, player) : 0;
+    Owner* o = account ? g_owners.find(account) : nullptr;
+    if (!o || o->player != player) {
+        EMF_REPLY("no player %u in this world yet (players are looked up once a second)", player);
+        return;
+    }
+    const std::string& word = args[1];
+    const uint64_t now = GetTickCount64();
+    const bool active = o->companion.phase() == companion::Companion::Phase::Active;
+    if (word == "summon") {
+        if (active) {
+            EMF_REPLY("player %u's companion is out already (entity %u)", player, o->companion.entity());
+            return;
         }
-        save_state();
-        double you[3];
-        const bool here = emf::local_player() && entity_pos(w, emf::local_player(), you);
-        if (here) g_catch.watch_player(now, {you[0], you[1], you[2]});
-        if (g_companion.phase() == companion::Companion::Phase::None && here) {
-            // a lost one comes to your own spot once you stand (never into the air beside you while you glide), or, when
-            // it was staying, at its stay spot once you are back near it
-            const bool lost = g_policy.lost_pending();
-            const bool staying = g_orders.mode() == companion::Mode::Stay;
-            const emf::aim::Vec3 player{you[0], you[1], you[2]};
-            const emf::aim::Vec3 spot = g_orders.stay_pos();
-            const auto where =
-                companion::come_back(lost, staying, g_catch.player_settled(), emf::aim::length(emf::aim::sub(spot, player)));
-            std::optional<emf::aim::Vec3> at;
-            if (where == companion::ComeBack::AtStaySpot) at = emf::aim::Vec3{spot.x, spot.y + 0.5, spot.z};
-            else if (lost) at = companion::return_spot(player);
-            if (where != companion::ComeBack::Wait && g_policy.due(now) &&
-                summon(w, now, !lost ? "auto" : at && staying ? "back at its stay spot" : "back after it got lost", false, at) ==
-                    Summon::Failed)
-                g_policy.on_spawn_failed(now);  // try again after a back-off instead of every second
+        if (o->companion.phase() != companion::Companion::Phase::None) {
+            EMF_REPLY("player %u's companion is being dismissed", player);
+            return;
         }
+        const Summon s = summon(w, *o, now, "companion.as", true, std::nullopt, true);
+        EMF_REPLY("%s", s == Summon::Ok ? format("companion %u for player %u", o->companion.entity(), player).c_str()
+                        : s == Summon::Limit ? "refused: max_companions are out"
+                        : s == Summon::NoPlayer ? "the player's position is not known"
+                                                : "the spawn failed (see the log)");
+    } else if (word == "gear") {
+        const uint32_t pl = player_level(w, *o);
+        EMF_REPLY("player %u's companion: level %u = %u + gear %u", player,
+                  companion::companion_level(pl, o->gear.bonus(pl, g_gear_bonus_max)), pl, o->gear.bonus(pl, g_gear_bonus_max));
+        for (const auto& piece : o->gear.held())
+            EMF_REPLY("  %s: %s (level %u, %s)", companion::slot_name(piece.slot), item_name(w, piece.item).c_str(),
+                      piece.level, rarity_name(piece.rarity));
+    } else if (!active) {
+        EMF_REPLY("player %u has no companion out (companion.as %u summon)", player, player);
+    } else if (word == "dismiss") {
+        summon_or_dismiss(w, *o, now, "companion.as");
+        EMF_REPLY("dismissing player %u's companion", player);
+    } else if (word == "follow") {
+        order_follow(w, *o);
+        EMF_REPLY("player %u's companion follows", player);
+    } else if (word == "stay") {
+        order_stay(w, *o);
+        EMF_REPLY("player %u's companion: %s", player, o->orders.mode() == companion::Mode::Stay ? "stays" : "see the note");
+    } else if (word == "attack") {
+        order_attack(w, *o, now);
+        EMF_REPLY("player %u's companion: %s", player,
+                  o->orders.mode() == companion::Mode::Attack ? "attacks what they look at" : "nothing to attack there");
+    } else {
+        EMF_REPLY("companion.as <player entity> summon|dismiss|follow|stay|attack|gear");
     }
 }
 
@@ -860,18 +979,22 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         EMF_LOG(kMod, "invalid guid '%s': disabled", guid.c_str());
         return true;
     }
+    EmfGameBuild build{};
+    build.size = sizeof(build);
+    g_dedicated = emf::has_v14() && api->game_build && api->game_build(&build) && build.server;
     wchar_t dist[32] = {};
     GetPrivateProfileStringW(L"companion", L"follow_distance", L"0", dist, 32, ini_path().c_str());
     g_follow_distance = static_cast<float>(std::wcstod(dist, nullptr));
-    g_catch = companion::CatchUp(g_follow_distance > 50.0f ? 50.0 : g_follow_distance);  // its limits move out with it
+    g_catch_defaults = companion::CatchUp(g_follow_distance > 50.0f ? 50.0 : g_follow_distance);  // its limits move out with it
     const std::wstring ini = ini_path();
     wchar_t fac[32] = {};  // read as text: GetPrivateProfileInt turns a negative value (-1 = keep) into 0
     GetPrivateProfileStringW(L"companion", L"faction", L"11", fac, 32, ini.c_str());
     const companion::FactionSetting faction = companion::parse_faction(fac);
     g_faction = faction.value;
     if (!faction.ok) EMF_LOG(kMod, "faction '%ls' is not a number from -1 to 15: using 11 (PlayerAlly)", fac);
-    g_policy.auto_summon = GetPrivateProfileIntW(L"companion", L"auto_summon", 0, ini.c_str()) != 0;
-    g_policy.respawn_ms = 1000ull * GetPrivateProfileIntW(L"companion", L"respawn_seconds", 0, ini.c_str());
+    g_policy_defaults.auto_summon = GetPrivateProfileIntW(L"companion", L"auto_summon", 0, ini.c_str()) != 0;
+    g_policy_defaults.respawn_ms = 1000ull * GetPrivateProfileIntW(L"companion", L"respawn_seconds", 0, ini.c_str());
+    g_max_companions = GetPrivateProfileIntW(L"companion", L"max_companions", 8, ini.c_str());
     auto read_key = [&ini](const wchar_t* name, const wchar_t* def, Hotkey& k) {
         wchar_t text[32] = {};
         GetPrivateProfileStringW(L"companion", name, def, text, 32, ini.c_str());
@@ -902,22 +1025,32 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         g_slot = slot;
         g_loaded_session = emf::server_session();
     }, nullptr);
-    emf::add_command("companion.gear", ": what the companion wears and the level it gets", [](emf::World w,
-                                                                                           const std::vector<std::string>&) {
-        const uint32_t pl = player_level(w);
-        const uint32_t bonus = g_gear.bonus(pl, g_gear_bonus_max);
+    emf::add_command("companion.gear", ": what your companion wears and the level it gets", [](emf::World w,
+                                                                                              const std::vector<std::string>&) {
+        Owner* o = nullptr;
+        g_owners.each([&](Owner& x) {
+            if (x.host) o = &x;
+        });
+        if (!o) {
+            EMF_REPLY("no host's companion in this world (on a dedicated server: companion.as <player> gear)");
+            return;
+        }
+        const uint32_t pl = player_level(w, *o);
+        const uint32_t bonus = o->gear.bonus(pl, g_gear_bonus_max);
         EMF_REPLY("companion level %u = you %u + gear %u (at most +%u)", companion::companion_level(pl, bonus), pl, bonus,
                   g_gear_bonus_max);
-        for (const auto& piece : g_gear.held())
+        for (const auto& piece : o->gear.held())
             EMF_REPLY("  %s: %s (level %u, %s)", companion::slot_name(piece.slot), item_name(w, piece.item).c_str(),
                       piece.level, rarity_name(piece.rarity));
-        if (g_gear.held().empty())
+        if (o->gear.held().empty())
             EMF_REPLY("  no gear (%s, then Gear, gives some from your backpack)", call_key().c_str());
-        for (const auto& piece : g_gear.unreturned())
+        for (const auto& piece : o->gear.unreturned())
             EMF_REPLY(piece.put_failed ? "  waiting for room in your inventory (then Take all gear back): %s (level %u, %s)"
                                        : "  on the way back to you: %s (level %u, %s)",
                       item_name(w, piece.item).c_str(), piece.level, rarity_name(piece.rarity));
     });
+    emf::add_command("companion.as", "<player entity> summon|dismiss|follow|stay|attack|gear: a player's companion order "
+                     "from the console", [](emf::World w, const std::vector<std::string>& args) { as_command(w, args); });
     emf::add_command("companion.aim", ": the camera ray and the creatures near it (why Attack picks what it picks)",
                      [](emf::World w, const std::vector<std::string>&) {
         const uint32_t player = emf::local_player();
@@ -947,7 +1080,8 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
     });
     emf::on_tick(on_tick);
     EMF_LOG(kMod, "ready: %s summons a companion, then opens its order wheel (template %s, faction %d, "
-            "auto_summon %d, respawn %llu s)", g_key_wheel.vk ? g_key_wheel.name.c_str() : "no key (none set)", guid.c_str(),
-            g_faction, g_policy.auto_summon ? 1 : 0, g_policy.respawn_ms / 1000ull);
+            "auto_summon %d, respawn %llu s, max_companions %u%s)", g_key_wheel.vk ? g_key_wheel.name.c_str() : "no key (none set)",
+            guid.c_str(), g_faction, g_policy_defaults.auto_summon ? 1 : 0, g_policy_defaults.respawn_ms / 1000ull,
+            g_max_companions, g_dedicated ? ", dedicated server" : "");
     return true;
 }
