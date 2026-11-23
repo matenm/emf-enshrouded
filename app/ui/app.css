@@ -274,6 +274,7 @@ main { flex: 1; min-height: 0; position: relative; }
   width: 100%; margin: 4px 0 6px; padding: 7px 11px; border: 1px solid var(--rim); border-radius: 9px; background: var(--night); outline: none;
 }
 .setting-search:focus { border-color: rgba(255, 138, 61, 0.6); }
+.setting-search::-webkit-search-cancel-button { filter: invert(0.6); }
 .settings-none { margin: 10px 0 0; color: var(--haze); font-size: 13px; }
 .setting.inactive .setting-label, .setting.inactive .setting-help, .setting.inactive .setting-control { opacity: 0.45; }
 .setting-cond { margin: 6px 0 0; color: var(--amber); font-size: 12.5px; }

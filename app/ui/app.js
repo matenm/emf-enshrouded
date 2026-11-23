@@ -613,7 +613,12 @@ function settingSearchBox(m) {
   return withFocus(el('input', {
     class: 'setting-search', type: 'search', placeholder: 'Find a setting', 'aria-label': 'Find a setting',
     autocomplete: 'off', spellcheck: 'false', value: settingSearch[k] || '',
-    oninput: (e) => { settingSearch[k] = e.target.value; redraw(e.target.selectionStart); },
+    oninput: (e) => {
+      settingSearch[k] = e.target.value;
+      if (!e.isComposing) redraw(e.target.selectionStart);  // an IME's word being built: drawn when it is done
+    },
+    oncompositionend: (e) => { settingSearch[k] = e.target.value; redraw(e.target.selectionStart); },
+    onblur: () => setTimeout(() => renderDetails(false), 0),  // a redraw skipped while typing
     onkeydown: (e) => {
       if (e.key !== 'Escape') return;
       e.preventDefault();
@@ -659,6 +664,8 @@ function renderDetails(force) {
   detailsShown = shownNow;
   const scroll = d.scrollTop;
   const focusWas = d.contains(active) && active.dataset ? active.dataset.focus : '';  // to put the keyboard back after
+  let caretWas = null;  // and the caret in a text field (number, range and colour fields have none)
+  try { if (focusWas && typeof active.selectionStart === 'number') caretWas = [active.selectionStart, active.selectionEnd]; } catch (e) { caretWas = null; }
 
   const g = groupOf(m);
   const meta = [];
@@ -706,7 +713,10 @@ function renderDetails(force) {
   d.scrollTop = scroll;
   if (focusWas) {
     const again = d.querySelector('[data-focus="' + CSS.escape(focusWas) + '"]');
-    if (again && !again.disabled) again.focus();
+    if (again && !again.disabled) {
+      again.focus();
+      if (caretWas) try { again.setSelectionRange(caretWas[0], caretWas[1]); } catch (e) { /* not a text field now */ }
+    }
   }
 }
 
