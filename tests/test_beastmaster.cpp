@@ -215,6 +215,15 @@ TEST_CASE("beastmaster: with nothing under the crosshair, taming takes another b
     CHECK(b.noted("You tamed a wolf"));
 }
 
+TEST_CASE("pack beast: the pack llama is a kind of its own: given, never wild, never tamed, not among the kinds to tame (GitHub #48)") {
+    BeastRig b;
+    CHECK(b.reply("beastmaster.give packllama").find("added Pack llama (packllama)") != std::string::npos);
+    CHECK(b.reply("beastmaster.spawn packllama").find("never wild") != std::string::npos);
+    CHECK(b.reply("beastmaster.tame").find("wolf, boar, sabretooth, hound, rat, bear, aurochs or snake") != std::string::npos);
+    // its creature (the game's cat-deer companion's graph) is never a beast to tame
+    CHECK(b.reply("beastmaster.species 73702659-0000-0000-0000-000000000000 11") == "unknown");
+}
+
 TEST_CASE("beastmaster: the channel breaks when you walk away (more than 8 m) or the beast dies") {
     BeastRig b;
     b.look(1, 0, 10.5, 0, 0);
@@ -3924,7 +3933,7 @@ TEST_CASE("beastmaster: mod.json asks EMF for a portrait of every kind, the wild
     const std::regex entry(R"re(\{ id = "([a-z_]+)",[^\n]*template = "([0-9a-f-]{36})")re");
     for (auto it = std::sregex_iterator(species.begin(), species.end(), entry); it != std::sregex_iterator(); ++it)
         kinds[(*it)[1]] = (*it)[2];
-    REQUIRE(kinds.size() == 11u);  // wolf, boar, sabretooth, hound, rat, bear, aurochs and four snakes
+    REQUIRE(kinds.size() == 12u);  // wolf, boar, sabretooth, hound, rat, bear, aurochs, four snakes and the pack llama
     // and the wilds pack's fighting animals (species_wilds.lua: an entry spans lines)
     const std::string wilds_file = slurp(std::filesystem::path(dir + "species_wilds.lua").wstring());
     const size_t from = wilds_file.find("M.beasts = {"), to = wilds_file.find("M.kinds = {");
@@ -3934,7 +3943,7 @@ TEST_CASE("beastmaster: mod.json asks EMF for a portrait of every kind, the wild
     const std::regex wild_entry(R"re(\{ id = "([a-z_]+)",[^}]*?template = "([0-9a-f-]{36})")re");
     for (auto it = std::sregex_iterator(wilds.begin(), wilds.end(), wild_entry); it != std::sregex_iterator(); ++it)
         kinds[(*it)[1]] = (*it)[2];
-    REQUIRE(kinds.size() == 31u);
+    REQUIRE(kinds.size() == 32u);
     std::vector<std::string> problems;
     const auto items = emf::loader::read_portrait_lists(
         {{"beastmaster", slurp(std::filesystem::path(dir + "mod.json").wstring())}}, &problems);

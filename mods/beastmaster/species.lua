@@ -26,6 +26,8 @@
 --   stays:      false: the Sleep state never holds it while its owner stands still (it only turns, and roams)
 --   small:      a critter that is everywhere (the rat): taming with nothing under the crosshair takes any other kind
 --               near first
+--   carrier:    a pack beast (the llama): it carries a bag and never fights, has a slot of its own (one out per player)
+--               and is never wild nor tamed (it has no graph to be known by)
 -- Baits are settings ("bait_<id>"), read when used.
 local M = {}
 
@@ -83,6 +85,10 @@ M.list = {
 		graph = "d4c87337-8c53-41df-8488-8079046e1535", factions = { [WILDBEAST] = true },
 		rare_of = "snake", chance = 0.0025,
 		bonus = { runes = { 6, 10 }, rune2 = 0.50, gear = 0.25, gear_rarity = "legendary" } },
+	-- the pack beast (GitHub #48): a llama on the game's cat-deer companion (the wilds pack's wilds_packllama, with a
+	-- 16-slot inventory in its template); GUIDs fixed forever
+	{ id = "packllama", name = "Pack llama", plural = "pack llamas", carrier = true, template = "d9da8d97-981f-4e72-86ac-ec81ff70b6d2",
+		model = "ebb344e5-9619-471d-a7dd-ee75ddc7ec65", pack = "the wilds pack (emf_beastmaster_wilds)", role_health = 1.0, role_damage = 1.0 },
 }
 
 -- The wilds pack's fighting animals (species_wilds.lua): beasts like the ones above, known by replace.lua's list of the

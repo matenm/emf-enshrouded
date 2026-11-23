@@ -47,7 +47,7 @@ end
 local function candidates(off)
 	local out = {}
 	for _, sp in ipairs(species.list) do
-		if sp.pack and not sp.rare_of and not sp.wilds and not off[sp.id] then out[#out + 1] = sp end
+		if sp.pack and not sp.rare_of and not sp.wilds and not sp.carrier and not off[sp.id] then out[#out + 1] = sp end
 	end
 	for i = #out, 2, -1 do
 		local j = math.random(i)

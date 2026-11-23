@@ -67,7 +67,7 @@ end
 local function kinds_text()
 	local names = {}
 	for _, sp in ipairs(species.list) do
-		if not sp.rare_of and not sp.wilds then names[#names + 1] = sp.name:lower() end
+		if not sp.rare_of and not sp.wilds and not sp.carrier then names[#names + 1] = sp.name:lower() end
 	end
 	if #names < 2 then return names[1] or "" end
 	return table.concat(names, ", ", 1, #names - 1) .. " or " .. names[#names]

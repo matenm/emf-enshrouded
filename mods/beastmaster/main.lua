@@ -1158,6 +1158,10 @@ emf.command("spawn", "<species>: a wild beast 5 m in front of you, to try taming
 		emf.reply("no species " .. tostring(args[1]) .. " (" .. table.concat(ids, ", ") .. ")")
 		return
 	end
+	if s.carrier then
+		emf.reply("the " .. s.name:lower() .. " is never wild (beastmaster.give " .. s.id .. " adds one)")
+		return
+	end
 	local me = emf.local_player()
 	local x, y, z = world:position(me or 0)
 	if not x then emf.reply("your position is not known yet") return end
