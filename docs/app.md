@@ -57,7 +57,10 @@ account features are switched off, and a tester setting switches them on ("Nexus
   with no EML, ShroudForge or `emf_content.dll` to load them (or with EMF's EML content set to off), a loader whose file
   name another tool took, and EMF's start-up report (the
   same lines as `emf_core.log`). **Copy all** puts them on the clipboard for a bug report.
-- **EMF**: whether EMF is installed in the folder, its version, the **EML content** card (below), the **Nexus account**
+- **EMF**: whether EMF is installed in the folder, its version, **EMF's settings** (the in-game Settings tab's pages
+  Text on screen, Console and HUD, from `emf\emf_core.ini`: a change writes only its own line, a value typed by hand
+  stays as typed, and the console key takes the next key press by where the key is, so a console that does not open
+  is fixed before the game starts; not in a dedicated server's folder), the **EML content** card (below), the **Nexus account**
   and the **Mod Manager Download links** setting (with the Nexus features, below), and the end of `emf_core.log`,
   `emf_loader.log` and `content.log` (read while the game writes them), each with a **Copy** button. Error texts in a mod's details have one too. The chip at the top
   ("Nexus: not logged in", or the account's name and Premium) opens the account.

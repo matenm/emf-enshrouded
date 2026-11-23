@@ -14,6 +14,7 @@
 #include "core/json.h"
 #include "core/known_tools.h"
 #include "core/mod_order.h"
+#include "core/emf_settings.h"
 #include "core/key_list.h"
 #include "core/settings.h"
 #include "emf/emf_api.h"
@@ -422,6 +423,8 @@ void apply_load_rules(FolderState& s, const std::vector<EmfLoadInfo>& infos) {
         if (!why[i].empty() && e.enabled && e.error.empty()) e.error = "Will not load: " + why[i];
     }
 }
+
+void scan_emf_settings(FolderState& s);
 
 // ---- keys two EMF mods use (the console's `keys` lists them too) ----
 void note_shared_keys(FolderState& s) {
@@ -1103,6 +1106,7 @@ FolderState scan_mod_folder(const std::wstring& game_in, ScanDepth depth) {
     assign_keys(s);
     if (c.light) return s;  // no warnings: profiles read the switches only
     if (!s.server) note_shared_keys(s);  // a dedicated server has no keyboard
+    if (s.emf_installed && !s.server) scan_emf_settings(s);
 
     // warnings that need the whole list
     std::vector<Warning> first;
@@ -1352,6 +1356,115 @@ Change reset_mod_setting(const std::wstring& game_in, const std::string& id, con
     for (const auto& k : keys) {
         std::string why;
         switch (store.reset(id, k, &why)) {
+            case core::SettingsStore::SetResult::Ok: changed = true; break;
+            case core::SettingsStore::SetResult::Unchanged: break;
+            case core::SettingsStore::SetResult::WriteFailed: return fail(why + ": " + windows_error_text(GetLastError()));
+            default: return fail(why);
+        }
+    }
+    return {true, {}, !changed};
+}
+
+// ---- EMF's own settings: the in-game Settings tab's pages, from emf\emf_core.ini ----
+namespace {
+// What the card shows: the pages "Text on screen", "Console" and "HUD" (the backups are on the Saves tab, the HUD layout
+// has its own bar in the game, the console window is a start-up switch).
+bool on_emf_card(const core::SettingDef& d) {
+    return d.group == core::kPageText || d.group == core::kPageConsole || d.group == core::kPageHud;
+}
+
+// emf_core.ini while only looking: nothing is written back.
+class ReadOnlyCoreIni : public core::IniBackend {
+public:
+    explicit ReadOnlyCoreIni(std::wstring path) : file_(std::move(path)) {}
+    std::optional<std::string> read(const std::string& mod, const std::string& key) override { return file_.read(mod, key); }
+    bool write(const std::string&, const std::string&, const std::string&) override { return true; }
+    bool erase(const std::string&, const std::string&) override { return true; }
+
+private:
+    core::CoreIniBackend file_;
+};
+
+// emf_core.ini while one setting changes: declaring writes nothing (Declare::Keep), then only that line.
+class SaveCoreIni : public core::IniBackend {
+public:
+    explicit SaveCoreIni(std::wstring path) : file_(std::move(path)) {}
+    std::optional<std::string> read(const std::string& mod, const std::string& key) override { return file_.read(mod, key); }
+    bool write(const std::string& mod, const std::string& key, const std::string& value) override {
+        return !writing || file_.write(mod, key, value);
+    }
+    bool erase(const std::string& mod, const std::string& key) override { return !writing || file_.erase(mod, key); }
+    bool writing = false;
+
+private:
+    core::CoreIniBackend file_;
+};
+
+void scan_emf_settings(FolderState& s) {
+    ReadOnlyCoreIni ini(s.game + L"\\emf\\emf_core.ini");
+    core::SettingsStore store(&ini);
+    core::declare_emf_settings(store, s.game + L"\\emf\\fonts");
+    const std::string id = core::kEmfSettingsId;
+    const auto defs = store.defs(id);
+    const auto value_of = [&](const std::string& k) { return store.get(id, k); };
+    for (const auto& d : defs) {
+        if (!on_emf_card(d)) continue;
+        ModSetting ms{d, store.get(id, d.key)};
+        ms.active = core::setting_active(d, value_of);
+        ms.when = core::setting_condition_text(d, defs);
+        for (const auto& other : defs) ms.controls = ms.controls || other.when_key == d.key;
+        ms.stored = store.stored(id, d.key);
+        if (d.type == core::SettingType::ScanCode) ms.shown = core::scan_code_shown(ms.value);
+        s.emf_settings.push_back(std::move(ms));
+    }
+}
+
+// The store for a change: EMF's settings declared as the game declares them, the file written from here on.
+bool emf_card_store(const std::wstring& game, SaveCoreIni& ini, core::SettingsStore& store, std::string* error) {
+    if (!exists(game + L"\\emf\\emf_core.dll")) return *error = "EMF is not installed in this folder.", false;
+    core::declare_emf_settings(store, game + L"\\emf\\fonts");
+    ini.writing = true;
+    return true;
+}
+bool emf_card_key(const core::SettingsStore& store, const std::string& key) {
+    for (const auto& d : store.defs(core::kEmfSettingsId))
+        if (d.key == key) return on_emf_card(d);
+    return false;
+}
+}  // namespace
+
+Change set_emf_setting(const std::wstring& game_in, const std::string& key, const std::string& value) {
+    const std::wstring game = trim_slashes(game_in);
+    if (!is_game_folder(game)) return fail("The game folder is not there any more.");
+    SaveCoreIni ini(game + L"\\emf\\emf_core.ini");
+    core::SettingsStore store(&ini);
+    std::string error;
+    if (!emf_card_store(game, ini, store, &error)) return fail(error);
+    if (!emf_card_key(store, key)) return fail("EMF has no setting \"" + key + "\" here.");
+    std::string why;
+    switch (store.set(core::kEmfSettingsId, key, value, &why)) {
+        case core::SettingsStore::SetResult::Ok: return {true, {}};
+        case core::SettingsStore::SetResult::Unchanged: return {true, {}, true};
+        case core::SettingsStore::SetResult::WriteFailed: return fail(why + ": " + windows_error_text(GetLastError()));
+        default: return fail(why.empty() ? "That value is not valid." : why);
+    }
+}
+
+Change reset_emf_setting(const std::wstring& game_in, const std::string& key) {
+    const std::wstring game = trim_slashes(game_in);
+    if (!is_game_folder(game)) return fail("The game folder is not there any more.");
+    SaveCoreIni ini(game + L"\\emf\\emf_core.ini");
+    core::SettingsStore store(&ini);
+    std::string error;
+    if (!emf_card_store(game, ini, store, &error)) return fail(error);
+    std::vector<std::string> keys;
+    for (const auto& d : store.defs(core::kEmfSettingsId))
+        if (on_emf_card(d) && (key.empty() || d.key == key)) keys.push_back(d.key);
+    if (keys.empty()) return fail("EMF has no setting \"" + key + "\" here.");
+    bool changed = false;
+    for (const auto& k : keys) {
+        std::string why;
+        switch (store.reset(core::kEmfSettingsId, k, &why)) {
             case core::SettingsStore::SetResult::Ok: changed = true; break;
             case core::SettingsStore::SetResult::Unchanged: break;
             case core::SettingsStore::SetResult::WriteFailed: return fail(why + ": " + windows_error_text(GetLastError()));

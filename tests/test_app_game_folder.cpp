@@ -949,6 +949,60 @@ TEST_CASE("app keys: keys shared on purpose are no note, but the key bind still 
     CHECK_FALSE(key_setting(s, "stable")->also_clash);
 }
 
+namespace {
+const ModSetting* emf_setting(const FolderState& s, const std::string& key) {
+    for (const auto& ms : s.emf_settings)
+        if (ms.def.key == key) return &ms;
+    return nullptr;
+}
+}  // namespace
+
+TEST_CASE("app EMF settings: the Settings tab's three pages are read from emf_core.ini, not the backups or the layout") {
+    TempGame g(L"emfset");
+    install_emf(g);
+    g.write(L"emf\\emf_core.ini", "[overlay]\r\nkey=0x3b\r\nheight=500\r\n[hud]\r\nsize=120\r\n");
+    const FolderState s = scan_game_folder(g.dir);
+    REQUIRE(emf_setting(s, "overlay.key"));
+    CHECK(emf_setting(s, "overlay.key")->value == "0x3b");
+    CHECK(emf_setting(s, "overlay.key")->stored);
+    CHECK(emf_setting(s, "overlay.key")->shown.find("0x3b") != std::string::npos);  // the key's name on this keyboard
+    CHECK(emf_setting(s, "hud.size")->value == "120");
+    CHECK_FALSE(emf_setting(s, "hud.colour")->stored);
+    REQUIRE(emf_setting(s, "hud_editor.key_page"));
+    CHECK_FALSE(emf_setting(s, "backup.keep"));  // the Saves tab has them
+    CHECK_FALSE(emf_setting(s, "hud_editor.active_layout"));  // the layout bar changes it
+    CHECK_FALSE(emf_setting(s, "console.window"));
+    CHECK(s.emf_settings.front().def.group == "Text on screen");
+}
+
+TEST_CASE("app EMF settings: a change writes its own line, a value typed by hand stays as typed, reset removes the line") {
+    TempGame g(L"emfsetsave");
+    install_emf(g);
+    g.write(L"emf\\emf_core.ini", "[overlay]\r\nheight=500\r\n");
+    CHECK(set_emf_setting(g.dir, "overlay.key", "0x10").ok);
+    std::string ini = g.read(L"emf\\emf_core.ini");
+    CHECK(ini.find("key=0x10") != std::string::npos);
+    CHECK(ini.find("height=500") != std::string::npos);  // out of range, but the player's: EMF's core clamps it in memory
+    const Change bad = set_emf_setting(g.dir, "hud.size", "999");
+    CHECK_FALSE(bad.ok);
+    CHECK(bad.error.find("between 60 and 200") != std::string::npos);
+    CHECK_FALSE(set_emf_setting(g.dir, "backup.keep", "5").ok);  // not on this card
+    CHECK_FALSE(set_emf_setting(g.dir, "nokey", "1").ok);
+    CHECK(reset_emf_setting(g.dir, "overlay.key").ok);
+    ini = g.read(L"emf\\emf_core.ini");
+    CHECK(ini.find("key=") == std::string::npos);
+    CHECK(reset_emf_setting(g.dir, "overlay.key").unchanged);
+}
+
+TEST_CASE("app EMF settings: none in a dedicated server's folder (it draws nothing) or without EMF") {
+    TempGame d(L"emfsetserver", false);
+    d.write(L"enshrouded_server.exe", "fake");
+    install_emf(d);
+    CHECK(scan_game_folder(d.dir).emf_settings.empty());
+    TempGame g(L"emfsetnone");
+    CHECK(scan_game_folder(g.dir).emf_settings.empty());
+}
+
 // ---- edge cases ----
 
 TEST_CASE("app chain: only [Chain] and lines before any section count; another tool's section is left alone") {

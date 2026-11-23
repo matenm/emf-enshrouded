@@ -237,6 +237,7 @@ function render() {
   if (!nogame) renderDetails(false);
   renderWarnings();
   renderEmf();
+  renderEmfSettings(false);
   if (typeof renderContent === 'function') renderContent();  // the EML content card (content.js)
   renderAccount();
   renderNexusChip();
@@ -432,19 +433,47 @@ function keyName(e) {
 let capture = null;
 let refreshAfterState = false;
 const MODIFIERS = ['Shift', 'Ctrl', 'Alt'];
+// The places with settings: a mod's details and the EMF tab's card.
+function redrawSettings() {
+  renderDetails(true);
+  renderEmfSettings(true);
+}
 function bindCaptured(name) {
   const c = capture;
   capture = null;
   c.save(name);
-  renderDetails(true);
+  redrawSettings();
 }
+// KeyboardEvent.code (the key's place) -> its scan code, for EMF's console key: the main block, F1-F24 and the numpad
+// (the extended keys, such as the arrows, right Ctrl and Insert, are not here: the console key cannot be one).
+const SCAN_CODES = (() => {
+  const t = { Escape: 0x01, Minus: 0x0c, Equal: 0x0d, Backspace: 0x0e, Tab: 0x0f, BracketLeft: 0x1a, BracketRight: 0x1b,
+    Enter: 0x1c, ControlLeft: 0x1d, Semicolon: 0x27, Quote: 0x28, Backquote: 0x29, ShiftLeft: 0x2a, Backslash: 0x2b,
+    Comma: 0x33, Period: 0x34, Slash: 0x35, ShiftRight: 0x36, NumpadMultiply: 0x37, AltLeft: 0x38, Space: 0x39,
+    CapsLock: 0x3a, ScrollLock: 0x46, NumpadSubtract: 0x4a, NumpadAdd: 0x4e, NumpadDecimal: 0x53, IntlBackslash: 0x56,
+    F11: 0x57, F12: 0x58, IntlRo: 0x73, IntlYen: 0x7d, F24: 0x76 };
+  '1234567890'.split('').forEach((d, i) => { t['Digit' + d] = 0x02 + i; });
+  [['QWERTYUIOP', 0x10], ['ASDFGHJKL', 0x1e], ['ZXCVBNM', 0x2c]].forEach(([row, at]) => row.split('').forEach((ch, i) => { t['Key' + ch] = at + i; }));
+  for (let f = 1; f <= 10; f++) t['F' + f] = 0x3a + f;
+  for (let f = 13; f <= 23; f++) t['F' + f] = 0x64 + f - 13;
+  [[7, 0x47], [8, 0x48], [9, 0x49], [4, 0x4b], [5, 0x4c], [6, 0x4d], [1, 0x4f], [2, 0x50], [3, 0x51], [0, 0x52]].forEach(([n, sc]) => { t['Numpad' + n] = sc; });
+  return t;
+})();
 window.addEventListener('keydown', (e) => {
   if (!capture) return;
   e.preventDefault();
   e.stopPropagation();
-  if (e.key === 'Escape') {
+  if (e.key === 'Escape' || e.code === 'Escape') {
     capture = null;
-    renderDetails(true);
+    redrawSettings();
+    return;
+  }
+  if (capture.scan) {  // EMF's console key, as the game refuses keys there (scan_capture_key)
+    const sc = SCAN_CODES[e.code];
+    const what = e.key && e.key.length === 1 ? e.key.toUpperCase() : (e.key || e.code || 'That key');
+    if (!sc) toast(what + ' cannot open the console: choose another key (Esc cancels).', true);
+    else if (sc === 0x1c) toast('Enter sends the command line: choose another key (Esc cancels).', true);
+    else bindCaptured('0x' + sc.toString(16).padStart(2, '0'));
     return;
   }
   const name = keyName(e);
@@ -468,7 +497,7 @@ document.addEventListener('mousedown', (e) => {
   // a click on a key bind button (this one or another) is handled by its own click: no redraw that would eat it
   if (capture && !(e.target.closest && e.target.closest('.keybind'))) {
     capture = null;
-    renderDetails(true);
+    redrawSettings();
   }
 }, true);
 
@@ -522,6 +551,18 @@ function settingControl(m, s) {
     const pick = el('input', { type: 'color', value: s.value, 'aria-label': s.label, 'data-focus': focus, disabled: off });
     pick.addEventListener('change', () => save(pick.value));
     parts.push(pick, el('span', { class: 'setting-range' }, s.value));
+  } else if (s.type === 'scan code') {  // EMF's console key: the next key press, by where the key is
+    const waiting = !!capture && capture.ref === errKey;
+    const shown = s.shown || s.value;
+    parts.push(el('button', {
+      class: 'keybind' + (waiting ? ' waiting' : ''), type: 'button', 'data-focus': focus, disabled: off,
+      'aria-label': s.label + ': ' + shown + (waiting ? '. Press a key, Esc cancels' : '. Click, then press a key'),
+      onclick: () => {
+        capture = waiting ? null : { ref: errKey, save, scan: true };
+        redrawSettings();
+      },
+    }, waiting ? 'Press a key\u2026' : shown));
+    if (waiting) parts.push(el('span', { class: 'setting-range' }, 'Esc cancels'));
   } else if (s.type === 'key') {
     const waiting = !!capture && capture.ref === errKey;
     parts.push(el('button', {
@@ -529,7 +570,7 @@ function settingControl(m, s) {
       'aria-label': s.label + ': ' + (s.value || 'no key') + (waiting ? '. Press a key, Esc cancels' : '. Click, then press a key'),
       onclick: () => {
         capture = waiting ? null : { ref: errKey, save };
-        renderDetails(true);
+        redrawSettings();
       },
     }, waiting ? 'Press a key\u2026' : (s.value || 'No key')));
     if (waiting) parts.push(el('span', { class: 'setting-range' }, 'Esc cancels'));
@@ -558,8 +599,8 @@ function settingControl(m, s) {
       el('span', { class: 'setting-label' }, s.label || s.key),
       state.game_running
         ? el('span', { class: 'setting-when', title: 'The game is running: what you save here applies at its next start' }, 'From next start')
-        : el('span', { class: 'setting-when' + (s.live ? ' live' : ''), title: s.live ? 'The in-game Mods tab applies it at once' : 'Applies when the game starts' },
-          s.live ? 'Live in the in-game Mods tab' : 'At game start')),
+        : el('span', { class: 'setting-when' + (s.live ? ' live' : ''), title: s.live ? 'The ' + (m.live_where || 'in-game Mods tab') + ' applies it at once' : 'Applies when the game starts' },
+          s.live ? 'Live in the ' + (m.live_where || 'in-game Mods tab') : 'At game start')),
     s.help ? el('p', { class: 'setting-help' }, s.help) : null,
     el('div', { class: 'setting-control' }, parts),
     off && s.when ? el('p', { class: 'setting-cond' }, sentence(s.when)) : null,
@@ -770,6 +811,41 @@ function renderEmf() {
     s.game_found ? el('div', { class: 'row' },
       el('button', { class: 'ghost', type: 'button', onclick: () => send({ cmd: 'open_folder', path: s.game }) }, 'Show the game folder'),
       s.emf_installed ? el('button', { class: 'ghost', type: 'button', onclick: () => send({ cmd: 'open_folder', path: s.game + '\\emf' }) }, 'Show the emf folder') : null) : null);
+}
+
+// ---- EMF's own settings (emf\emf_core.ini) on the EMF tab: the in-game Settings tab's pages ----
+// The same controls as a mod's settings; a save goes to the host as set_setting with the id "emf".
+const EMF_CARD = { key: 'emf-core', id: 'emf', live_where: 'in-game Settings tab' };
+let emfSettingsPage = '';
+let emfSettingsShown = '';
+function renderEmfSettings(force) {
+  const box = $('emf-settings');
+  if (!box || !state) return;
+  const list = (state.game_found && state.emf_installed && !state.server && state.emf_settings) || [];
+  $('emf-settings-title').hidden = box.hidden = !list.length;
+  if (!list.length) { emfSettingsShown = ''; return; }
+  const pages = [...new Set(list.map((s) => s.group || ''))];
+  if (!pages.includes(emfSettingsPage)) emfSettingsPage = pages[0];
+  const shownNow = JSON.stringify([list, state.game_running, settingErrors, capture && capture.ref, emfSettingsPage]);
+  if (!force && shownNow === emfSettingsShown) return;
+  const active = document.activeElement;
+  if (!force && box.contains(active) && (active.tagName === 'INPUT' || active.tagName === 'SELECT')) return;  // the player is typing
+  emfSettingsShown = shownNow;
+  const focusWas = box.contains(active) && active.dataset ? active.dataset.focus : '';
+  const m = Object.assign({ settings: list }, EMF_CARD);
+  fill(box,
+    el('p', { class: 'd-note' }, state.game_running
+      ? 'The game is running: what you save here applies at its next start (the in-game Settings tab changes it at once).'
+      : 'The console\u2019s Settings tab in the game, here before it starts: for example a console key that suits your keyboard.'),
+    el('div', { class: 'segmented emf-pages', role: 'tablist', 'aria-label': 'Pages' }, pages.map((p) => el('button', {
+      class: 'seg emf-page', type: 'button', role: 'tab', 'aria-selected': String(p === emfSettingsPage), 'data-focus': 'emf-page:' + p,
+      onclick: () => { emfSettingsPage = p; renderEmfSettings(true); },
+    }, p))),
+    list.filter((s) => (s.group || '') === emfSettingsPage).map((s) => settingControl(m, s)));
+  if (focusWas) {
+    const again = box.querySelector('[data-focus="' + CSS.escape(focusWas) + '"]');
+    if (again && !again.disabled) again.focus();
+  }
 }
 
 function renderLog() {

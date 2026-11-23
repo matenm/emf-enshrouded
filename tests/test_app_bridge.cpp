@@ -266,6 +266,23 @@ TEST_CASE("app bridge: reset_setting needs its key (\"\" for every setting): a m
     CHECK(g.read(L"emf\\config\\clock.ini").find("size=") == std::string::npos);
 }
 
+TEST_CASE("app bridge: set_setting and reset_setting with the id emf change EMF's own settings, and the state has them") {
+    TempGame g(L"bridge_emfset");
+    fake_game(g);
+    FakeHost host;
+    host.dir = g.dir;
+    Bridge bridge(host);
+    const auto replies = bridge.handle(R"({"cmd":"set_setting","id":"emf","key":"overlay.font","value":"cascadia"})");
+    CHECK(result_of(replies).get("ok")->b);
+    CHECK(g.read(L"emf\\emf_core.ini").find("font=cascadia") != std::string::npos);
+    bool listed = false;
+    for (const auto& r : replies)
+        if (r.find("\"type\":\"state\"") != std::string::npos) listed = r.find("\"emf_settings\":[") != std::string::npos && r.find("cascadia") != std::string::npos;
+    CHECK(listed);
+    CHECK(result_of(bridge.handle(R"({"cmd":"reset_setting","id":"emf","key":"overlay.font"})")).get("ok")->b);
+    CHECK(g.read(L"emf\\emf_core.ini").find("font=") == std::string::npos);
+}
+
 TEST_CASE("app bridge: play starts the game through Steam") {
     TempGame g(L"bridge_play");
     FakeHost host;

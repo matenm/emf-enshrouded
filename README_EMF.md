@@ -210,7 +210,9 @@ new key (Esc cancels), so a key you cannot press again is never saved. The same 
 lists them, `set emf <section>.<key> <value>` changes one (`set emf hud.size 140`). They are the keys of
 `<game>\emf\emf_core.ini` below: a change writes only its own line, and a value you typed by hand that is out of range
 is used inside its range but stays in the file as you wrote it. Switching the console off (`[overlay] enabled`), chat
-admins and the debug bridge stay in the file and EMF.exe's Server tab.
+admins and the debug bridge stay in the file and EMF.exe's Server tab. EMF.exe's EMF tab shows the pages Text on
+screen, Console and HUD too, so you can set them before the game starts (a console key that suits your keyboard, for
+one).
 
 Settings in `<game>\emf\emf_core.ini`:
 ```

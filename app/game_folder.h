@@ -33,6 +33,7 @@ struct ModSetting {
     // (one press does both) rather than keys shared on purpose
     std::string also;
     bool also_clash = false;
+    std::string shown;  // a scan code (EMF's console key) as a name: "the key under Esc (0x29)"
     bool stored = false;    // its line is in the mod's ini (someone set it): the page offers Reset
 };
 
@@ -88,6 +89,9 @@ struct FolderState {
     std::wstring game;
     bool game_found = false;  // enshrouded.exe or enshrouded_server.exe is there
     bool server = false;      // a dedicated server folder (enshrouded_server.exe only)
+    // EMF's own settings (emf\emf_core.ini) on the in-game Settings tab's pages "Text on screen", "Console" and "HUD",
+    // in its order; empty without EMF and in a dedicated server's folder (a server draws nothing)
+    std::vector<ModSetting> emf_settings;
     bool emf_installed = false;
     bool play_once = false;  // EMF's loader here takes the one-shot flag of Play's menu (loader/play_once.h)
     std::string emf_version;  // from emf\emf_core.dll ("" when unknown)
@@ -154,6 +158,11 @@ Change set_mod_enabled(const std::wstring& game, const std::string& source, cons
                        const FolderFacts* facts);
 Change set_mod_setting(const std::wstring& game, const std::string& id, const std::string& key, const std::string& value,
                        const FolderFacts* facts);
+// One of EMF's own settings (FolderState::emf_settings) in emf\emf_core.ini, checked as the game checks it; only its
+// line is written, and a value typed by hand elsewhere in the file stays as it is.
+Change set_emf_setting(const std::wstring& game, const std::string& key, const std::string& value);
+// One of them back to its default (its line removed), or with `key` "" every one of them.
+Change reset_emf_setting(const std::wstring& game, const std::string& key);
 // An EMF mod's setting back to its default (its line removed from the ini; never the default written in), or with
 // `key` "" every setting of the mod (never its switch). unchanged: nothing was set.
 Change reset_mod_setting(const std::wstring& game, const std::string& id, const std::string& key);

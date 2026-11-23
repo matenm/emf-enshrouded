@@ -10,6 +10,7 @@
 #include "archive.h"
 #include "browse.h"
 #include "core/json.h"
+#include "core/settings.h"
 #include "json_out.h"
 #include "loader/play_once.h"
 #include "locate.h"
@@ -47,6 +48,7 @@ std::string setting_json(const ModSetting& s) {
     Obj o;
     o.str("key", s.def.key).str("type", core::setting_type_name(s.def.type)).str("label", s.def.label).str("help", s.def.help);
     o.str("value", s.value).str("default", s.def.default_value).boolean("live", s.def.live).str("also", s.also).boolean("also_clash", s.also_clash).boolean("stored", s.stored);
+    if (!s.shown.empty()) o.str("shown", s.shown);
     // the default as the in-game Mods tab shows it on hover ("on", an option's label, a key's name)
     o.str("default_shown", core::setting_shown_value(s.def, s.def.default_value));
     if (s.def.has_min) o.num("min", s.def.min);
@@ -277,6 +279,9 @@ std::string state_json(const FolderState& s, const std::string& running_reason) 
     for (const auto& m : s.installed) installed.push_back(installed_json(m));
     o.raw("installed", json_list(installed));
     o.raw("profiles", profiles_json(s));
+    std::vector<std::string> emf_settings;
+    for (const auto& st : s.emf_settings) emf_settings.push_back(setting_json(st));
+    o.raw("emf_settings", json_list(emf_settings));  // EMF's own settings: the EMF tab's card
     return o.text();
 }
 
@@ -796,10 +801,13 @@ std::vector<std::string> Bridge::handle(const std::string& message) {
         return with_state(result(cmd, c.ok, c.error, c.ok ? "Takes effect at the next game start." : ""));
     }
     if (cmd == "set_setting") {
-        const Change c = set_mod_setting(game, text_of(m, "id"), text_of(m, "key"), value_text(m.get("value")));
+        const bool emf_own = text_of(m, "id") == core::kEmfSettingsId;  // EMF's own settings (emf_core.ini)
+        const Change c = emf_own ? set_emf_setting(game, text_of(m, "key"), value_text(m.get("value")))
+                                 : set_mod_setting(game, text_of(m, "id"), text_of(m, "key"), value_text(m.get("value")));
         std::string text = "Saved.";
         if (!host_.running_reason().empty())
-            text += " The running game uses it from its next start (the in-game Mods tab changes settings at once).";
+            text += emf_own ? " The running game uses it from its next start (the in-game Settings tab changes it at once)."
+                            : " The running game uses it from its next start (the in-game Mods tab changes settings at once).";
         return with_state(result(cmd, c.ok, c.error, c.ok ? text : ""));
     }
     if (cmd == "reset_setting") {  // key "": every setting of the mod (never its switch)
@@ -807,7 +815,8 @@ std::vector<std::string> Bridge::handle(const std::string& message) {
         if (!k || !k->is(VT::String))
             return with_state(result(cmd, false, "reset_setting needs the setting's key (\"\" for every setting).", ""));
         const std::string key = k->s;
-        const Change c = reset_mod_setting(game, text_of(m, "id"), key);
+        const Change c = text_of(m, "id") == core::kEmfSettingsId ? reset_emf_setting(game, key)
+                                                                   : reset_mod_setting(game, text_of(m, "id"), key);
         std::string text = c.unchanged ? "Already at the default." : key.empty() ? "Every setting is back to its default." : "Back to the default.";
         if (c.ok && !c.unchanged && !host_.running_reason().empty())
             text += " The running game uses it from its next start (the in-game Mods tab resets settings at once).";

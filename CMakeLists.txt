@@ -411,7 +411,7 @@ add_library(emf_app_lib STATIC app/game_folder.cpp app/locate.cpp app/bridge.cpp
   app/browse.cpp app/account_store.cpp app/nxm_handler.cpp app/args.cpp app/updates.cpp app/bridge_updates.cpp
   app/servers.cpp app/server_process.cpp app/server_bridge.cpp
   src/core/json.cpp src/core/manifest.cpp src/core/settings.cpp src/core/key_list.cpp src/core/known_tools.cpp
-  src/core/mod_order.cpp)
+  src/core/mod_order.cpp src/core/emf_settings.cpp src/core/overlay/look_settings.cpp)
 target_include_directories(emf_app_lib PUBLIC ${CMAKE_SOURCE_DIR} src sdk/include)
 # Browse and install: the Nexus library, and bcrypt for the SHA-256 of installed files
 target_link_libraries(emf_app_lib PUBLIC emf_nexus_lib bcrypt)
