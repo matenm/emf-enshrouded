@@ -213,6 +213,23 @@ TEST_CASE("mods ui: reset puts a setting back to its default and says so; only a
     CHECK_FALSE(setting_resettable(s, "m", "radius"));
 }
 
+TEST_CASE("mods ui: reset ends a key capture, so the next key press does not undo it") {
+    MemIni ini;
+    SettingsStore s(&ini);
+    SettingDef key = def("key", SettingType::Key, "F3");
+    s.declare("m", key);
+    ModsUiState ui;
+    REQUIRE(apply_setting_edit(s, "m", "key", "F5", ui));
+    ui.capturing = "m.key";  // the bind waits for a key
+    ui.captured = "G";
+    ui.scan.step = ScanCapture::Step::First;  // and the console key for its first press
+    CHECK(apply_setting_reset(s, "m", "key", ui));
+    CHECK(ui.capturing.empty());
+    CHECK(ui.captured.empty());
+    CHECK(ui.scan.step == ScanCapture::Step::Idle);
+    CHECK(s.get("m", "key") == "F3");
+}
+
 TEST_CASE("mods ui: the console's Mods tab draws every kind of setting and many mods without ImGui errors") {
     Headless h;
     MemIni ini;

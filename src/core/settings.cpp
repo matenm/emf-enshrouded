@@ -125,10 +125,23 @@ bool FileIniBackend::write(const std::string& mod, const std::string& key, const
     return WritePrivateProfileStringW(wide(mod).c_str(), wide(key).c_str(), wide(value).c_str(), file.c_str()) != 0;
 }
 
-bool FileIniBackend::erase(const std::string& mod, const std::string& key) {
-    const std::wstring file = dir_ + L"\\" + wide(mod) + L".ini";
+namespace {
+// Removes every line of `key` in `section` (Windows removes the first one per call; a hand-edited file may have more).
+bool erase_ini_key(const std::wstring& file, const std::wstring& section, const std::wstring& key) {
     if (GetFileAttributesW(file.c_str()) == INVALID_FILE_ATTRIBUTES) return true;  // no file: no line
-    return WritePrivateProfileStringW(wide(mod).c_str(), wide(key).c_str(), nullptr, file.c_str()) != 0;
+    for (int i = 0; i < 16; ++i) {
+        if (!WritePrivateProfileStringW(section.c_str(), key.c_str(), nullptr, file.c_str())) return false;
+        wchar_t probe[2] = {};
+        if (GetPrivateProfileStringW(section.c_str(), key.c_str(), L"\x01", probe, 2, file.c_str()) == 1 &&
+            probe[0] == L'\x01')
+            return true;  // gone
+    }
+    return false;
+}
+}  // namespace
+
+bool FileIniBackend::erase(const std::string& mod, const std::string& key) {
+    return erase_ini_key(dir_ + L"\\" + wide(mod) + L".ini", wide(mod), wide(key));
 }
 
 namespace {
@@ -164,8 +177,7 @@ bool CoreIniBackend::write(const std::string&, const std::string& key, const std
 bool CoreIniBackend::erase(const std::string&, const std::string& key) {
     std::wstring section, name;
     if (!split_core_key(key, &section, &name)) return false;
-    if (GetFileAttributesW(path_.c_str()) == INVALID_FILE_ATTRIBUTES) return true;  // no file: no line
-    return WritePrivateProfileStringW(section.c_str(), name.c_str(), nullptr, path_.c_str()) != 0;
+    return erase_ini_key(path_, section, name);
 }
 
 std::optional<std::string> RoutingIniBackend::read(const std::string& mod, const std::string& key) {

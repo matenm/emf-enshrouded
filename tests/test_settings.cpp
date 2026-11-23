@@ -595,6 +595,10 @@ TEST_CASE("settings: the file backends remove a key's line (and only it); no fil
     CHECK(core.read(kEmfSettingsId, "hud.style").value_or("") == "boxed");
     CHECK(core.erase(kEmfSettingsId, "hud.size"));  // no line: fine
     CHECK_FALSE(core.erase(kEmfSettingsId, "nodot"));
+    put_bytes(ini, "[hud]\r\nsize=140\r\nsize=150\r\nstyle=boxed\r\n");  // a hand-edited file with the key twice
+    CHECK(core.erase(kEmfSettingsId, "hud.size"));
+    CHECK_FALSE(core.read(kEmfSettingsId, "hud.size").has_value());
+    CHECK(core.read(kEmfSettingsId, "hud.style").value_or("") == "boxed");
     DeleteFileW(ini.c_str());
     CHECK(core.erase(kEmfSettingsId, "hud.style"));  // no file: fine, and none is made
     CHECK(GetFileAttributesW(ini.c_str()) == INVALID_FILE_ATTRIBUTES);

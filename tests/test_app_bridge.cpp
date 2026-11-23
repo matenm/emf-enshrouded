@@ -252,6 +252,20 @@ TEST_CASE("app bridge: set_enabled switches the mod and sends the new state") {
     CHECK(bad.get("error")->s.find("between 1 and 9") != std::string::npos);
 }
 
+TEST_CASE("app bridge: reset_setting needs its key (\"\" for every setting): a message without one changes nothing") {
+    TempGame g(L"bridge_reset");
+    fake_game(g);
+    g.write(L"emf\\config\\clock.ini", "[clock]\r\nsize=5\r\n");
+    FakeHost host;
+    host.dir = g.dir;
+    Bridge bridge(host);
+    CHECK_FALSE(result_of(bridge.handle(R"({"cmd":"reset_setting","id":"clock"})")).get("ok")->b);
+    CHECK_FALSE(result_of(bridge.handle(R"({"cmd":"reset_setting","id":"clock","key":5})")).get("ok")->b);
+    CHECK(g.read(L"emf\\config\\clock.ini").find("size=5") != std::string::npos);
+    CHECK(result_of(bridge.handle(R"({"cmd":"reset_setting","id":"clock","key":"size"})")).get("ok")->b);
+    CHECK(g.read(L"emf\\config\\clock.ini").find("size=") == std::string::npos);
+}
+
 TEST_CASE("app bridge: play starts the game through Steam") {
     TempGame g(L"bridge_play");
     FakeHost host;

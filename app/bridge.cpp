@@ -803,7 +803,10 @@ std::vector<std::string> Bridge::handle(const std::string& message) {
         return with_state(result(cmd, c.ok, c.error, c.ok ? text : ""));
     }
     if (cmd == "reset_setting") {  // key "": every setting of the mod (never its switch)
-        const std::string key = text_of(m, "key");
+        const Value* k = m.get("key");
+        if (!k || !k->is(VT::String))
+            return with_state(result(cmd, false, "reset_setting needs the setting's key (\"\" for every setting).", ""));
+        const std::string key = k->s;
         const Change c = reset_mod_setting(game, text_of(m, "id"), key);
         std::string text = c.unchanged ? "Already at the default." : key.empty() ? "Every setting is back to its default." : "Back to the default.";
         if (c.ok && !c.unchanged && !host_.running_reason().empty())

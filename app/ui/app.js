@@ -151,6 +151,9 @@ function onResult(m) {
     }
   }
   if (m.cmd === 'updates_check' || m.cmd === 'nexus_link') updatesOnResult(m);
+  if (m.cmd === 'reset_setting' && m.ok && m.ref) {  // the control shows the default now: no old error under it
+    for (const k of Object.keys(settingErrors)) if (k === m.ref || (m.ref.endsWith(':') && k.startsWith(m.ref))) delete settingErrors[k];
+  }
   if (m.cmd === 'set_setting' && m.ref) {  // the host echoes the ref the save was sent with
     if (m.ok) delete settingErrors[m.ref];
     else {
@@ -564,16 +567,20 @@ function settingControl(m, s) {
 
 // "Reset all" above a mod's settings while any is set: the first click asks, the second (within 5 s) resets.
 let resetAllAsked = '';
+let resetAllTimer = 0;
 function resetAllButton(m) {
   if (!m.settings.some((s) => s.stored)) return null;
   const asking = resetAllAsked === keyOf(m);
   return el('button', {
     class: 'ghost small reset-all' + (asking ? ' asking' : ''), type: 'button', 'data-focus': 'reset-all',
-    onclick: () => {
-      if (!asking) {
+    onclick: (e) => {
+      if (e.detail > 1) return;  // the second click of a double-click: only the first one counts (it asks)
+      clearTimeout(resetAllTimer);
+      if (resetAllAsked !== keyOf(m)) {  // read now: the button may show a question that ran out
         resetAllAsked = keyOf(m);
-        renderDetails(true);
-        setTimeout(() => { if (resetAllAsked === keyOf(m)) { resetAllAsked = ''; renderDetails(true); } }, 5000);
+        renderDetails();
+        // a redraw that is not forced: it waits while the player types in a field
+        resetAllTimer = setTimeout(() => { resetAllAsked = ''; renderDetails(); }, 5000);
         return;
       }
       resetAllAsked = '';
@@ -605,7 +612,7 @@ function renderDetails(force) {
     detailsShown = '';
     return;
   }
-  const shownNow = JSON.stringify([m, state.game_running, pending, settingErrors, capture && capture.ref, updatesSignature(m)]);
+  const shownNow = JSON.stringify([m, state.game_running, pending, settingErrors, capture && capture.ref, updatesSignature(m), resetAllAsked]);
   if (forceDetails) force = true;
   forceDetails = false;
   if (!force && shownNow === detailsShown) return;

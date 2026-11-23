@@ -235,7 +235,7 @@ void draw_setting(SettingsStore& s, const std::string& mod, const SettingDef& d,
     }
     if (setting_resettable(s, mod, d.key)) {  // someone changed it: one click back to the default
         ImGui::SameLine();
-        if (ImGui::SmallButton("reset")) {
+        if (ImGui::SmallButton("reset##emf_reset")) {  // its own id: a setting's label may be "reset" too
             ui.pending.erase(full);
             apply_setting_reset(s, mod, d.key, ui);
         }
@@ -366,6 +366,13 @@ bool setting_resettable(const SettingsStore& store, const std::string& mod, cons
 }
 
 bool apply_setting_reset(SettingsStore& store, const std::string& mod, const std::string& key, ModsUiState& ui) {
+    // a key capture still waiting would save the next key press over the reset
+    ui.capturing.clear();
+    ui.captured.clear();
+    ui.capture_modifier.clear();
+    ui.scan.step = ScanCapture::Step::Idle;
+    ui.scan.message.clear();
+    ui.scan.value.clear();
     std::string why;
     const auto r = store.reset(mod, key, &why);
     if (r != SettingsStore::SetResult::Ok && r != SettingsStore::SetResult::Unchanged) {
