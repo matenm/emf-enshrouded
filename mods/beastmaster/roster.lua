@@ -5,6 +5,8 @@
 --   a <account> <name>                    (an active beast: in one of its owner's active slots)
 --   s 1                                   (the world has had a stable: from then on only active beasts are called)
 --   t <account> <talent:points,...> <name> (a beast's talent points spent: "strength:2,guard:1", talents.lua)
+--   g <account> <fraction> <x,y,z> <name>  (a beast in training at the Training Grounds at x,y,z, with the fraction of
+--                                           a loyalty point it has earned there: training.lua)
 -- account is world:account's text ("0x" + 16 hex digits); the name is last and may hold spaces. A player without an m
 -- line is defending.
 local talents = require("talents")
@@ -128,6 +130,9 @@ function R:serialize()
 			if b.active then lines[#lines + 1] = string.format("a %s %s", account, b.name) end
 			local spent = talents.format(b)
 			if spent then lines[#lines + 1] = string.format("t %s %s %s", account, spent, b.name) end
+			if b.training then
+				lines[#lines + 1] = string.format("g %s %.4f %s %s", account, b.trained or 0, b.training, b.name)
+			end
 		end
 	end
 	if self.has_stable then lines[#lines + 1] = "s 1" end
@@ -143,6 +148,7 @@ function M.parse(text)
 	local loyal = {}  -- y lines, applied once every beast is read
 	local active = {}  -- a lines, the same
 	local spent = {}   -- t lines, the same
+	local trains = {}  -- g lines, the same
 	for line in (text or ""):gmatch("[^\r\n]+") do
 		local y_account, points, y_name = line:match("^y (%S+) (%d+) (.+)$")
 		if y_account then loyal[#loyal + 1] = { y_account, tonumber(points), y_name } end
@@ -151,6 +157,10 @@ function M.parse(text)
 		local t_account, t_points, t_name = line:match("^t (%S+) (%S+) (.+)$")
 		local t_spent = t_account and talents.parse(t_points)
 		if t_spent then spent[#spent + 1] = { t_account, t_spent, t_name } end  -- a field with no known talent: no line
+		local g_account, g_fraction, g_key, g_name = line:match("^g (%S+) (%S+) (%S+) (.+)$")
+		if g_account and tonumber(g_fraction) and g_key:match("^%-?[%d.]+,%-?[%d.]+,%-?[%d.]+$") then
+			trains[#trains + 1] = { g_account, tonumber(g_fraction), g_key, g_name }
+		end
 		if line == "s 1" then r.has_stable = true end
 		local m_account, mode = line:match("^m (%S+) (%S+)$")
 		if m_account then r:set_mode(m_account, mode) end
@@ -175,6 +185,11 @@ function M.parse(text)
 	for _, t in ipairs(spent) do
 		for _, b in ipairs(r.by[t[1]] or {}) do
 			if b.name == t[3] then b.talents = t[2] end
+		end
+	end
+	for _, g in ipairs(trains) do
+		for _, b in ipairs(r.by[g[1]] or {}) do
+			if b.name == g[4] and not b.out then b.training, b.trained = g[3], math.max(0, math.min(g[2], 1)) end
 		end
 	end
 	return r

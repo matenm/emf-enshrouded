@@ -52,6 +52,8 @@
     {"key": "slot3_level", "type": "slider", "min": 0, "max": 50, "step": 1, "default": 20, "label": "Active slot 3 at level (0: never)", "live": true, "group": "Stable"},
     {"key": "slot4_level", "type": "slider", "min": 0, "max": 50, "step": 1, "default": 30, "label": "Active slot 4 at level (0: never)", "live": true, "group": "Stable"},
     {"key": "home_beasts", "type": "bool", "default": true, "label": "Beasts at home live in a Large Stable (the beasts pack's)", "live": true, "group": "Stable"},
+    {"key": "training_points", "type": "slider", "min": 0, "max": 12, "step": 1, "default": 3, "label": "Training gives (loyalty points a game day)", "live": true, "group": "Training"},
+    {"key": "training_room", "type": "slider", "min": 1, "max": 4, "step": 1, "default": 2, "label": "Beasts a Training Grounds holds", "live": true, "group": "Training"},
     {"key": "beast_health", "type": "slider", "min": 100, "max": 300, "step": 5, "default": 150, "label": "Beast health (% of their kind's)", "live": true, "group": "Behaviour"},
     {"key": "beast_damage", "type": "slider", "min": 50, "max": 300, "step": 5, "default": 125, "label": "Beast damage (% of their kind's)", "live": true, "group": "Behaviour"},
     {"key": "loyalty_pace", "type": "slider", "min": 0.25, "max": 4, "step": 0.25, "default": 1, "label": "Loyalty grows (x the normal pace)", "live": true, "group": "Behaviour"},

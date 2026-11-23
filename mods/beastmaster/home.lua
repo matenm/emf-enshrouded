@@ -348,7 +348,7 @@ end
 
 -- Whether beast `b` may be shown now.
 function H:allowed(b, now)
-	if b.out then return false end
+	if b.out or b.training then return false end  -- one in training is at its Training Grounds
 	local sp = species.by_id(b.species)
 	if not sp or now < (self.refused[sp.id] or 0) then return false end
 	return now >= (self.back_at[b] or 0)

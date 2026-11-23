@@ -12,6 +12,7 @@ local loyalty = require("loyalty")
 local slots = require("slots")
 local stable_mod = require("stable")
 local home_mod = require("home")
+local training_mod = require("training")
 local window_mod = require("beasts_window")
 local talents = require("talents")
 local wire = require("wire")
@@ -72,10 +73,13 @@ local function open_slots(world, player)
 	return slots.unlocked(level, setting)
 end
 
+local training  -- the beasts in training at a Training Grounds (made below; save() writes its lines)
 local function save()
 	if not loaded then return end
-	local text, marks = beasts:serialize(), stables:serialize()
-	if marks ~= "" then text = text ~= "" and (text .. "\n" .. marks) or marks end
+	local text = beasts:serialize()
+	for _, more in ipairs({ stables:serialize(), training and training:serialize() or "" }) do
+		if more ~= "" then text = text ~= "" and (text .. "\n" .. more) or more end
+	end
 	emf.save_world_data(text)
 end
 on_stables_changed = function() save() end
@@ -102,7 +106,10 @@ local pack = pack_mod.new({
 	mode = function(account) return beasts:mode(account) end,
 	slots = open_slots,
 	stabled = function() return beasts:stabled() end,
-	leave_home = function(world, b) home:leave(world, b) end,
+	leave_home = function(world, b)
+		home:leave(world, b)
+		training:back(b)  -- called: its training ends
+	end,
 	at_home = function(id) return home:has(id) end,
 })
 
@@ -118,6 +125,19 @@ home = home_mod.new({
 	gain = function(world, account, b) pack:gain(world, { account = account, beast = b }) end,
 })
 
+-- the beasts in training at a Training Grounds (1.21, the beasts pack's)
+training = training_mod.new({
+	now = now,
+	setting = setting,
+	beasts = function() return beasts end,
+	grounds = function() return stables:grounds() end,
+	present = function() return pack.present end,
+	gain = function(world, account, b) pack:gain(world, { account = account, beast = b }) end,
+	tell = tell,
+	save = save,
+	log = emf.log,
+})
+
 -- rare wild bears, aurochs and snakes (with their content packs)
 local wild = wild_mod.new({ setting = setting, now = now, on_spawn = spawned })
 
@@ -127,6 +147,7 @@ local rare = rare_mod.new()
 emf.on_world_data(function(world, text)
 	beasts = roster.parse(text)
 	stables:load(text)
+	training:load(text)
 	window:reset()
 	if remote then remote:reset() end
 	release_asked = {}
@@ -416,6 +437,39 @@ function actions.dismiss(world, player, account, key)
 	return pack:dismiss(world, account, b)
 end
 
+-- A beast goes to train at the nearest Training Grounds with room (from the player; 1.21).
+function actions.train(world, player, account, key)
+	if not account then return "Your account is not known yet." end
+	local b = beasts:find(account, key)
+	if not b then return "No such beast (beastmaster.list shows yours)." end
+	if b.training then return b.name .. " is training already (beastmaster.untrain brings it back)." end
+	if b.out then return b.name .. " is out: send it home first (beastmaster.dismiss)." end
+	if #training:grounds() == 0 then
+		return "No Training Grounds in this world yet: build one in your base (the beasts pack's, crafted at the Workbench)."
+	end
+	local x, y, z = world:position(player)
+	if not x then return "Your place is not known yet." end
+	local free, nearest = training:nearest(x, y, z)
+	if not free then
+		return string.format("The Training Grounds is full (%d of %d): bring a beast back first, or build another.",
+			training:count(nearest), training:room())
+	end
+	local ok, why = training:send(b, free)
+	if not ok then return b.name .. " cannot train now (" .. tostring(why) .. ")." end
+	home:leave(world, b)
+	return b.name .. " goes to the Training Grounds: it trains there and earns loyalty by the game's clock while you are "
+		.. "in the world."
+end
+
+-- A beast in training comes back to the stable (1.21).
+function actions.untrain(world, player, account, key)
+	if not account then return "Your account is not known yet." end
+	local b = beasts:find(account, key)
+	if not b then return "No such beast (beastmaster.list shows yours)." end
+	if not training:back(b) then return b.name .. " is not training." end
+	return b.name .. " is back in the stable."
+end
+
 local ATTACK_RANGE_M, HIT_MEMORY_S = 40, 10
 local ATTACK_CONE_DEG = 30  -- Attack with nothing under the crosshair: a monster at most this far off where you look
 
@@ -460,6 +514,21 @@ end)
 
 command("feed", ": feed the beast you look at its bait (3 times to tame it)", function(world, args)
 	emf.reply(actions.feed(world, who(world)))
+end)
+
+command("train", "<name or number>: send a beast to train at the nearest Training Grounds (it earns loyalty by the "
+	.. "game's clock); nothing: where your beasts train", function(world, args)
+	local player, account = who(world)
+	if #args == 0 then
+		emf.reply(account and training:text(account) or "Your account is not known yet.")
+		return
+	end
+	emf.reply(actions.train(world, player, account, table.concat(args, " ")))
+end)
+
+command("untrain", "<name or number>: bring a beast in training back to the stable", function(world, args)
+	local player, account = who(world)
+	emf.reply(actions.untrain(world, player, account, table.concat(args, " ")))
 end)
 
 command("call", "<name or number>: call a beast of your collection to your side", function(world, args)
@@ -878,6 +947,7 @@ emf.on_tick(function(world)
 	pack:step(world)
 	markers:step(world, pack.present, pack.ids, stables.stables)
 	home:step(world)
+	training:step(world)
 	wild:step(world)
 	health:step(world)
 	if pending then

@@ -7328,3 +7328,122 @@ TEST_CASE("beastmaster: through its protection a tamed beast stops fighting play
     CHECK_FALSE(still_fighting(b, 50));
     CHECK(now_of<ecs::DynamicEnemy01BehaviorState>(b, 50).state == S::Idle);
 }
+
+// ---- training (1.21): beasts sent to a Training Grounds (the beasts pack's) earn loyalty by the game's clock ----
+namespace {
+constexpr const char* kTrainingModel = "bb3549a0-5088-4c3b-8057-3a7e48a59ad6";
+// A Training Grounds `id` at (x, 10, z) in the base of the flame altar 900 at (0, 0): found by the next search.
+void training_grounds(BeastRig& b, uint32_t id, double x, double z) {
+    flame_altar(b, 900, 0, 0);
+    stable_prop(b, id, x, 10, z, kTrainingModel);
+}
+bool says(const std::string& reply, const std::string& part) { return reply.find(part) != std::string::npos; }
+}  // namespace
+
+TEST_CASE("training: a beast goes to the nearest Training Grounds with room; one more than its room is refused; untrain brings it back") {
+    BeastRig b;
+    three_beasts(b);
+    CHECK(says(b.reply("beastmaster.train Fang"), "No Training Grounds in this world yet"));
+    training_grounds(b, 960, 10, 0);
+    b.seconds(32);
+    CHECK(says(b.reply("beastmaster.train Fang"), "Fang goes to the Training Grounds"));
+    CHECK(says(b.reply("beastmaster.train Fang"), "training already"));
+    CHECK(says(b.reply("beastmaster.train Tusk"), "Tusk goes to the Training Grounds"));
+    CHECK(says(b.reply("beastmaster.train Rex"), "full (2 of 2)"));  // training_room: 2
+    CHECK(says(b.reply("beastmaster.train"), "Fang trains at the Training Grounds at 10, 10, 0 (loyalty 1, 0 % of a point)"));
+    CHECK(says(b.reply("beastmaster.untrain Fang"), "Fang is back in the stable"));
+    CHECK(says(b.reply("beastmaster.untrain Fang"), "Fang is not training"));
+    CHECK(says(b.reply("beastmaster.train Rex"), "Rex goes to the Training Grounds"));
+    CHECK(says(b.saved(), "g 0x00000000000000aa 0.0000 10.0,10.0,0.0 Rex"));
+    CHECK(says(b.saved(), "q 10.0 10.0 0.0 "));
+    CHECK_FALSE(says(b.saved(), "10.0,10.0,0.0 Fang"));  // brought back: no g line
+}
+
+TEST_CASE("training: a beast that is out is not sent; calling a beast in training ends its training") {
+    BeastRig b;
+    three_beasts(b);
+    training_grounds(b, 960, 10, 0);
+    b.seconds(32);
+    REQUIRE(says(b.reply("beastmaster.train Fang"), "goes to the Training Grounds"));
+    b.spawnable(1);
+    REQUIRE(says(b.reply("beastmaster.call Fang"), "comes"));
+    CHECK(says(b.reply("beastmaster.train"), "None of your beasts is training"));
+    CHECK(says(b.reply("beastmaster.train Fang"), "Fang is out: send it home first"));
+}
+
+TEST_CASE("training: 3 loyalty points a game day by the game's clock while its owner is in the world; a clock jump counts 12 h at most") {
+    BeastRig b;
+    three_beasts(b);
+    training_grounds(b, 960, 10, 0);
+    b.seconds(32);
+    set_daytime(b.r.fake, 6.0);
+    REQUIRE(says(b.reply("beastmaster.train Fang"), "goes to the Training Grounds"));
+    b.seconds(2);
+    set_daytime(b.r.fake, 14.0);  // 8 game hours: one point
+    b.seconds(2);
+    CHECK(says(b.saved(), "y 0x00000000000000aa 1 Fang"));
+    set_daytime(b.r.fake, 13.0);  // round the clock (23 h): counts as 12, one and a half points
+    b.seconds(2);
+    CHECK(says(b.saved(), "y 0x00000000000000aa 2 Fang"));
+    CHECK(says(b.reply("beastmaster.train"), "Fang trains at the Training Grounds at 10, 10, 0 (loyalty 1, 50 % of a point)"));
+    // its owner leaves the world: nothing counts
+    b.r.fake.components.erase({ecs::PlayerState::kHash, 1});
+    b.seconds(2);
+    set_daytime(b.r.fake, 21.0);
+    b.seconds(2);
+    CHECK(says(b.saved(), "y 0x00000000000000aa 2 Fang"));
+    // 0 a day: training only looks
+    component<ecs::PlayerState>(b.r.fake, 1);
+    b.r.fake.settings["beastmaster.training_points"] = "0";
+    b.seconds(2);
+    set_daytime(b.r.fake, 5.0);
+    b.seconds(2);
+    CHECK(says(b.saved(), "y 0x00000000000000aa 2 Fang"));
+}
+
+TEST_CASE("training: a save's g and q lines load back: a beast trains on at a Training Grounds nobody is near") {
+    BeastRig b;
+    write(b.data, "b 0x00000000000000aa wolf 0 0 Fang\ng 0x00000000000000aa 0.5000 300.0,10.0,0.0 Fang\n"
+                  "q 300.0 10.0 0.0 -\ns 1\n");
+    b.r.fake.session = 2;
+    fire_load(1);
+    b.seconds(1);
+    CHECK(says(b.reply("beastmaster.train"), "Fang trains at the Training Grounds at 300, 10, 0 (loyalty 1, 50 % of a point)"));
+    set_daytime(b.r.fake, 6.0);
+    b.seconds(2);
+    set_daytime(b.r.fake, 10.0);  // 4 game hours: half a point, the first whole one
+    b.seconds(2);
+    CHECK(says(b.saved(), "y 0x00000000000000aa 1 Fang"));
+    CHECK(says(b.saved(), "q 300.0 10.0 0.0 -"));  // still known: nobody near it saw it gone
+}
+
+TEST_CASE("training: a Training Grounds a player near it no longer sees for 30 s is gone: its beasts go back to the stable") {
+    BeastRig b;
+    three_beasts(b);
+    training_grounds(b, 960, 10, 0);
+    b.seconds(32);
+    REQUIRE(says(b.reply("beastmaster.train Fang"), "goes to the Training Grounds"));
+    remove_entity(b.r.fake, 960);  // taken down, the player 10 m from it
+    b.seconds(65);                 // the next search (every 30 s), then 30 s unseen
+    CHECK(says(b.reply("beastmaster.train"), "None of your beasts is training"));
+    CHECK_FALSE(says(b.saved(), "q 10.0 10.0 0.0"));
+    bool heard = false;
+    for (const auto& n : b.r.fake.notes) heard = heard || n.find("Fang's Training Grounds is gone") != std::string::npos;
+    for (const auto& [p, t] : b.r.fake.tells) heard = heard || t.find("Fang's Training Grounds is gone") != std::string::npos;
+    CHECK(heard);
+}
+
+TEST_CASE("home: a beast in training does not show up in the Large Stable") {
+    BeastRig b;
+    three_beasts(b);
+    large_stable(b, 950, 10, 0);
+    training_grounds(b, 960, -10, 0);
+    homes_ready(b, 3);
+    b.seconds(32);
+    REQUIRE(b.r.fake.spawns.size() == 3);
+    REQUIRE(says(b.reply("beastmaster.train Rex"), "goes to the Training Grounds"));
+    b.seconds(2);
+    CHECK(destroyed(b, 1236));  // Rex left the Large Stable
+    b.seconds(5);
+    CHECK(b.r.fake.spawns.size() == 3);  // and is not shown there again
+}

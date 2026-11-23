@@ -33,9 +33,12 @@ M.MODELS = {
 	["7dd9139a-fba7-4e60-8b5a-fa853c250ef7"] = "Large animal bed",  -- animalprops_farm_animal_sleep_large_01
 	["1a49170a-b3d2-498d-9062-8946f6469613"] = "Stable",            -- beastmaster_stable (the beasts pack)
 	["5879f304-0050-4ecb-96f4-5cc0e66155d9"] = "Large Stable",      -- beastmaster_large_stable (the beasts pack)
+	["bb3549a0-5088-4c3b-8057-3a7e48a59ad6"] = "Training Grounds",  -- beastmaster_training_grounds (the beasts pack)
 }
 -- The stables the beasts at home live in (home.lua): the Large Stable.
 M.HOMES = { ["5879f304-0050-4ecb-96f4-5cc0e66155d9"] = true }
+-- Where beasts train (training.lua): the Training Grounds.
+M.GROUNDS = { ["bb3549a0-5088-4c3b-8057-3a7e48a59ad6"] = true }
 M.STABLE_ITEM = "Prop_Beastmaster_Stable"  -- the beasts pack's Stable: its item's debug name (the pack has both)
 
 local ASK_AGAIN_S = 60  -- s: craftable(t) asks again this long after an item lookup that found nothing
@@ -368,6 +371,15 @@ function S:homes()
 	local out = {}
 	for _, b in ipairs(self.stables) do
 		if b.kind == "built" and b.model and M.HOMES[b.model] then out[#out + 1] = b end
+	end
+	return out
+end
+
+-- The built Training Grounds (M.GROUNDS), as homes() gives the Large Stables.
+function S:grounds()
+	local out = {}
+	for _, b in ipairs(self.stables) do
+		if b.kind == "built" and b.model and M.GROUNDS[b.model] then out[#out + 1] = b end
 	end
 	return out
 end
