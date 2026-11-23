@@ -397,6 +397,7 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 | Beasts come back from (`leash_m`), At once from (`leash_far_m`) | 60 m, 120 m | |
 | Aggressive beasts go at foes within (`aggro_m`) | 25 m | |
 | You get your beasts' kills (`xp_credit`) | on | XP and loot for the owner |
+| Beasts leave small critters alone (`spare_critters`) | on | rats in houses and ruins: beasts neither go after them nor fight them, unless one bites you or a beast (then for 30 s); Attack on one is still your call (1.21.0) |
 | Beasts step aside while someone builds next to them (`make_room`) | on | while you, or a player within 20 m of them, hold something to build or place, your beasts leave and come back after |
 | Beasts pass the time while you stand still (`idle`) | on | off: they keep following you as before (see When you stand still) |
 | After you stand still for (`idle_s`) | 10 s | 5-60 |

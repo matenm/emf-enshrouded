@@ -65,6 +65,7 @@
     {"key": "damage_share_pct", "type": "slider", "min": 0, "max": 90, "step": 5, "default": 20, "label": "Another beast draws (% of the monsters)", "live": true, "group": "Monsters"},
     {"key": "beasts_share_max_pct", "type": "slider", "min": 0, "max": 90, "step": 5, "default": 90, "label": "All your beasts draw at most (%)", "live": true, "group": "Monsters"},
     {"key": "boss_share_max_pct", "type": "slider", "min": 0, "max": 90, "step": 5, "default": 35, "label": "Of a boss, your beasts draw at most (%)", "live": true, "group": "Monsters"},
+    {"key": "spare_critters", "type": "bool", "default": true, "label": "Beasts leave small critters (rats) alone unless one bites", "live": true, "group": "Behaviour"},
     {"key": "make_room", "type": "bool", "default": true, "label": "Beasts step aside while someone builds next to them", "live": true, "group": "Behaviour"},
     {"key": "idle", "type": "bool", "default": true, "label": "Beasts pass the time while you stand still", "live": true, "group": "Behaviour"},
     {"key": "idle_s", "type": "slider", "min": 5, "max": 60, "step": 1, "default": 10, "label": "After you stand still for (s)", "live": true, "group": "Behaviour"},

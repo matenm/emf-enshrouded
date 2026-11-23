@@ -7631,3 +7631,43 @@ TEST_CASE("training: a clock set back (or forward more than 12 h) counts nothing
     b.seconds(2);
     CHECK(says(b.saved(), "y 0x00000000000000aa 1 Grey Fang"));
 }
+
+// ---- critters (1.21, GitHub #47): beasts leave small critters (rats) alone, unless one attacks ----
+namespace {
+constexpr const char* kRatGraph = "57a2f080-1f1e-4d18-8170-2d80b756fe56";  // Enemy_Wildbeast_Rat_hook's
+}  // namespace
+
+// A player's idea: their wolf killed every rat in an old house; they liked the rats running around.
+TEST_CASE("critters: an aggressive beast leaves a rat alone; a rat that bites its owner is fair game for 30 s") {
+    BeastRig b;
+    wolf_out(b);
+    b.beast(72, kRatGraph, 5, 20, kWildBeast, 30, 30);
+    armed(b, 1234);
+    b.reply("beastmaster.mode aggressive");
+    b.seconds(3);
+    CHECK(ordered(b, 1234) == 0u);
+    deliver(b.r.fake, "HitEvent", hit_event(72, 1));  // it bites the player
+    b.seconds(3);
+    CHECK(ordered(b, 1234) == 72u);
+}
+
+TEST_CASE("critters: a beast's own fight against a rat is cleared every step; one that bit it is fought for 30 s; with the setting off a rat is a foe") {
+    BeastRig b;
+    wolf_out(b);
+    b.beast(72, kRatGraph, 0, 3, kWildBeast, 30, 30);
+    fighting(b, 1234, 72);  // its own senses picked the rat
+    b.seconds(1);
+    CHECK_FALSE(still_fighting(b, 1234));
+    deliver(b.r.fake, "HitEvent", hit_event(72, 1234));  // the rat bites the beast
+    fighting(b, 1234, 72);
+    b.seconds(1);
+    CHECK(still_fighting(b, 1234));
+    b.seconds(31);  // 30 s after the bite it is a critter again
+    fighting(b, 1234, 72);
+    b.seconds(1);
+    CHECK_FALSE(still_fighting(b, 1234));
+    b.r.fake.settings["beastmaster.spare_critters"] = "false";
+    fighting(b, 1234, 72);
+    b.seconds(1);
+    CHECK(still_fighting(b, 1234));
+}

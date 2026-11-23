@@ -98,6 +98,7 @@ function P:reset()
 	self.base = {}       -- entity id -> {damage, wrote}: its template's damage multiplier, and the one written
 	self.fought = {}     -- entity id -> when it last hit or was hit (it heals HEAL_AFTER_S after that)
 	self.hits = {}       -- hostile creature id -> {beast entity id -> when it hit it} (loyalty for the kill)
+	self.provoked = {}   -- critter id -> until when it is fair game (it bit a player or a beast)
 	self.speeds = {}     -- entity id -> {base, wrote} by Movement entry: the game's values and Swiftness's (talents.lua)
 	self.present = nil   -- account -> player entity, for the players in the world (as of the last check)
 	self.called = {}     -- entity id -> when Beastmaster spawned it (idle.lua's clock: its SpawnTime is the game's then)
@@ -135,6 +136,17 @@ function M.fightable(world, id)
 	return cur ~= nil and cur > 0
 end
 
+-- Small critters (the rats of houses and ruins): the animation graphs they run (template data on the server world).
+local CRITTER_GRAPHS = { ["57a2f080-1f1e-4d18-8170-2d80b756fe56"] = true }  -- Enemy_Wildbeast_Rat_hook and its variants
+local PROVOKED_S = 30  -- s: a critter that bit a player or a beast is fair game this long
+
+-- A small critter (a rat): with the setting spare_critters, beasts leave it alone unless it bites (P:spared).
+function M.critter(world, id)
+	local ok, g = pcall(world.template, world, "AnimationGraphResourceComponent2", id)
+	local graph = ok and g and g.animationGraph and tostring(g.animationGraph):lower()
+	return graph ~= nil and CRITTER_GRAPHS[graph] == true
+end
+
 -- The game keeps it peaceful toward players and their allies (its PacifiedState): the game's own Beastmaster skill
 -- pacifies Vukah until the player attacks them, and a beast that bites one ends that peace for everyone.
 function M.pacified(world, id)
@@ -160,12 +172,13 @@ end
 -- `only` true: only its fights against the player side (players and their allies), as for a beast just tamed (it may
 -- still fight a monster that bites it: seen, a wild wolf killed a tamed one kept from fighting back).
 -- `only` "pacified": only its fights against creatures the game keeps pacified (its own senses pick them: the game
--- leaves a pacified creature's foes alone only from the pacified side), never `spare` (the creature an order sent it at).
-local function calm(world, id, only, spare)
+-- leaves a pacified creature's foes alone only from the pacified side) and those `also(e)` says (critters it spares),
+-- never `spare` (the creature an order sent it at).
+local function calm(world, id, only, spare, also)
 	local function clears(e)
 		if not only then return true end
 		if not e or e == 0 then return false end
-		if only == "pacified" then return e ~= spare and M.pacified(world, e) end
+		if only == "pacified" then return e ~= spare and (M.pacified(world, e) or (also ~= nil and also(e))) end
 		if world:account(e) then return true end
 		local f = world:get("Faction", e)
 		return f ~= nil and PLAYER_SIDE[f.faction] == true
@@ -599,15 +612,16 @@ function P:keep_order(world, id, now)
 	end
 end
 
--- The nearest living hostile creature (HOSTILE) within `range` metres of `owner`, never a boss or a player; nil when
--- there is none.
-local function nearest_foe(world, owner, range)
+-- The nearest living hostile creature (HOSTILE) within `range` metres of `owner`, never a boss, a player or one
+-- `skip(id)` says (a spared critter); nil when there is none.
+local function nearest_foe(world, owner, range, skip)
 	local ox, oy, oz = world:position(owner)
 	if not ox then return nil end
 	local best, best_d
 	for _, id in ipairs(world:entities()) do
 		local f = world:get("Faction", id)
-		if f and HOSTILE[f.faction] and not world:get("PlayerState", id) and not M.pacified(world, id) then
+		if f and HOSTILE[f.faction] and not world:get("PlayerState", id) and not M.pacified(world, id)
+			and not (skip and skip(id)) then
 			local x, y, z = world:position(id)
 			local d = x and math.sqrt((x - ox) ^ 2 + (y - oy) ^ 2 + (z - oz) ^ 2)
 			if d and d <= range and (not best_d or d < best_d) and not world:get("Boss", id)
@@ -622,7 +636,8 @@ end
 
 -- Aggressive beasts: every beast of `account` that is out goes at the nearest hostile creature near its owner.
 function P:hunt(world, account, owner)
-	local foe = nearest_foe(world, owner, self.env.setting("aggro_m"))
+	local now = self.env.now(world)
+	local foe = nearest_foe(world, owner, self.env.setting("aggro_m"), function(id) return self:spared(world, id, now) end)
 	if foe then self:attack(world, account, foe, true) end
 end
 
@@ -657,8 +672,12 @@ end
 function P:on_hit(world, source, target, change)
 	self.threat:on_hit(world, source, target)
 	self.idle:on_hit(world, source, target)
-	if not (self.ids[source] or self.ids[target]) then return end
 	local now = self.env.now(world)
+	-- a critter that bites a player or one of the beasts is fair game for PROVOKED_S
+	if source and source ~= 0 and (self.ids[target] or world:get("PlayerState", target)) and M.critter(world, source) then
+		self.provoked[source] = now + PROVOKED_S
+	end
+	if not (self.ids[source] or self.ids[target]) then return end
 	if self.ids[source] then self.fought[source] = now end
 	if self.ids[target] then self.fought[target] = now end
 	local f = self.ids[source] and world:get("Faction", target)
@@ -681,6 +700,13 @@ function P:strike(world, e, id, target, amount)
 	else
 		emf.damage(world, id, target, amount)
 	end
+end
+
+-- A critter the beasts leave alone now (the setting spare_critters, and it did not bite a player or a beast lately).
+function P:spared(world, id, now)
+	if self.env.setting("spare_critters") == false then return false end
+	if now < (self.provoked[id] or 0) then return false end
+	return M.critter(world, id)
 end
 
 -- A loyalty point for the beast of entity `e`: a new loyalty is told to its owner and makes it stronger at once.
@@ -860,7 +886,7 @@ function P:step(world)
 		if passive or now < (self.recall[id] or 0) then
 			calm(world, id)
 		else
-			calm(world, id, "pacified", self.orders[id])
+			calm(world, id, "pacified", self.orders[id], function(e) return self:spared(world, e, now) end)
 		end
 		if self.speeds[id] then self:set_speed(world, id, e.beast) end
 	end
