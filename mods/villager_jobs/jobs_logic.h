@@ -279,12 +279,16 @@ public:
                 s.job.place2 = c2i->pos;
                 changed_ = true;
             }
+            if (vi->busy) {
+                // Another mod moves it: no walk order meanwhile (the game would drop it). The wait timer starts again
+                // when the move ends, and the first tick after it walks at once (not up to goto_every_ms later).
+                s.work.since_ms = now_ms;
+                s.work.sent_goto = false;
+                s.went = false;
+                ++i;
+                continue;
+            }
             if (s.job.kind != JobKind::Craft) {
-                if (vi->busy) {  // the walk and wait timers start again when the other mod's move ends
-                    s.work.since_ms = now_ms;
-                    ++i;
-                    continue;
-                }
                 work_tick(s, *vi, *ci, c2i ? c2i->pos : Vec3{}, now_ms, view, out);
                 ++i;
                 continue;

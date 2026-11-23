@@ -1462,3 +1462,36 @@ TEST_CASE("jobs: a villager another mod is moving does no job work meanwhile; it
     for (uint64_t t = 121000; t <= 155000; t += 500) notes += count(book.tick(t, w.fn(), f.view()), ActionKind::Notice);
     CHECK(notes == 0);  // the 40 s count from the move's end
 }
+
+TEST_CASE("jobs: after another mod's short move (under the 5 s walk interval) the job walks again at once") {
+    JobBook book(test_cfg());
+    World w;
+    Wilds f;
+    w.pos[1025] = {0, 0, 0};
+    w.pos[6830] = {0, 0, 0};
+    f.items = {{8001, {15, 0, 0}}};
+    REQUIRE(book.assign(gather_job(), 0, 30000));
+    REQUIRE(first_of(book.tick(0, w.fn(), f.view()), ActionKind::GoToPos));
+    w.busy.insert(1025);
+    for (uint64_t t = 500; t <= 2000; t += 500) CHECK(book.tick(t, w.fn(), f.view()).empty());
+    w.busy.erase(1025);
+    CHECK(first_of(book.tick(2500, w.fn(), f.view()), ActionKind::GoToPos));  // not at 5 s from its last order
+}
+
+// The game drops a walk order sent while another mod moves the villager: a craft job sends none then, and walks to its
+// chest at once after the move instead of up to 10 s later.
+TEST_CASE("jobs: a crafting villager another mod moves sends no walk order meanwhile, and walks to its chest at once after") {
+    JobBook book;
+    World w;
+    w.pos[1025] = {10, 0, 0};
+    w.pos[6830] = {0, 0, 0};
+    REQUIRE(book.assign({1025, 6830, 0xf94576e0}, 1000, 30000));
+    REQUIRE(count(book.tick(1000, w.fn()), ActionKind::GoTo) == 1);
+    w.busy.insert(1025);
+    size_t acts = 0;
+    for (uint64_t t = 1500; t <= 13000; t += 500) acts += book.tick(t, w.fn()).size();
+    CHECK(acts == 0);  // no walk orders the game would drop
+    w.busy.erase(1025);
+    CHECK(count(book.tick(13500, w.fn()), ActionKind::GoTo) == 1);
+    CHECK(count(book.tick(14000, w.fn()), ActionKind::GoTo) == 0);  // then every 10 s again
+}
