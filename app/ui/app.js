@@ -540,6 +540,15 @@ function settingControl(m, s) {
     parts.push(input);
     if (s.max_length) parts.push(el('span', { class: 'setting-range' }, 'max ' + s.max_length));
   }
+  if (s.stored) {  // someone set it: one click back to the default (its line goes from the ini)
+    parts.push(el('button', {
+      class: 'ghost small reset', type: 'button', title: 'Back to the default', 'data-focus': focus + ':reset',
+      onclick: () => {
+        if (s.controls) refreshAfterState = true;
+        send({ cmd: 'reset_setting', id: m.id, key: s.key, ref: errKey });
+      },
+    }, 'Reset'));
+  }
   return el('div', { class: 'setting' + (off ? ' inactive' : ''), title: defaultTip(s) },
     el('div', { class: 'setting-head' },
       el('span', { class: 'setting-label' }, s.label || s.key),
@@ -551,6 +560,27 @@ function settingControl(m, s) {
     el('div', { class: 'setting-control' }, parts),
     off && s.when ? el('p', { class: 'setting-cond' }, sentence(s.when)) : null,
     settingErrors[errKey] ? el('div', { class: 'setting-error', role: 'alert' }, settingErrors[errKey]) : null);
+}
+
+// "Reset all" above a mod's settings while any is set: the first click asks, the second (within 5 s) resets.
+let resetAllAsked = '';
+function resetAllButton(m) {
+  if (!m.settings.some((s) => s.stored)) return null;
+  const asking = resetAllAsked === keyOf(m);
+  return el('button', {
+    class: 'ghost small reset-all' + (asking ? ' asking' : ''), type: 'button', 'data-focus': 'reset-all',
+    onclick: () => {
+      if (!asking) {
+        resetAllAsked = keyOf(m);
+        renderDetails(true);
+        setTimeout(() => { if (resetAllAsked === keyOf(m)) { resetAllAsked = ''; renderDetails(true); } }, 5000);
+        return;
+      }
+      resetAllAsked = '';
+      refreshAfterState = true;
+      send({ cmd: 'reset_setting', id: m.id, key: '', ref: keyOf(m) + ':' });
+    },
+  }, asking ? 'Reset every setting? Click again' : 'Reset all');
 }
 
 // The settings with a heading where a group starts (the host sends them in the in-game Mods tab's order).
@@ -623,7 +653,7 @@ function renderDetails(force) {
     m.depends.length ? el('div', { class: 'd-section' }, el('h3', {}, 'Needs'), el('ul', { class: 'd-list' }, m.depends.map((x) => el('li', {}, x)))) : null,
     m.game_build ? el('p', { class: 'd-note' }, 'Made for game build ' + m.game_build + '.') : null,
     m.settings.length ? el('div', { class: 'd-section' },
-      el('h3', {}, 'Settings'),
+      el('h3', {}, 'Settings', resetAllButton(m)),
       state.game_running ? el('p', { class: 'd-note' }, 'The game is running: what you save here applies at its next start. The in-game Mods tab changes settings at once.') : null,
       settingList(m)) : null,
     m.readme ? el('div', { class: 'd-section' }, el('h3', {}, 'Readme'), el('pre', { class: 'readme' }, m.readme)) : null);

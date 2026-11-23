@@ -46,7 +46,7 @@ size_t utf8_length(const std::string& s, size_t i) {
 std::string setting_json(const ModSetting& s) {
     Obj o;
     o.str("key", s.def.key).str("type", core::setting_type_name(s.def.type)).str("label", s.def.label).str("help", s.def.help);
-    o.str("value", s.value).str("default", s.def.default_value).boolean("live", s.def.live);
+    o.str("value", s.value).str("default", s.def.default_value).boolean("live", s.def.live).boolean("stored", s.stored);
     // the default as the in-game Mods tab shows it on hover ("on", an option's label, a key's name)
     o.str("default_shown", core::setting_shown_value(s.def, s.def.default_value));
     if (s.def.has_min) o.num("min", s.def.min);
@@ -800,6 +800,14 @@ std::vector<std::string> Bridge::handle(const std::string& message) {
         std::string text = "Saved.";
         if (!host_.running_reason().empty())
             text += " The running game uses it from its next start (the in-game Mods tab changes settings at once).";
+        return with_state(result(cmd, c.ok, c.error, c.ok ? text : ""));
+    }
+    if (cmd == "reset_setting") {  // key "": every setting of the mod (never its switch)
+        const std::string key = text_of(m, "key");
+        const Change c = reset_mod_setting(game, text_of(m, "id"), key);
+        std::string text = c.unchanged ? "Already at the default." : key.empty() ? "Every setting is back to its default." : "Back to the default.";
+        if (c.ok && !c.unchanged && !host_.running_reason().empty())
+            text += " The running game uses it from its next start (the in-game Mods tab resets settings at once).";
         return with_state(result(cmd, c.ok, c.error, c.ok ? text : ""));
     }
     if (auto out = handle_profiles(cmd, m)) return *out;  // mod profiles (bridge_profiles.cpp)

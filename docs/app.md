@@ -132,7 +132,9 @@ While `enshrouded.exe` or `enshrouded_server.exe` runs from the folder, the swit
 first"), and the banner says which process (or that Windows hides its folder because the game runs as administrator;
 then EMF assumes it is this folder). Settings still save; the running game uses them from its next start, and each
 setting says "From next start" then (the in-game Mods tab changes them at once: "Live in the in-game Mods tab").
-Settings are checked the same way as in the game: a value outside the mod's range is refused with the reason.
+Settings are checked the same way as in the game: a value outside the mod's range is refused with the reason. A setting
+someone changed has a **Reset** button (back to the default: its line goes from the mod's ini), and **Reset all** above a
+mod's settings asks once, then puts every one back (never the mod's on/off switch).
 Hovering a setting shows its default ("Default: on", an option's label, a key), as the in-game Mods tab does.
 
 ## Profiles

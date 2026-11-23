@@ -841,6 +841,32 @@ TEST_CASE("app settings: a value is checked like the Mods tab and written to the
     CHECK(find(scan_game_folder(g.dir), "emf", "clock")->settings[1].value == "15");
 }
 
+TEST_CASE("app settings: reset puts one setting, or all of a mod's, back to its default by removing the lines") {
+    TempGame g(L"resetsetting");
+    install_emf(g);
+    g.write(L"emf\\mods\\clock\\mod.json", kClock);
+    g.write(L"emf\\mods\\clock\\clock.dll", "dll");
+    g.write(L"emf\\config\\clock.ini", "[clock]\r\nenabled=1\r\nsize=15\r\nplace=0\r\n");
+    const FolderState before = scan_game_folder(g.dir);
+    const ModEntry* m = find(before, "emf", "clock");
+    REQUIRE(m);
+    CHECK(m->settings[1].stored);  // someone set it: the page shows Reset
+    CHECK(reset_mod_setting(g.dir, "clock", "size").ok);
+    std::string ini = g.read(L"emf\\config\\clock.ini");
+    CHECK(ini.find("size=") == std::string::npos);
+    CHECK(ini.find("place=0") != std::string::npos);
+    const FolderState after = scan_game_folder(g.dir);
+    CHECK_FALSE(find(after, "emf", "clock")->settings[1].stored);
+    CHECK(find(after, "emf", "clock")->settings[1].value == "10");
+    CHECK(reset_mod_setting(g.dir, "clock", "size").unchanged);  // nobody set it now
+    CHECK(reset_mod_setting(g.dir, "clock", "").ok);  // every setting
+    ini = g.read(L"emf\\config\\clock.ini");
+    CHECK(ini.find("place=") == std::string::npos);
+    CHECK(ini.find("enabled=1") != std::string::npos);  // never the switch
+    CHECK_FALSE(reset_mod_setting(g.dir, "clock", "nokey").ok);
+    CHECK_FALSE(reset_mod_setting(g.dir, "nomod", "").ok);
+}
+
 // ---- edge cases ----
 
 TEST_CASE("app chain: only [Chain] and lines before any section count; another tool's section is left alone") {

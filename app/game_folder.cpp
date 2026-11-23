@@ -286,6 +286,7 @@ public:
     bool write(const std::string& mod, const std::string& key, const std::string& value) override {
         return !writing || file_.write(mod, key, value);
     }
+    bool erase(const std::string& mod, const std::string& key) override { return !writing || file_.erase(mod, key); }
     bool writing = false;
 
 private:
@@ -487,6 +488,7 @@ void scan_emf_mods(FolderState& s, const Context& c) {
         for (size_t i : core::setting_display_order(defs)) {  // as the in-game Mods tab lists them
             ModSetting ms{defs[i], store.get(m.id, defs[i].key)};
             ms.active = core::setting_active(defs[i], value_of);
+            ms.stored = store.stored(m.id, defs[i].key);
             ms.when = core::setting_condition_text(defs[i], defs);
             for (const auto& other : defs) ms.controls = ms.controls || other.when_key == defs[i].key;
             e.settings.push_back(std::move(ms));
@@ -1275,6 +1277,33 @@ Change set_mod_setting(const std::wstring& game_in, const std::string& id, const
         default:
             return fail(why.empty() ? "That value is not valid." : why);
     }
+}
+
+Change reset_mod_setting(const std::wstring& game_in, const std::string& id, const std::string& key) {
+    const std::wstring game = trim_slashes(game_in);
+    if (!is_game_folder(game)) return fail("The game folder is not there any more.");
+    std::optional<core::Manifest> m;
+    if (!core::valid_mod_id(id) || !find_emf_mod(game, id, m) || !m) return fail("There is no EMF mod \"" + id + "\" with settings.");
+    SaveOneIni ini(game + L"\\emf\\config");
+    core::SettingsStore store(&ini);
+    for (const auto& def : m->settings) store.declare(id, def);
+    ini.writing = true;
+    std::vector<std::string> keys;
+    if (key.empty())
+        for (const auto& d : store.defs(id)) keys.push_back(d.key);
+    else
+        keys.push_back(key);
+    bool changed = false;
+    for (const auto& k : keys) {
+        std::string why;
+        switch (store.reset(id, k, &why)) {
+            case core::SettingsStore::SetResult::Ok: changed = true; break;
+            case core::SettingsStore::SetResult::Unchanged: break;
+            case core::SettingsStore::SetResult::WriteFailed: return fail(why + ": " + windows_error_text(GetLastError()));
+            default: return fail(why);
+        }
+    }
+    return {true, {}, !changed};
 }
 
 // ---- dinput8-chain.ini lines ----

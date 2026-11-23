@@ -277,6 +277,18 @@ try {
     $iniText = if (Test-Path -LiteralPath $starterIni) { Get-Content -LiteralPath $starterIni -Raw } else { "" }
     Check ($iniText -match "(?m)^toggle_key=Shift") "the last bind is saved ($($iniText.Trim() -replace "`r`n", ' | '))"
 
+    # 1d. Reset beside a setting someone set (its line goes from the ini), and Reset all (asks, then every setting)
+    $resetJs = "var W=function(c,f,n){n=n||0;if(c()){f();}else if(n<120){setTimeout(function(){W(c,f,n+1);},100);}else{f();}}; var pr={}; window.emfProbe=pr; var by=function(t){return [...document.querySelectorAll('.setting')].find(function(x){return x.querySelector('.setting-label').textContent===t;});}; var rb=function(t){var x=by(t); return x&&x.querySelector('button.reset');}; W(function(){return !!rb('Key that shows and hides the line');},function(){ pr.before=!!rb('Show the line'); rb('Key that shows and hides the line').click(); W(function(){return !rb('Key that shows and hides the line');},function(){ var k=by('Key that shows and hides the line').querySelector('.keybind'); pr.key=k?k.textContent:''; var all=document.querySelector('.reset-all'); pr.all=!!all; all.click(); W(function(){var a=document.querySelector('.reset-all'); return a&&/again/.test(a.textContent);},function(){ pr.asked=document.querySelector('.reset-all').textContent; document.querySelector('.reset-all').click(); W(function(){return !document.querySelector('.reset-all');},function(){ pr.left=document.querySelectorAll('button.reset').length; window.emfDone=true; }); }); }); });"
+    $run = Invoke-Smoke -Eval $resetJs -SelectMod "emf:my_first_mod" -More @("--probe-wait", "9000")
+    $p1d = if ($run.R -and $run.R.probe) { $run.R.probe.probe } else { $null }
+    Check ($run.Code -eq 0 -and $null -ne $p1d) "the reset page script ran ($($run.Code))"
+    if ($p1d) {
+        Check ($p1d.before -and $p1d.key -eq "F7") "Reset beside the key bind puts its default F7 back ($($p1d.key))"
+        Check ($p1d.all -and $p1d.asked -like "*Click again*" -and $p1d.left -eq 0) "Reset all asks first, then no setting has a Reset left ($($p1d.asked); $($p1d.left))"
+    }
+    $iniText = if (Test-Path -LiteralPath $starterIni) { Get-Content -LiteralPath $starterIni -Raw } else { "" }
+    Check (($iniText -notmatch "(?m)^toggle_key=") -and ($iniText -notmatch "(?m)^show=")) "the reset settings' lines are gone from emf\config\my_first_mod.ini ($($iniText.Trim() -replace "`r`n", ' | '))"
+
     # 2. lockdown: from the page, a fetch must fail and a navigation must be cancelled
     $lock = "var W=function(c,f,n){n=n||0;if(c()){f();}else if(n<120){setTimeout(function(){W(c,f,n+1);},100);}else{f();}}; var t0=Date.now(); window.emfProbe={fetch:'pending'}; fetch('https://example.com/').then(function(x){window.emfProbe.fetch='status '+x.status;},function(){window.emfProbe.fetch='blocked';}); setTimeout(function(){location.href='https://example.com/';},200); W(function(){return window.emfProbe.fetch!=='pending'&&Date.now()-t0>700;},function(){window.emfDone=true;});"
     # the script takes 0.7 s and the fetch's answer: with the default 1 s wait, a busy PC could read the page while the

@@ -29,6 +29,7 @@ struct ModSetting {
     bool active = true;     // its "enabledWhen" holds (or it has none); the in-game Mods tab greys it out otherwise
     std::string when;       // "only while Show the line is on" ("" without "enabledWhen")
     bool controls = false;  // another setting's "enabledWhen" names this one (a change re-draws the others)
+    bool stored = false;    // its line is in the mod's ini (someone set it): the page offers Reset
 };
 
 struct ModEntry {
@@ -148,6 +149,9 @@ Change set_mod_enabled(const std::wstring& game, const std::string& source, cons
                        const FolderFacts* facts);
 Change set_mod_setting(const std::wstring& game, const std::string& id, const std::string& key, const std::string& value,
                        const FolderFacts* facts);
+// An EMF mod's setting back to its default (its line removed from the ini; never the default written in), or with
+// `key` "" every setting of the mod (never its switch). unchanged: nothing was set.
+Change reset_mod_setting(const std::wstring& game, const std::string& id, const std::string& key);
 
 // dinput8-chain.ini text with the lines naming `dll` commented out ("; " in front) when !on, or that prefix removed
 // when on. Every other byte stays as it was. nullopt when no line changes.
