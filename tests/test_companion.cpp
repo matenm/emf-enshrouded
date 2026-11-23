@@ -1299,3 +1299,15 @@ TEST_CASE("owners: a player who leaves has their companion dismissed and back wh
     c.on_back(4, 10000);
     CHECK(!c.policy.coming());
 }
+
+TEST_CASE("owners: companion.as reads the player entity and the word after the command's own name") {
+    const auto a = companion::parse_as({"companion.as", "2", "summon"});
+    REQUIRE(a);
+    CHECK(a->player == 2);
+    CHECK(a->word == "summon");
+    CHECK(companion::parse_as({"companion.as", "7", "Follow"})->word == "follow");
+    CHECK(!companion::parse_as({"companion.as", "2"}));
+    CHECK(!companion::parse_as({"companion.as", "x", "summon"}));
+    CHECK(!companion::parse_as({"companion.as", "0", "summon"}));
+    CHECK(!companion::parse_as({"companion.as"}));
+}

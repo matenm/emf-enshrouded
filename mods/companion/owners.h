@@ -5,11 +5,13 @@
 #pragma once
 
 #include <atomic>
+#include <cstdlib>
 #include <cstdint>
 #include <cwchar>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -90,6 +92,23 @@ struct Owner {
         policy.on_lost(now_ms);
     }
 };
+
+// companion.as <player entity> <word>: the arguments as the console gives them (args[0] is the command's own name).
+// nullopt when a part is missing or the entity is not a number above 0. The word in lower case.
+struct AsOrder {
+    uint32_t player = 0;
+    std::string word;
+};
+inline std::optional<AsOrder> parse_as(const std::vector<std::string>& args) {
+    if (args.size() < 3 || args[1].empty()) return std::nullopt;
+    char* end = nullptr;
+    const unsigned long player = std::strtoul(args[1].c_str(), &end, 10);
+    if (*end || player == 0 || player > 0xFFFFFFFFul) return std::nullopt;
+    AsOrder a;
+    a.player = static_cast<uint32_t>(player);
+    for (char c : args[2]) a.word += static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c);
+    return a;
+}
 
 class Owners {
 public:

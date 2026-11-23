@@ -897,18 +897,19 @@ void on_tick(emf::World w) {
 
 // companion.as <player entity> <word>: a player's order run from the console (for tests and admins).
 void as_command(emf::World w, const std::vector<std::string>& args) {
-    if (args.size() < 2) {
+    const auto order = companion::parse_as(args);
+    if (!order) {
         EMF_REPLY("companion.as <player entity> summon|dismiss|follow|stay|attack|gear");
         return;
     }
-    const uint32_t player = static_cast<uint32_t>(std::strtoul(args[0].c_str(), nullptr, 10));
-    const uint64_t account = player ? emf::player_account(w, player) : 0;
+    const uint32_t player = order->player;
+    const uint64_t account = emf::player_account(w, player);
     Owner* o = account ? g_owners.find(account) : nullptr;
     if (!o || o->player != player) {
         EMF_REPLY("no player %u in this world yet (players are looked up once a second)", player);
         return;
     }
-    const std::string& word = args[1];
+    const std::string& word = order->word;
     const uint64_t now = GetTickCount64();
     const bool active = o->companion.phase() == companion::Companion::Phase::Active;
     if (word == "summon") {
