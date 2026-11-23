@@ -1322,7 +1322,7 @@ TEST_CASE("raids: mod.json: Raiders break walls (off), Hole size (small), Broken
         CHECK(key != "wall_drops");
         CHECK(key != "wall_strength");
     }
-    CHECK(emf::core::version_text(r.manifest->version) == "1.3.0");
+    CHECK(emf::core::version_text(r.manifest->version) == "1.3.1");
 }
 
 TEST_CASE("walls (review I1): after a give-up the raider does not look again until it makes 3 m of progress") {
