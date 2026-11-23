@@ -40,6 +40,7 @@ struct Owner {
     std::atomic<bool> died{false};  // the program saw its companion die; taken by the server tick
     bool away_out = false;          // it was out when they left: it comes back when they return (and the file says out)
     bool loaded = false;            // their file was read this session
+    bool remote = false;            // their own game sent a key this session: notes and wheels go to it (remote.h)
     int missed = 0;                 // checks in a row that did not find them in the world
     std::string saved_text;         // what their file holds now
     bool return_after_load = false;  // pieces left "returning" by a crash go back once they are in the world

@@ -602,10 +602,12 @@ every player: each one follows and fights for its own player, takes that player'
 backpack and is kept for them with the world. Your own (the host's) works exactly as before, in the same file. A
 guest's or a server player's companion is in `emf\config\companion\<world slot>-<account>.txt`; when they leave the
 world it goes with them and comes back when they join again (its order and gear kept). Their notes come as a line only
-they see ("[Companion] following you"). Until a joined player's own game sends their keys (a later version), their
-companion is ordered from the console: `companion.as <player entity> summon|dismiss|follow|stay|attack|gear`
-(`beastmaster.as`'s player numbers, or `chat.players`), or comes by itself with `auto_summon=1`. `max_companions`
-(default 8) caps how many are out at once in the world.
+they see ("[Companion] following you"). A player who joined uses their own keys (F6 and the single order keys, as
+they set them in their own game) when Companion is switched on in their game too: the key goes to the server, which
+acts on their own companion only and shows the order and gear wheels in their game, and their notes come as notes.
+Without Companion in their game, their companion is ordered from the server's console: `companion.as <player entity>
+summon|dismiss|follow|stay|attack|gear` (`chat.players` lists the players), or comes by itself with `auto_summon=1`.
+`max_companions` (default 8) caps how many are out at once in the world; one whose player left holds no place.
 
 **New in 1.7:** the order wheel key is F6 by default (it was G, which the game uses in build mode and to sort the
 backpack); a key you chose yourself stays. F6 no longer dismisses at once: pick Dismiss on the wheel, or set

@@ -47,6 +47,7 @@
 #include "gear.h"
 #include "orders.h"
 #include "owners.h"
+#include "remote.h"
 
 namespace gen = emf::gen;
 using companion::Owner;
@@ -87,6 +88,10 @@ std::string call_key() { return companion::call_key_text(g_key_wheel.vk ? g_key_
 std::mutex g_m;                    // guards the owners' threat boxes and g_dead (server tick <-> the program's thread)
 companion::DeathLog g_dead;       // entities whose EntityDiedEvent was seen, per session (attack targets end on them)
 uint32_t g_client_session = 0;     // the session the owners' client checks belong to (client tick only)
+namespace remote = companion::remote;
+constexpr uint32_t kClientSteps = 180;   // the client world stepping this often without a server step: someone else's game
+std::atomic<uint32_t> g_client_steps{0};
+bool g_net = false;                      // the companion/ui channel is registered (EMF API v27)
 
 std::string format(const char* fmt, ...) {
     char b[512];
@@ -103,6 +108,11 @@ void note(emf::World w, const Owner& o, const std::string& text) {
         return;
     }
     if (!o.player) return;
+    if (o.remote && g_net) {  // their own Companion shows it as a note
+        const std::string m = remote::encode_note(text);
+        if (emf::api()->net_to_player(w.raw(), o.player, remote::kChannel, m.data(), static_cast<uint32_t>(m.size())))
+            return;
+    }
     const std::string head = "Companion: ";
     emf::tell(w, o.player, "[Companion] " + (text.rfind(head, 0) == 0 ? text.substr(head.size()) : text), true);
 }
@@ -723,7 +733,38 @@ void take_back_gear(emf::World w, Owner& o) {
     save_state(o);
 }
 
-// The gear wheel, on the host's screen (the host's own companion).
+// A player's open wheel on the server for a player who joined (remote.h): the order wheel, or the gear wheel with the
+// pieces it offered (read from their backpack on the server when it opened).
+struct WheelAction {
+    bool gear = false;
+    std::vector<GearCandidate> cands;
+};
+remote::WheelDesk<WheelAction> g_desk;  // server tick thread (the channel's server callback runs after its step)
+remote::PressGate g_presses;
+
+// A wheel for a player who joined, sent to their game; their pick comes back as a message.
+void send_wheel(emf::World w, Owner& o, const std::string& title, const std::vector<std::string>& labels,
+                WheelAction action) {
+    const uint32_t seq = g_desk.open(o.account, std::move(action), GetTickCount64());
+    const std::string m = remote::encode_wheel(seq, title, labels);
+    if (!g_net || !o.remote ||
+        !emf::api()->net_to_player(w.raw(), o.player, remote::kChannel, m.data(), static_cast<uint32_t>(m.size()))) {
+        g_desk.forget(o.account);
+        note(w, o, "Companion: the wheel could not be sent to your game (the server's log says why)");
+    }
+}
+
+// A pick on the gear wheel: a piece to give, or (past the pieces) take all back.
+void run_gear_choice(emf::World w, Owner& o, const std::vector<GearCandidate>& cands, int choice) {
+    if (choice < 0) return;
+    if (static_cast<size_t>(choice) >= companion::gear_wheel_offered(cands.size())) {
+        take_back_gear(w, o);
+        return;
+    }
+    give_piece(w, o, cands[static_cast<size_t>(choice)]);
+}
+
+// The gear wheel: on the host's screen for the host, in their own game for a player who joined.
 void open_gear_wheel(emf::World w, Owner& o) {
     const auto cands = gear_candidates(w, o.player);
     std::vector<std::string> pieces;
@@ -736,55 +777,181 @@ void open_gear_wheel(emf::World w, Owner& o) {
     const uint32_t pl = player_level(w, o);
     char title[64];
     snprintf(title, sizeof(title), "Gear (+%u levels, %zu worn)", o.gear.bonus(pl, g_gear_bonus_max), o.gear.held().size());
+    if (!o.host) {
+        WheelAction a;
+        a.gear = true;
+        a.cands = cands;
+        send_wheel(w, o, title, labels, std::move(a));
+        return;
+    }
     const uint64_t account = o.account;
     const bool ok = emf::wheel(title, labels, g_key_wheel.vk, EMF_WORLD_SERVER, [cands, account](emf::World w2, int choice) {
         Owner* me = g_owners.find(account);
-        if (choice < 0 || !me) return;
-        if (static_cast<size_t>(choice) >= companion::gear_wheel_offered(cands.size())) {
-            take_back_gear(w2, *me);
-            return;
-        }
-        give_piece(w2, *me, cands[static_cast<size_t>(choice)]);
+        if (me) run_gear_choice(w2, *me, cands, choice);
     });
     if (!ok) emf::api()->notify("The gear wheel could not open (the log says why)");
 }
 
-// The order wheel, on the host's screen (the host's own companion).
+// A pick on the order wheel (its companion must still be out).
+void run_order_choice(emf::World w, Owner& o, int choice) {
+    if (o.companion.phase() != companion::Companion::Phase::Active) return;
+    const uint64_t now = GetTickCount64();
+    switch (choice) {
+        case 0: order_follow(w, o); break;
+        case 1: order_stay(w, o); break;
+        case 2: order_attack(w, o, now); break;
+        case 3: open_gear_wheel(w, o); break;
+        case 4: summon_or_dismiss(w, o, now, "wheel"); break;
+        default: break;
+    }
+}
+
+// The order wheel: on the host's screen for the host, in their own game for a player who joined.
 void open_order_wheel(emf::World w, Owner& o) {
     char title[64];
     snprintf(title, sizeof(title), "Companion (level %u)", companion_level(w, o));
+    const std::vector<std::string> labels = {"Follow me", "Stay here", "Attack (what you look at)", "Gear", "Dismiss"};
+    if (!o.host) {
+        send_wheel(w, o, title, labels, WheelAction{});
+        return;
+    }
     const uint64_t account = o.account;
-    const bool ok = emf::wheel(title, {"Follow me", "Stay here", "Attack (what you look at)", "Gear", "Dismiss"},
-                               g_key_wheel.vk, EMF_WORLD_SERVER, [account](emf::World w2, int choice) {
-                                   Owner* me = g_owners.find(account);
-                                   if (!me || me->companion.phase() != companion::Companion::Phase::Active) return;
-                                   const uint64_t now = GetTickCount64();
-                                   switch (choice) {
-                                       case 0: order_follow(w2, *me); break;
-                                       case 1: order_stay(w2, *me); break;
-                                       case 2: order_attack(w2, *me, now); break;
-                                       case 3: open_gear_wheel(w2, *me); break;
-                                       case 4: summon_or_dismiss(w2, *me, now, "wheel"); break;
-                                       default: break;
-                                   }
-                               });
+    const bool ok = emf::wheel(title, labels, g_key_wheel.vk, EMF_WORLD_SERVER, [account](emf::World w2, int choice) {
+        Owner* me = g_owners.find(account);
+        if (me) run_order_choice(w2, *me, choice);
+    });
     if (!ok) emf::api()->notify("The companion wheel could not open (the console may be open; the log says why)");
 }
 
+// What a key does for a player's own companion (the host's keys, or a key a joined player's game sent).
+void run_key(emf::World w, Owner& o, remote::Key key, uint64_t now, const char* why) {
+    const bool active = o.companion.phase() == companion::Companion::Phase::Active;
+    switch (key) {
+        case remote::Key::Wheel:
+            switch (companion::wheel_press(o.companion.phase())) {
+                case companion::WheelPress::OpenWheel: open_order_wheel(w, o); break;
+                case companion::WheelPress::Summon: summon(w, o, now, why, true, std::nullopt, true); break;
+                case companion::WheelPress::Nothing: break;  // a dismissal is under way
+            }
+            break;
+        case remote::Key::Follow:
+            if (active) order_follow(w, o);
+            break;
+        case remote::Key::Stay:
+            if (active) order_stay(w, o);
+            break;
+        case remote::Key::Attack:
+            if (active) order_attack(w, o, now);
+            break;
+        case remote::Key::Dismiss:
+            if (active) summon_or_dismiss(w, o, now, "dismiss key");
+            break;
+    }
+}
+
+// The order wheel key and the single order keys, each with what it does (the host's server tick and a joined game's
+// client tick read them).
+struct KeyRead {
+    Hotkey* hotkey;
+    remote::Key key;
+};
+KeyRead g_keys[] = {{&g_key_wheel, remote::Key::Wheel},   {&g_key_follow, remote::Key::Follow},
+                    {&g_key_stay, remote::Key::Stay},     {&g_key_attack, remote::Key::Attack},
+                    {&g_key_dismiss, remote::Key::Dismiss}};
+
 // The host's keys order the host's own companion.
 void read_keys(emf::World w, Owner& o, uint64_t now) {
-    const bool active = o.companion.phase() == companion::Companion::Phase::Active;
-    if (g_key_wheel.edge.pressed(emf::keys::down(g_key_wheel.vk))) {
-        switch (companion::wheel_press(o.companion.phase())) {
-            case companion::WheelPress::OpenWheel: open_order_wheel(w, o); break;
-            case companion::WheelPress::Summon: summon(w, o, now, "wheel key", true, std::nullopt, true); break;
-            case companion::WheelPress::Nothing: break;  // a dismissal is under way
-        }
+    for (auto& k : g_keys)
+        if (k.hotkey->edge.pressed(emf::keys::down(k.hotkey->vk))) run_key(w, o, k.key, now, "wheel key");
+}
+
+// ---- the companion/ui channel (players who joined: remote.h) ----
+
+// The server: a joined player's key press or wheel pick (the server world's thread, after its step).
+void on_server_message(EmfWorld* raw, const EmfNetFrom* from, const void* data, uint32_t size, void*) {
+    if (!from || from->local || !from->player) return;  // the host's own keys are read on the server tick
+    const auto m = remote::decode(std::string(static_cast<const char*>(data), size));
+    static std::atomic<int> bad{0};
+    if (!m || (m->kind != remote::Msg::KeyPress && m->kind != remote::Msg::Pick)) {
+        if (bad++ < 8)
+            EMF_LOG(kMod, "a broken message from player 0x%016llx: dropped", static_cast<unsigned long long>(from->account));
+        return;
     }
-    if (g_key_follow.edge.pressed(emf::keys::down(g_key_follow.vk)) && active) order_follow(w, o);
-    if (g_key_stay.edge.pressed(emf::keys::down(g_key_stay.vk)) && active) order_stay(w, o);
-    if (g_key_attack.edge.pressed(emf::keys::down(g_key_attack.vk)) && active) order_attack(w, o, now);
-    if (g_key_dismiss.edge.pressed(emf::keys::down(g_key_dismiss.vk)) && active) summon_or_dismiss(w, o, now, "dismiss key");
+    emf::World w(raw);
+    Owner* o = g_owners.find(from->account);
+    if (!o || o->player != from->player) {  // just joined: the server looks players up once a second
+        const std::string n = remote::encode_note("Companion: the server has not set up your companion yet; press again in a moment");
+        emf::api()->net_to_player(raw, from->player, remote::kChannel, n.data(), static_cast<uint32_t>(n.size()));
+        return;
+    }
+    o->remote = true;
+    const uint64_t now = GetTickCount64();
+    if (m->kind == remote::Msg::Pick) {
+        auto action = g_desk.take(from->account, m->seq, now);
+        if (!action) {
+            if (m->choice >= 0) note(w, *o, "Companion: that wheel has closed: press the order wheel key again");
+            return;
+        }
+        if (action->gear)
+            run_gear_choice(w, *o, action->cands, m->choice);
+        else if (m->choice >= 0)
+            run_order_choice(w, *o, m->choice);
+        return;
+    }
+    if (!g_presses.allow(from->account, now)) return;  // a held key or a macro
+    run_key(w, *o, m->key, now, "wheel key (their game)");
+}
+
+// A joined player's game: the server's notes and wheels (the client world's thread, after its step).
+remote::ClientGate g_gate;
+void on_player_message(EmfWorld*, const EmfNetFrom* from, const void* data, uint32_t size, void*) {
+    if (from && from->local) return;  // the host's own game: its notes are on its screen already
+    const auto m = remote::decode(std::string(static_cast<const char*>(data), size));
+    if (!m) return;
+    if (m->kind == remote::Msg::Note) {
+        emf::api()->notify("%s", m->text.c_str());
+        return;
+    }
+    if (m->kind != remote::Msg::Wheel) return;
+    const uint32_t seq = m->seq;
+    const auto answer = g_gate.take_wheel(GetTickCount64());
+    if (answer != remote::ClientGate::Answer::Open) {  // the server's wheel is let go at once
+        const std::string cancel = remote::encode_pick(seq, -1);
+        emf::api()->net_to_server(remote::kChannel, cancel.data(), static_cast<uint32_t>(cancel.size()));
+        if (answer == remote::ClientGate::Answer::Late)
+            emf::api()->notify("Companion: the server answered late; press %s again", call_key().c_str());
+        return;
+    }
+    const bool ok = emf::wheel(m->text.c_str(), m->labels, g_key_wheel.vk, EMF_WORLD_CLIENT, [seq](emf::World, int choice) {
+        const std::string pick = remote::encode_pick(seq, choice);
+        // a pick may open the next wheel (Gear): that one is expected too
+        if (emf::api()->net_to_server(remote::kChannel, pick.data(), static_cast<uint32_t>(pick.size())) && choice >= 0)
+            g_gate.asked(GetTickCount64());
+    });
+    if (!ok) emf::api()->notify("The companion wheel could not open (the console may be open; the log says why)");
+}
+
+// A joined player's game, each client world step: their keys go to the server's Companion.
+uint64_t g_no_server_said = 0;
+void client_keys(emf::World) {
+    if (++g_client_steps <= kClientSteps) return;  // the host's own game: its server tick reads the keys
+    if (!g_net) return;
+    const uint64_t now = GetTickCount64();
+    for (auto& k : g_keys) {
+        if (!k.hotkey->edge.pressed(emf::keys::down(k.hotkey->vk))) continue;  // only with the game window in front
+        if (emf::api()->net_peer(nullptr, 0, remote::kChannel) != remote::kVersion) {
+            if (!g_no_server_said || now - g_no_server_said > 10000) {
+                g_no_server_said = now;
+                emf::api()->notify("Companion: this server does not run Companion 1.8 or newer, so %s does nothing here",
+                                   call_key().c_str());
+            }
+            continue;
+        }
+        const std::string m = remote::encode_key(k.key);
+        if (emf::api()->net_to_server(remote::kChannel, m.data(), static_cast<uint32_t>(m.size())) &&
+            k.key == remote::Key::Wheel)
+            g_gate.asked(now);
+    }
 }
 
 // The players in the server world now: a set for each one first seen (their file read once the world's save has
@@ -881,15 +1048,19 @@ void check_owner(emf::World w, Owner& o, uint64_t now) {
 void on_tick(emf::World w) {
     if (w.is_client()) {
         check_client(w);
+        client_keys(w);
         return;
     }
     if (!w.is_server()) return;
+    g_client_steps = 0;
     const uint64_t now = GetTickCount64();
     const uint32_t session = emf::server_session();
     if (session != g_owners_session) {  // a new session (another world, a reload): nobody's set carries over, but a
         g_owners_session = session;      // companion that was out is wanted again (as after a reload)
         g_session_start_ms = now;
         g_was_out = g_owners.clear();
+        g_desk.clear();
+        g_presses.clear();
         g_last_check_ms = 0;
     }
     g_owners.each([&](Owner& o) {
@@ -1043,6 +1214,26 @@ extern "C" __declspec(dllexport) bool emf_mod_load(const EmfApi* api) {
         g_slot = slot;
         g_loaded_session = emf::server_session();
     }, nullptr);
+    if (emf::has_v27() && api->net_channel) {  // the keys of players who joined (remote.h)
+        EmfNetChannel ch{};
+        ch.size = sizeof(ch);
+        ch.version = remote::kVersion;
+        ch.name = remote::kChannel;
+        ch.flags = EMF_NET_TO_SERVER | EMF_NET_TO_PLAYERS;
+        ch.max_size = remote::kMaxMessage;
+        ch.per_10s = 30;  // a player's key presses and picks (the server also takes one press per 300 ms)
+        ch.on_server = on_server_message;
+        ch.on_player = on_player_message;
+        g_net = api->net_channel(&ch);
+    }
+    if (!g_net)
+        EMF_LOG(kMod, "the companion keys work for the host only (players who joined need EMF API v27 on both sides)");
+    else
+        emf::on_player(kMod, [](emf::World, const EmfPlayerEvent& e) {
+            if (e.kind != EMF_PLAYER_LEFT) return;
+            g_desk.forget(e.account);
+            g_presses.forget(e.account);
+        });
     emf::add_command("companion.gear", ": what your companion wears and the level it gets", [](emf::World w,
                                                                                               const std::vector<std::string>&) {
         Owner* o = nullptr;
