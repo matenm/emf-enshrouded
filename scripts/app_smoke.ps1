@@ -174,12 +174,14 @@ $out = Join-Path $game "smoke.json"
 # (nothing carries over from another run: the key, folders.json) with the tester switch for Nexus on (New-AppData).
 function Invoke-Smoke([string]$Eval = "", [string]$SelectMod = "", [string[]]$More = @()) {
     # WebView2's browser process sometimes ends at start inside a full verify run (0x80004005; never seen when this script
-    # runs alone): one more try then, said in the output, after any stand-in server of this run is stopped
+    # runs alone), and an immediate second try has failed the same way (the last run's WebView2 still closing): up to two
+    # more tries then, each after a pause and said in the output, after any stand-in server of this run is stopped
     $r = Invoke-SmokeOnce $Eval $SelectMod $More
-    if ($r.Json -match "browser process ended") {
-        Write-Host "retry: WebView2's browser process ended at start; trying this smoke step once more"
+    for ($try = 2; $try -le 3 -and $r.Json -match "browser process ended"; $try++) {
+        Write-Host "retry: WebView2's browser process ended at start; try $try of this smoke step after a pause"
         Get-Process enshrouded_server -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$runTemp*" } |
             Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds (3 * ($try - 1))
         $r = Invoke-SmokeOnce $Eval $SelectMod $More
     }
     return $r
