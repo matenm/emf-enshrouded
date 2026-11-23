@@ -609,12 +609,12 @@ TEST_CASE("settings: the file backends remove a key's line (and only it); no fil
     CreateDirectoryW(dir.c_str(), nullptr);
     FileIniBackend files(dir);
     CHECK(files.erase("m", "radius"));  // no file
-    CHECK(GetFileAttributesW((dir + L"\m.ini").c_str()) == INVALID_FILE_ATTRIBUTES);
+    CHECK(GetFileAttributesW((dir + L"\\m.ini").c_str()) == INVALID_FILE_ATTRIBUTES);
     REQUIRE(files.write("m", "radius", "30"));
     REQUIRE(files.write("m", "enabled", "1"));
     CHECK(files.erase("m", "radius"));
     CHECK_FALSE(files.read("m", "radius").has_value());
     CHECK(files.read("m", "enabled").value_or("") == "1");
-    DeleteFileW((dir + L"\m.ini").c_str());
-    RemoveDirectoryW(dir.c_str());
+    DeleteFileW((dir + L"\\m.ini").c_str());
+    CHECK(RemoveDirectoryW(dir.c_str()));  // nothing left in it
 }
