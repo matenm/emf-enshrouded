@@ -958,6 +958,31 @@
      }
     }
    ]
+  },
+  {
+   "name": "wilds_packllama",
+   "glb": "../../../analysis/models/wilds/packllama.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/animal_catdeer.hierarchy.json",
+   "source_model_guid": "882f5388-0547-4588-8d20-5e2383e99d6a",
+   "source_model_json": "../../../analysis/model_survey/dump/animal_catdeer.json",
+   "source_template": "Enemy_Companion_Catdeer",
+   "template_name": "Wilds_Packllama",
+   "model_guid": "ebb344e5-9619-471d-a7dd-ee75ddc7ec65",
+   "template_guid": "d9da8d97-981f-4e72-86ac-ec81ff70b6d2",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/packllama",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "620a8528-ed47-4ef6-9617-23d4e9011234"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.2
+     }
+    }
+   ]
   }
  ]
 }
