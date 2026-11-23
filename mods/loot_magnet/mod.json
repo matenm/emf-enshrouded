@@ -1,7 +1,7 @@
 {
   "id": "loot_magnet",
   "name": "Loot Magnet",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Walk around and the loot comes to you, without pressing E: the loot of creatures killed near you, items on the ground (drops, sticks and stones after chopping or mining) and collectibles; by choice also mushrooms, fireflies, wild plants, chests in ruins and barrels, crates and urns to smash. On the host or a dedicated server it works for every player, also those who joined without EMF; each switches their own with /loot.toggle. Never inside a base, never a player's chest, never a quest item.",
   "authors": ["EMF"],
   "enabled": false,

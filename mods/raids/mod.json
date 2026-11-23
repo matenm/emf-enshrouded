@@ -1,7 +1,7 @@
 {
   "id": "raids",
   "name": "Night Raids",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "At nightfall, by chance, waves of Vukah gather outside a base where players are and march on its flame altar, at the players' level. A warning first, the raiders left on screen, a reward when you repel them; survivors flee at dawn. With Raiders break walls on, a raider held up by a wall or a closed gate breaks through it. Installed switched off; once on, it is still off in every world until you switch it on there (raids.world on). Host or dedicated server; players who join need nothing.",
   "authors": ["EMF"],
   "emf": 17,

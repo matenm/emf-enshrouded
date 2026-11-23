@@ -368,7 +368,7 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 | Baits to tame by feeding (`feed_count`), Feeding window (`feed_window_s`) | 3, 10 s | |
 | Bait for wolves, hounds, boars, sabretooths, bears, aurochs, snakes, the rare snakes (`bait_<kind>`) | see above | an item's debug name (`items meat` in the console) |
 | Beasts drop a chase at (`chase_m`) | 45 m | they turn from the fight and run back |
-| Beast health (`beast_health`) | 150 % | every beast's health against its kind's own (its role, loyalty and talents on top); applies at once to the beasts out (1.20.0; before: 100 %) |
+| Beast health (`beast_health`) | 150 % | every beast's health against its kind's own (its role, loyalty and talents on top); applies at once to the beasts out and (1.20.1) the beasts at home (1.20.0; before: 100 %) |
 | Beast damage (`beast_damage`) | 125 % | the same for the damage they deal (1.20.0; before: 100 %) |
 | Loyalty grows (`loyalty_pace`) | 1x | 2x: half the kills per loyalty |
 | Beasts come back from (`leash_m`), At once from (`leash_far_m`) | 60 m, 120 m | |
