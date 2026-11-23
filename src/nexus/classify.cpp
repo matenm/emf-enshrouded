@@ -377,6 +377,11 @@ void write_notes(Classification& c, const Archive& a, bool emf_by_layout, bool r
 
 }  // namespace
 
+const std::vector<std::string>& proxy_names() {
+    static const std::vector<std::string> names(std::begin(kProxyNames), std::end(kProxyNames));
+    return names;
+}
+
 const char* kind_id(ArchiveKind k) {
     switch (k) {
         case ArchiveKind::EmfFramework: return "emf";

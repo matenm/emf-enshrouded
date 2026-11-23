@@ -9,6 +9,7 @@
 
 #include "core/known_tools.h"
 #include "loader/loader_id.h"
+#include "nexus/classify.h"
 
 using emf::core::KnownTool;
 using emf::core::parse_known_tools;
@@ -350,6 +351,11 @@ TEST_CASE("known tools: the loader names EMF.exe installs are proxy names in the
     const auto& names = emf::core::proxy_dll_names();
     for (const char* n : {"d3d12.dll", "opengl32.dll", "dwmapi.dll", "uxtheme.dll", "wtsapi32.dll", "iphlpapi.dll", "hid.dll"})
         CHECK_MESSAGE(std::find(names.begin(), names.end(), n) != names.end(), n);
+}
+
+// EMF.exe's installer (src/nexus/classify.cpp) and the core's game folder view keep one list of proxy names.
+TEST_CASE("known tools: the installer's proxy names are the core's, name for name and in order") {
+    CHECK(emf::nexus::proxy_names() == emf::core::proxy_dll_names());
 }
 
 TEST_CASE("known tools: Greeneye's other file names are proxy names too") {
