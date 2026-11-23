@@ -437,7 +437,8 @@ typedef struct EmfPlayerEvent {
     uint32_t killer;   /* died: the root source of the last hit on them within 10 s (not themselves), else 0 */
     uint8_t host;      /* 1 = the host's own player */
     uint8_t pad[7];
-    char name[64];     /* their chat name (UTF-8), "" where players' chat is off or it is not known */
+    char name[64];     /* their chat name (UTF-8, at most 63 bytes, cut between characters), "" where players' chat is off
+                          or it is not known */
 } EmfPlayerEvent;
 typedef void (*EmfPlayerCallback)(EmfWorld* world, const EmfPlayerEvent* e, void* user);
 

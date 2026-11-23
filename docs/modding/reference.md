@@ -697,7 +697,7 @@ api->on_player(on_player, NULL);  /* in emf_mod_load, for "died" too */
 
 `EmfPlayerEvent`: `size`, `kind`, `account` (as `player_account` and the command sender give it), `player` (the entity
 in the server world; for left, the one they had), `killer` (died only), `host` (1 = the host's own player), `name` (the
-chat name, "" where players' chat is off).
+chat name, at most 63 bytes of UTF-8 cut between characters; "" where players' chat is off).
 
 - **`EMF_PLAYER_JOINED`**: the player is in the world (PlayerState and a position), their account is known and their
   game is ready to play (`PlayerInput.fromClientIsReadyForGameplay`; the host's own player at once). Once per
