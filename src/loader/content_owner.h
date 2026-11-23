@@ -4,8 +4,9 @@
 // loader's one line):
 //   1. [content] mode=off in emf\emf_core.ini
 //   2. "Play without any mods" (EMF.exe's one-shot flag); "Play without EMF mods" keeps EML content (E7)
-//   3. another tool applies it: a dbghelp.dll in the game folder (EML's or ShroudForge's proxy), or EML's or
-//      ShroudForge's dinput8.dll listed in dinput8-chain.ini; mode=on never overrides another tool
+//   3. another tool applies it: Kiln (kiln\kiln.json in the game folder), a dbghelp.dll in the game folder (EML's or
+//      ShroudForge's proxy), or EML's or ShroudForge's dinput8.dll listed in dinput8-chain.ini; mode=on never overrides
+//      another tool
 //   4. emf_content.dll is not installed (<game>\emf\emf_content.dll)
 //   5. no EML mod in <game>\mods that EMF can build (eml_mods.h)
 //   6. no base to build from (content_base.h)
@@ -108,6 +109,9 @@ inline std::optional<std::string> chained_tool_by_text(const ToolLook& look) {
 // installer gives it (<word>.dll: eml.dll, shroudforge.dll); under another name only by reading it, which `read_chain`
 // allows (the loader asks only when it would build otherwise).
 inline std::optional<std::string> other_content_tool(const ToolLook& look, bool read_dbghelp, bool read_chain) {
+    // Kiln loads the game's mods (EMF too, as one of its chain entries) and applies their content with its own EML layer
+    // and ShroudForge: an EMF build would replace that data
+    if (look.exists && look.exists(L"kiln\\kiln.json")) return std::string("Kiln (its EML layer and ShroudForge)");
     if (look.exists && look.exists(L"dbghelp.dll")) {
         const std::string name = read_dbghelp && look.tool_name ? look.tool_name(L"dbghelp.dll") : std::string();
         return name.empty() ? std::string("dbghelp.dll (EML or ShroudForge)") : name;

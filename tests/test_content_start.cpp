@@ -468,7 +468,7 @@ TEST_CASE("content start: facts stop at the first no (a start without emf_conten
     CHECK_FALSE(emf::loader::decide_content(f).emf_owns);
     std::string seen;
     for (const auto& a : asked) seen += a + "; ";
-    CHECK(seen == "mode; dll; exists dbghelp.dll; ");
+    CHECK(seen == "mode; dll; exists kiln\\kiln.json; exists dbghelp.dll; ");
 
     asked.clear();
     dll = true;
@@ -476,7 +476,7 @@ TEST_CASE("content start: facts stop at the first no (a start without emf_conten
     CHECK(emf::loader::decide_content(f).emf_owns);
     seen.clear();
     for (const auto& a : asked) seen += a + "; ";
-    CHECK(seen == "mode; dll; exists dbghelp.dll; mods; read creative.dll; base; ");
+    CHECK(seen == "mode; dll; exists kiln\\kiln.json; exists dbghelp.dll; mods; read creative.dll; base; ");
 
     asked.clear();
     f = emf::loader::collect_facts(io, emf::loader::PlayOnce::NoMods, false);
@@ -487,19 +487,19 @@ TEST_CASE("content start: facts stop at the first no (a start without emf_conten
     CHECK(emf::loader::decide_content(f).emf_owns);
     seen.clear();
     for (const auto& a : asked) seen += a + "; ";
-    CHECK(seen == "mode; dll; exists dbghelp.dll; mods; read creative.dll; base; ");
+    CHECK(seen == "mode; dll; exists kiln\\kiln.json; exists dbghelp.dll; mods; read creative.dll; base; ");
 
     // EML's or ShroudForge's dbghelp.dll there but no emf_content.dll: named, never read (it is up to 32 MB)
     asked.clear();
     dll = false;
-    io.look.exists = [&](const std::wstring& name) { return asked.push_back("exists " + emf::loader::cio::to_utf8(name)), true; };
+    io.look.exists = [&](const std::wstring& name) { return asked.push_back("exists " + emf::loader::cio::to_utf8(name)), name == L"dbghelp.dll"; };
     f = emf::loader::collect_facts(io, emf::loader::PlayOnce::Normal, false);
     CHECK(f.other_tool == std::optional<std::string>("dbghelp.dll (EML or ShroudForge)"));
-    CHECK(asked == std::vector<std::string>{"mode", "dll", "exists dbghelp.dll"});
+    CHECK(asked == std::vector<std::string>{"mode", "dll", "exists kiln\\kiln.json", "exists dbghelp.dll"});
     asked.clear();
     dll = true;
     f = emf::loader::collect_facts(io, emf::loader::PlayOnce::Normal, false);
-    CHECK(asked == std::vector<std::string>{"mode", "dll", "exists dbghelp.dll", "read dbghelp.dll"});
+    CHECK(asked == std::vector<std::string>{"mode", "dll", "exists kiln\\kiln.json", "exists dbghelp.dll", "read dbghelp.dll"});
 
     // another program that loads EMF's loader: nothing more is asked
     asked.clear();

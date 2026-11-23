@@ -349,6 +349,11 @@ TEST_CASE("content owner: another tool: a dbghelp.dll in the game folder, or EML
     };
     CHECK_FALSE(emf::loader::other_content_tool(look, true, true).has_value());
 
+    // Kiln (its own EML layer and ShroudForge) loads the game's mods, EMF too: it applies the content, not EMF (a
+    // player's report: EMF's build replaced ShroudForge's data under Kiln)
+    present = {L"kiln\\kiln.json"};
+    CHECK(emf::loader::other_content_tool(look, true, false) == std::optional<std::string>("Kiln (its EML layer and ShroudForge)"));
+
     present = {L"dbghelp.dll"};
     CHECK(emf::loader::other_content_tool(look, true, false) == std::optional<std::string>("ShroudForge"));
     look.tool_name = [&](const std::wstring&) { return std::string(); };  // a dbghelp.dll EMF does not know
