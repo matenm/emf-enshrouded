@@ -230,6 +230,9 @@ const char* take_over_name(TakeOver t) {
 
 std::string content_take_over_problem(const std::wstring& game) {
     if (!is_file(game + L"\\dbghelp.dll")) return "There is no dbghelp.dll in the game folder, so there is nothing to set aside.";
+    if (is_file(game + L"\\kiln\\kiln.json"))
+        return "Kiln applies the EML content in this game folder (its EML layer and ShroudForge), so EMF never builds it "
+               "here.";
     const std::string word = folder_tool_word(game, L"dbghelp.dll");
     if (word == "shroudforge")
         return "This dbghelp.dll is ShroudForge's. ShroudForge starts the game its own way, so EMF never sets it aside: switch "

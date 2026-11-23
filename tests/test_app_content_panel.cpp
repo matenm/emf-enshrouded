@@ -525,6 +525,16 @@ TEST_CASE("app content: no take-over is offered when it could not work: [content
     CHECK(has(content_take_over_problem(g.dir), "dinput8-chain.ini"));
 }
 
+TEST_CASE("app content: with Kiln in the game folder the card says Kiln applies the content and offers no take-over") {
+    ContentGame g(L"cp_kiln");
+    g.write(L"dbghelp.dll", "MZ EML proxy EML_LOG_FILE_PATH");
+    g.write(L"emf\\emf_core.ini", "[content]\r\nmode=auto\r\n");
+    g.write(L"kiln\\kiln.json", "{}");
+    const ContentPanel p = content_panel(g.dir, false);
+    CHECK(p.take_over == TakeOver::None);
+    CHECK(has(content_take_over_problem(g.dir), "Kiln"));
+}
+
 TEST_CASE("app content: a hand-edited set-aside record that names another file is not EMF's") {
     ContentGame g(L"cp_badrecord");
     g.write(L"creative.dll", "creative");
