@@ -625,3 +625,45 @@ TEST_CASE("a key capture (bind or console key) takes Esc from the console, so Es
     ui.capturing = "clock.key";
     CHECK(capturing_key(ui));
 }
+
+TEST_CASE("mods ui: the filter keeps the mods whose name, id, description or authors hold the text, any case") {
+    ModRecord r;
+    r.id = "raids";
+    r.name = "Night Raids";
+    r.description = "Shroud creatures attack your base at night.";
+    r.authors = "EMF, Some One";
+    CHECK(mod_matches(r, ""));
+    CHECK(mod_matches(r, "  "));
+    CHECK(mod_matches(r, "night"));
+    CHECK(mod_matches(r, "RAID"));
+    CHECK(mod_matches(r, "your base"));
+    CHECK(mod_matches(r, "some one"));
+    CHECK(mod_matches(r, " raids "));  // spaces around do not count
+    CHECK_FALSE(mod_matches(r, "clock"));
+}
+
+TEST_CASE("mods ui: with a filter the list shows the matches; the chosen mod stays chosen while it is filtered out") {
+    Headless h;
+    std::vector<ModRecord> mods;
+    for (const char* id : {"clock", "raids", "companion"}) {
+        ModRecord r;
+        r.id = r.name = id;
+        r.source = std::string(id) + "\\";
+        mods.push_back(r);
+    }
+    ModsUiState ui;
+    ui.selected = "clock\\";
+    ui.filter = "comp";
+    CHECK(mods_shown(mods, ui) == 1);
+    for (int i = 0; i < 2; ++i) {
+        ImGui::NewFrame();
+        ImGui::SetNextWindowSize(ImVec2(1200, 600));
+        ImGui::Begin("##mods_filter_test");
+        draw_mods_tab(mods, nullptr, ui);
+        ImGui::End();
+        ImGui::Render();
+    }
+    CHECK(ui.selected == "clock\\");
+    ui.filter.clear();
+    CHECK(mods_shown(mods, ui) == 3);
+}

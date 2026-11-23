@@ -7,6 +7,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/mod_registry.h"
@@ -52,7 +53,14 @@ struct ModsUiState {
     int capture_frame = 0;
     std::string capture_modifier;  // Shift, Ctrl or Alt held while waiting: bound if released alone
     ScanCapture scan;              // the Settings tab's console key (it shares the key path with key binds)
+    std::string filter;            // the list's filter (kept while the game runs)
 };
+
+// Whether `r` passes the Mods tab's filter: its name, id, description or authors hold `filter` (any case, spaces around
+// it do not count); an empty filter passes every mod.
+bool mod_matches(const ModRecord& r, std::string_view filter);
+// How many of `mods` the list shows with ui.filter.
+size_t mods_shown(const std::vector<ModRecord>& mods, const ModsUiState& ui);
 
 // The list row's text and ImGui id: "Clock  1.1.0##clock\" (keyed by folder, so a copied folder with the same id
 // never shares an id with the original).

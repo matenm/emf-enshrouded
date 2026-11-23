@@ -246,6 +246,25 @@ void draw_setting(SettingsStore& s, const std::string& mod, const SettingDef& d,
     ImGui::PopID();
 }
 
+bool mod_matches(const ModRecord& r, std::string_view filter) {
+    while (!filter.empty() && filter.front() == ' ') filter.remove_prefix(1);
+    while (!filter.empty() && filter.back() == ' ') filter.remove_suffix(1);
+    if (filter.empty()) return true;
+    const auto low = [](std::string s) {
+        for (char& c : s)
+            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+        return s;
+    };
+    const std::string all = low(r.name + " " + r.id + " " + r.description + " " + r.authors);
+    return all.find(low(std::string(filter))) != std::string::npos;
+}
+
+size_t mods_shown(const std::vector<ModRecord>& mods, const ModsUiState& ui) {
+    size_t n = 0;
+    for (const auto& m : mods) n += mod_matches(m, ui.filter);
+    return n;
+}
+
 std::string mod_row_label(const ModRecord& r) {
     return r.name + (r.version.empty() ? "" : "  " + r.version) + "##" + r.source;
 }
@@ -509,10 +528,21 @@ void draw_mods_tab(const std::vector<ModRecord>& mods, SettingsStore* settings, 
 
     const float list_w = (std::max)(ImGui::GetFontSize() * 16.0f, ImGui::GetContentRegionAvail().x * 0.28f);
     ImGui::BeginChild("##mods_list", ImVec2(list_w, 0), ImGuiChildFlags_Borders);
+    // The filter (as EMF.exe's "Filter mods"): the chosen mod's details stay while the list hides it.
+    char fbuf[128];
+    const size_t fn = (std::min)(ui.filter.size(), sizeof(fbuf) - 1);
+    std::memcpy(fbuf, ui.filter.data(), fn);
+    fbuf[fn] = 0;
+    ImGui::PushItemWidth(-1.0f);
+    if (ImGui::InputTextWithHint("##mods_filter", "Filter mods", fbuf, sizeof(fbuf))) ui.filter = fbuf;
+    ImGui::PopItemWidth();
+    const size_t shown = mods_shown(mods, ui);
+    if (!ui.filter.empty() && shown != mods.size()) ImGui::TextDisabled("%zu of %zu", shown, mods.size());
     // The selected and hovered rows take the theme's dark gold (apply_look_theme), never ImGui's bright blue, so the
     // status colours stay readable; low values also stay dark when the game's HDR swapchain reads the overlay's colours
     // as PQ (see ENGINE_MAP.md).
     for (const auto& m : mods) {
+        if (!mod_matches(m, ui.filter)) continue;
         ImGui::PushStyleColor(ImGuiCol_Text, status_colour(m.status));
         if (ImGui::Selectable(mod_row_label(m).c_str(), m.source == ui.selected)) {
             ui.selected = m.source;

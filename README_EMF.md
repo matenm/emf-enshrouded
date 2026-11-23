@@ -186,7 +186,8 @@ host`.
 
 ### The Mods tab
 The console has three tabs, **Console**, **Mods** and **Settings** (click one, or Ctrl+Tab for the next). The Mods tab lists every mod in
-`<game>\emf\mods`, coloured by what became of it (loaded, a Lua script, disabled, failed, not loaded). Click one to see its
+`<game>\emf\mods`, coloured by what became of it (loaded, a Lua script, disabled, failed, not loaded); **Filter mods**
+above it keeps those whose name, id, description or authors hold the text. Click one to see its
 description and status, to switch it on or off ("Switched on", from the next game start) and to change its settings:
 checkboxes, sliders, lists and text fields, with the range and the default when you hover over one. Settings marked
 "(next start)" apply when you start the game again, the others at once. The same from the command line:
