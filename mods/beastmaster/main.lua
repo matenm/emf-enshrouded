@@ -325,6 +325,7 @@ local window_env = {
 	spend = stable_do.spend,
 	reset_talents = stable_do.reset_talents,
 	can_train = function() return #training:grounds() > 0 end,
+	pack = function(world, player, account) return actions.pack(world, player, account) end,
 	train = function(world, account, player, b) return actions.train(world, player, account, b.name) end,
 	untrain = function(world, account, b) return actions.untrain(world, nil, account, b.name) end,
 }

@@ -264,11 +264,20 @@ function W:rows(world)
 			rows[#rows + 1] = { text = b.name .. " " .. env.state(b, self.account), dim = true }
 		end
 	end
+	for _, b in ipairs(list) do  -- the pack beast (species carrier): a slot of its own, called or sent home here
+		if species.is_carrier(b.species) then
+			rows[#rows + 1] = { heading = "Pack beast" }
+			rows[#rows + 1] = { text = string.format("%s (%s)", b.name, env.state(b, self.account)) }
+			rows[#rows + 1] = { button = "pack", text = b.out and "Send home" or "Call", same_line = true,
+				disabled = env.pack == nil }
+			break
+		end
+	end
 	rows[#rows + 1] = { separator = true }
 	-- the stable: the beasts not in a slot (it holds collection_max of them besides the active ones)
 	local stored = {}
 	for _, b in ipairs(list) do
-		if not b.active then stored[#stored + 1] = b end
+		if not b.active and not species.is_carrier(b.species) then stored[#stored + 1] = b end
 	end
 	rows[#rows + 1] = { heading = string.format("Stable %d/%d", #stored, env.setting("collection_max")) }
 	if #list == 0 then
@@ -395,6 +404,9 @@ function W:on_event(world, ev)
 	elseif name then
 		local b = self.env.beasts():find(self.account, name)
 		if b then self:select(b) end
+	elseif key == "pack" and self.env.pack then
+		self.confirm = nil
+		self.note = self.env.pack(world, self.player, self.account)
 	elseif sel and key == "make_active" then
 		self.confirm = nil
 		self.note = self.env.make_active(world, self.account, self.player, sel)

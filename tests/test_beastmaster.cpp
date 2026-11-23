@@ -1635,6 +1635,25 @@ TEST_CASE("stable: E at a stable opens the Beasts window with the slots and the 
         CHECK((flags_at(w, button) & EMF_UI_DISABLED) != 0u);
 }
 
+TEST_CASE("pack beast: the Beasts window has a Pack beast row (Call, then Send home); the llama is not in the stable's list") {
+    BeastRig b({{"call_cooldown_s", "0"}, {"call_mana_pct", "0"}});
+    three_beasts(b);
+    b.reply("beastmaster.give packllama");
+    b.spawnable(1);
+    at_stable(b);
+    press(b, kE);
+    REQUIRE(b.r.fake.windows.size() == 1u);
+    CHECK(shows(shown(b), "Pack beast"));
+    CHECK(shows(shown(b), "Stable 2/8"));  // Tusk and Rex
+    CHECK(row_at(shown(b), "beast.Pack llama") == -1);
+    CHECK(text_at(shown(b), "pack") == "Call");
+    click(b, "pack");
+    CHECK(text_at(shown(b), "pack") == "Send home");
+    click(b, "pack");
+    CHECK(shows(shown(b), "Pack llama goes home."));
+    CHECK(text_at(shown(b), "pack") == "Call");
+}
+
 TEST_CASE("stable: Make active puts the selected beast into a free slot; Store takes it out (sent home if out)") {
     BeastRig b;
     three_beasts(b);
