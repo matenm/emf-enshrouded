@@ -153,6 +153,25 @@ has 20 % more health and damage and is 1.25x its size. The strength comes at onc
 (the game draws a creature at the size it is made with). `/beastmaster list` shows it; a new loyalty is told to you,
 with the talent point it brings.
 
+## The Training Grounds (1.21.0, with the beasts pack 2.3.0)
+
+The beasts pack's **Training Grounds** (crafted at the Workbench, placed in your base like the Stable) is a round
+wooden platform with a training dummy in the middle. At it, as at a stable, E opens the Beasts window: select a beast
+and **Send to training** (or `/beastmaster train <name>`; **Back to the stable** or `/beastmaster untrain <name>`
+brings it back).
+
+- A beast in training earns **loyalty** by the game's clock: 3 points a game day by default (the **Training gives**
+  setting; 0 = it only trains for the look). It counts while you are in the world, also when you are out exploring,
+  and not while you are not in the world. At loyalty 10 it earns nothing more.
+- Each Training Grounds holds **2 beasts** (the **Beasts a Training Grounds holds** setting, 1 to 4), all players
+  together; one more is refused until a beast comes back or you build another.
+- While you are within 50 m, your beasts in training show up on the platform and pass the time: they go for the dummy
+  and swing at it, rest facing it, sniff about, and lie down by the hay, the bowl, the rope or the bones. At night they
+  rest. Nothing breaks and they never fight there.
+- Calling a beast in training ends its training (it comes to you as usual). A Training Grounds taken down sends its
+  beasts back to the stable.
+- `/beastmaster train` with no name says where your beasts train and how far they are to the next point.
+
 ## Talents
 
 Each loyalty above 1 gives a beast a **talent point** (9 at loyalty 10). Spend them at a stable: on the beast's tab of
@@ -327,6 +346,8 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 | `/beastmaster talent <name or number> <talent>` | within 10 m of a stable: spend a talent point (strength, toughness, swiftness, second wind, ambush or guard) |
 | `/beastmaster talents <name or number> reset` | within 10 m of a stable: every talent point back, free |
 | `/beastmaster rename <name or number> <new name>` | rename a beast (1-20 characters, not a name your collection has) |
+| `/beastmaster train <name or number>` | send a beast that is not out to the nearest Training Grounds with room; no name: where your beasts train |
+| `/beastmaster untrain <name or number>` | bring a beast in training back to the stable |
 | `/beastmaster tame` | tame the beast you look at, else the nearest beaten-down one (under 25 % health, within 8 m) |
 | `/beastmaster markers on\|off` | markers over your beasts, for you (see Markers) |
 | `/beastmaster stable_markers on\|off` | the stables on your map and nearby, for you |
@@ -371,6 +392,8 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 | Beast health (`beast_health`) | 150 % | every beast's health against its kind's own (its role, loyalty and talents on top); applies at once to the beasts out and (1.20.1) the beasts at home (1.20.0; before: 100 %) |
 | Beast damage (`beast_damage`) | 125 % | the same for the damage they deal (1.20.0; before: 100 %) |
 | Loyalty grows (`loyalty_pace`) | 1x | 2x: half the kills per loyalty |
+| Training gives (`training_points`) | 3 | loyalty points a game day for a beast at a Training Grounds (0-12) |
+| Beasts a Training Grounds holds (`training_room`) | 2 | 1-4, all players together |
 | Beasts come back from (`leash_m`), At once from (`leash_far_m`) | 60 m, 120 m | |
 | Aggressive beasts go at foes within (`aggro_m`) | 25 m | |
 | You get your beasts' kills (`xp_credit`) | on | XP and loot for the owner |
