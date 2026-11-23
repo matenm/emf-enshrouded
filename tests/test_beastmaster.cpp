@@ -7545,3 +7545,29 @@ TEST_CASE("training: a beast is shown only at its own Training Grounds, and only
     b.seconds(2);
     CHECK(destroyed(b, 1234));
 }
+
+TEST_CASE("training: the Beasts window sends the selected beast to training and brings it back; no such button without a Training Grounds") {
+    BeastRig b;
+    three_beasts(b);
+    at_stable(b);
+    press(b, kE);
+    REQUIRE(b.r.fake.windows.size() == 1u);
+    click(b, "beast.Tusk");
+    CHECK(row_at(shown(b), "train") == -1);  // no Training Grounds in the world
+    CHECK(row_at(shown(b), "untrain") == -1);
+    training_grounds(b, 970, 10, 0);
+    b.seconds(32);
+    click(b, "beast.Tusk");
+    REQUIRE(row_at(shown(b), "train") != -1);
+    CHECK(text_at(shown(b), "train") == "Send to training");
+    CHECK((flags_at(shown(b), "train") & EMF_UI_DISABLED) == 0u);
+    click(b, "train");
+    CHECK(shows(shown(b), "Tusk goes to the Training Grounds"));
+    CHECK(text_at(shown(b), "untrain") == "Back to the stable");
+    click(b, "tab.stable");
+    CHECK(text_at(shown(b), "beast.Tusk") == "Tusk (boar, loyalty 1, training)");
+    click(b, "beast.Tusk");
+    click(b, "untrain");
+    CHECK(shows(shown(b), "Tusk is back in the stable"));
+    CHECK(text_at(shown(b), "train") == "Send to training");
+}

@@ -7,7 +7,9 @@
 -- ("out", "at home", "rests 1:20"), mode(account) (how the beasts fight), wind_left(world, beast) (seconds before Second
 -- Wind works again), and the stable's
 -- actions, each returning what it did: make_active(world, account, player, beast), store(world, account, beast),
--- release(world, account, beast), spend(world, account, beast, talent), reset_talents(world, account, beast).
+-- release(world, account, beast), spend(world, account, beast, talent), reset_talents(world, account, beast), and
+-- optionally (1.21) can_train() (a Training Grounds is known: Send to training and Back to the stable show),
+-- train(world, account, player, beast) and untrain(world, account, beast).
 -- M.new(env, screen): where the window is drawn (nil: M.host_screen(), EMF's overlay in this game); a screen has
 -- open(world, def, on_event) -> bool, update(world, def) -> bool (false: it is closed) and picture(sp) -> the fields a
 -- picture row of kind `sp` gets, or nil (none). def = {title, width, place, rows}. A screen with counts_down = true
@@ -143,6 +145,15 @@ function W:action_rows(rows, sel)
 	rows[#rows + 1] = { button = "store", text = "Store", same_line = true, disabled = not (sel and sel.active) }
 	rows[#rows + 1] = { button = "release", text = "Release", same_line = true, disabled = not sel,
 		tooltip = "Let the beast go for good (click twice)" }
+	if self.env.can_train and self.env.can_train() then
+		if sel and sel.training then
+			rows[#rows + 1] = { button = "untrain", text = "Back to the stable", same_line = true }
+		else
+			rows[#rows + 1] = { button = "train", text = "Send to training", same_line = true,
+				disabled = not sel or sel.out == true,
+				tooltip = "It trains at the nearest Training Grounds and earns loyalty by the game's clock" }
+		end
+	end
 	if self.note then rows[#rows + 1] = { text = self.note } end
 end
 
@@ -392,6 +403,12 @@ function W:on_event(world, ev)
 		self.note = self.env.store(world, self.account, sel)
 	elseif sel and key == "release" then
 		self:release(world, sel)
+	elseif sel and key == "train" and self.env.train then
+		self.confirm = nil
+		self.note = self.env.train(world, self.account, self.player, sel)
+	elseif sel and key == "untrain" and self.env.untrain then
+		self.confirm = nil
+		self.note = self.env.untrain(world, self.account, sel)
 	elseif sel and talent then
 		self.confirm = nil
 		self.note = self.env.spend(world, self.account, sel, talent)

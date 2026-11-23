@@ -208,6 +208,7 @@ local function state_text(b, aside)
 	local rest = b.rest > 0 and string.format("rests %d:%02d", math.floor(b.rest / 60), math.floor(b.rest % 60))
 	if b.out and rest then return rest .. ", then comes back" end  -- it fell and comes back by itself (back_after_rest)
 	if b.out then return aside and "aside" or "out" end
+	if b.training then return rest and (rest .. ", training") or "training" end
 	return rest or "at home"
 end
 
@@ -289,6 +290,7 @@ end
 
 -- the Beasts window (the host, at a stable)
 local STABLE_REACH_M = 4  -- E opens the window with a stable under the crosshair this close
+local actions = {}  -- each returns the text to show (a command's reply, a note after a wheel pick or a window click)
 local window_env = {
 	setting = setting,
 	now = now,
@@ -302,6 +304,9 @@ local window_env = {
 	release = stable_do.release,
 	spend = stable_do.spend,
 	reset_talents = stable_do.reset_talents,
+	can_train = function() return #training:grounds() > 0 end,
+	train = function(world, account, player, b) return actions.train(world, player, account, b.name) end,
+	untrain = function(world, account, b) return actions.untrain(world, nil, account, b.name) end,
 }
 window = window_mod.new(window_env)
 
@@ -419,8 +424,7 @@ local function collection_full(world, player)
 	return beasts:stabled() and "Your stable is full." or "Your collection is full."
 end
 
--- ---- actions: each returns the text to show (a command's reply, or a note after a wheel pick) ----
-local actions = {}
+-- ---- actions (the table is made above the window's env): each returns the text to show ----
 
 function actions.tame(world, player)
 	local full = collection_full(world, player)
