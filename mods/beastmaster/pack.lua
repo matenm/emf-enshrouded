@@ -148,8 +148,9 @@ function M.critter(world, id)
 	return graph ~= nil and CRITTER_GRAPHS[graph] == true
 end
 
--- The game keeps it peaceful toward players and their allies (its PacifiedState): the game's own Beastmaster skill
--- pacifies Vukah until the player attacks them, and a beast that bites one ends that peace for everyone.
+-- The game keeps it peaceful toward players and their allies (its PacifiedState): the game's Vukah Language skill
+-- pacifies the Vukah and its Elf skill wild beasts near the player until the player attacks them, and a beast that bites
+-- one ends that peace for everyone.
 function M.pacified(world, id)
 	local p = world:get("PacifiedState", id)
 	return p ~= nil and p.isPacified == true

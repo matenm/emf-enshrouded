@@ -47,9 +47,9 @@ page says who applies them). Without them everything else works and those beasts
      it falls, turns friendly or they drop the chase: then they are calm again at once).
    - **Aggressive:** they also go after hostile creatures within 25 m of you (never wildlife, farm animals, bosses or
      players).
-   - In every mode they leave alone creatures the game keeps peaceful toward you, such as the Vukah after the game's own
-     Beastmaster skill (1.20.0). A creature you hit loses its peace and is a foe again; to send your beasts at a
-     peaceful one, look right at it and use Attack.
+   - In every mode they leave alone creatures the game keeps peaceful toward you, such as the Vukah after the game's
+     Vukah Language skill or wild beasts near you after its Elf skill (1.20.0). A creature you hit loses its peace and
+     is a foe again; to send your beasts at a peaceful one, look right at it and use Attack.
 7. **A beast that falls** rests for 60 seconds, then comes back beside you by itself, free (the line at the bottom left
    and `/beastmaster list` show "rests 0:40, then comes back"). It keeps its active slot meanwhile: **Dismiss** it (the
    wheel shows "Dismiss Wolf (rests 0:40)") to leave it at home and call another. With **A fallen beast comes back by
@@ -365,7 +365,8 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 | `beastmaster.air` | **console:** each player's movement state as this world sees it, and whether their beasts count them in the air (on a dedicated server: whether a joined player's glide reaches the server) |
 | `beastmaster.spawn <species>` | **console, admin:** puts a wild beast of that species 5 m in front of you, to try taming it. Since 1.16.1 a beast being tamed stops fighting you, a tamed beast loses its debuffs (a bleed no longer kills it after taming), and a beast brought back from far away drops its chase and follows you again |
 | `beastmaster.loyalty <name or number> <1-10>` | **host console only:** set a beast's loyalty (tests); the reply says its talent points |
-| `beastmaster.give <species>` | **host console only:** add a beast to your collection without taming it (wolf, boar, sabretooth, hound, bear, aurochs, snake, crimson_snake, golden_snake, albino_snake) |
+| `beastmaster.give <species>` | **host console only:** add a beast to your collection without taming it (wolf, boar, sabretooth, hound, bear, aurochs, snake, crimson_snake, golden_snake, albino_snake; with the wilds pack fox, arctic_fox, silver_fox, sand_fox, white_wolf, black_wolf, red_wolf, brown_bear, black_bear, snow_bear, cinnamon_bear, wilds_panther, black_panther, jaguar, snow_leopard, tiger, lynx, snow_lynx, dark_lynx, red_lynx) |
+| `beastmaster.wild_swap <entity> [roll 0-1]` | **console:** a wild wolf, sabretooth or goat becomes one of the wilds pack's animals now (a roll under `wild_coat_pct`: a colour version), for checks in game (1.21.0) |
 | `beastmaster.as <#k or player entity> <word> [...]` | **host or server console only:** run a word as that player (#2: the second player, lowest entity id first): `give`, `loyalty`, `open [name]` (their Beasts window, on that beast's tab), or any `/beastmaster` word; for tests on a dedicated server |
 | `beastmaster.species <graph guid> <faction> [scale]` | for modders: which beast a creature is, by the animation graph its template runs, its faction number and its scale (render models are not on the server world; the bear its own copy of the wolf's graph at 1.4x (the bear pack 1.0's: the wolf's graph at 1.4x), the aurochs the boar's at 1.3x, the snake and each rare snake its own copy of the wolf's graph) |
 
@@ -406,6 +407,7 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 | A tank (boar, bear, aurochs) draws, Another beast draws (`tank_share_pct`, `damage_share_pct`) | 50 %, 20 % | of the monsters in a fight, before Menace |
 | All your beasts draw at most (`beasts_share_max_pct`), Of a boss (`boss_share_max_pct`) | 90 %, 35 % | |
 | Rare wild bears, aurochs and snakes (`wild_bears`), About every (`wild_bear_minutes`) | on, 30 min | needs their pack |
+| Our animals in place of the game's wolves, sabretooths and goats (`wild_replace_pct`), Rare colour versions of them (`wild_coat_pct`), Rare colours are stronger (`wild_coat_strength`) | 15 %, 4 %, 125 % | needs the wilds pack; 0-50 %, 0-20 %, 100-200 % health and damage (1.21.0) |
 | Markers over your beasts (`beast_markers`) | off | each player can choose: `/beastmaster markers on\|off` |
 | Stables on the map (`stable_markers`) | off | each player can choose: `/beastmaster stable_markers on\|off` |
 
@@ -458,6 +460,33 @@ Installed and rebuilt like the bear pack (`tools/models/packs/beastmaster_beasts
 content was not built), an aurochs or snake in your collection stays at home: calling it says that it comes with the
 EMF creature packs and how to install them, and one that was out when you saved goes home with one note when you
 load.
+
+## Our animals in the wild: the wilds pack (`emf_beastmaster_wilds`, 1.21.0)
+
+An EML data patch with 38 animals made in the game's style, each fitted straight onto a game animal's skeleton, so it
+moves with that animal's own animations and AI: the fox and the coloured wolves on the wolf's, the bear, panther and
+lynx on the sabretooth's, the goat, ram, deer and elk on the goat's, and the pack llama (for a later version). With it
+installed:
+- **In the wild:** a game wolf, sabretooth or goat that turns up is now and then one of these instead (15 %), and more
+  rarely a colour version (4 %) with more health and damage (125 %). A wolf can be a fox, or an arctic, silver or sand
+  fox or a white, black or red wolf. A sabretooth can be a bear, panther or lynx, or a black or cinnamon bear, a black
+  panther, jaguar or tiger, or a dark or red lynx. A snow sabretooth of the Cold Heights can be a bear or lynx, or a
+  snow bear, snow leopard or snow lynx. A goat can be a goat or deer (a black or piebald goat, a dark or fallow deer);
+  a mountain goat a ram or elk (a chamois, a black or golden ram, a mouflon, a white, dark or grey elk, a white deer).
+  Each has the level of the creature it replaced and that creature's loot.
+- Never a creature within 25 m of a player (nothing changes in front of you), within 40 m of a flame altar, hurt, or
+  one that was there when the world loaded.
+- The server world has no render models for creatures; on a game you host your own game's world tells a snow
+  sabretooth or a mountain goat by its model. A dedicated server cannot: there they get the sabretooth's or the goat's
+  animals.
+- **Taming:** the foxes, coloured wolves, bears, panthers and lynxes are tamed like any beast (beaten down, or fed:
+  lean meat for foxes and wolves, red berries for bears, cat bait for panthers and lynxes) and called from your
+  collection; a colour version is about 10 % stronger than its animal. The goat, ram, deer and elk run the game's
+  wildlife AI and cannot fight, so they are never tamed.
+- Beastmaster knows these animals by its list of the ones it put into the world (nothing else on the server tells a fox
+  from a wolf): after a script reload the ones already about cannot be tamed until the next world load.
+- Without the pack nothing is replaced: the first spawn the game refuses turns this off until the next world load, with
+  one line in the log, and takes nothing out.
 
 ## More beasts: `species_extra.lua` (for modders)
 
