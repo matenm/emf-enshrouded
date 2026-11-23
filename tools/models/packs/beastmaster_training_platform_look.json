@@ -1,0 +1,42 @@
+{
+  "notes": "The Training Grounds' platform on the game's own materials: the hay bale and the rope (saturated and bright) and the pale bones wear the thatch of the game's straw roofs (slot 0), the planks, logs, rim and bowl its sheds' planks (slot 1), at the Stable's densities. The model: Meshy image-to-3D 01a2080e-3b48-7586-9366-abfc2945ec70 from a concept (image-to-image 01a2080d-8569-775d-833e-65839437da66) of a Blender block-out.",
+  "rules": [
+    {
+      "material": 0,
+      "min_saturation": 0.42,
+      "min_value": 0.45
+    },
+    {
+      "material": 0,
+      "min_value": 0.65
+    }
+  ],
+  "default": 1,
+  "materials": {
+    "0": {
+      "repeat": [
+        1.39,
+        0.705
+      ],
+      "region": [
+        0.0391,
+        0.0293,
+        0.5859,
+        0.3076
+      ]
+    },
+    "1": {
+      "repeat": [
+        1.15,
+        1.37
+      ],
+      "region": [
+        0.4199,
+        0.0586,
+        0.9668,
+        0.7129
+      ]
+    }
+  },
+  "smooth_angle": 40
+}

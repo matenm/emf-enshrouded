@@ -1,7 +1,7 @@
 {
   "id": "emf_beastmaster_beasts",
   "title": "Beastmaster: new beasts",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "out": "../../../analysis/models/mods/emf_beastmaster_beasts",
   "description": "New beasts for the Beastmaster mod: the Aurochs (a huge horned wild bull on the game boar's skeleton, it charges) and the Snake (a 5 m snake from a 3D scan of a pit viper, on a spine of its own: it slithers, rears up and strikes). Wild ones appear now and then when Beastmaster is installed; tame one and call it. Now and then a wild snake is a rare one: crimson, golden king or albino, bigger and tougher. And the Stable and the Large Stable: beds for your tamed beasts that you craft at the Workbench and place in your base; press E at one to open Beastmaster's Beasts window. In the Large Stable the beasts you left at home walk about and lie down.",
   "authors": [
@@ -20,7 +20,8 @@
     "2.1 (the Stable in the game's style): the owner found the Meshy texture cartoony; the Stable now wears the game's own materials: the thatch of its straw roofs (slot 0) and the planks of its sheds (slot 1), through texture coordinates into their atlases (blender/game_materials.py with beastmaster_stable_look.json on the refined Meshy glb and its albedo, which only sorts straw from wood). No texture of ours ships for it.",
     "2.1 (the second Meshy model, the owner's ask for more detail): preview 01a1bba9-2ae0-72f9-b145-318da8528f86 at 45000 polygons (3x the first; prompt: squared posts and beams, log walls back and left, the right open between posts, an evenly thatched roof with a neat edge, a raised plank floor, hay bed, feeding trough, clean solid geometry, no loose straw, no base plate) and refine 01a1bbad-e998-76f9-ac0d-5a303fe2dc15, 30 credits. Fitted 4.5 m wide (2.95 m deep, 3.4 m high: room for a beast); the content script's boxes follow it (plank floor, back and left walls, the low right rail, the roof).",
     "2.2 (the Large Stable, the owner's ask for a second, bigger stable where the beasts at home show up, the Stable staying as it is): the same refined Meshy glb on the same game materials, built 7.2 m wide (1.6x: 4.7 m deep, 5.5 m high), with every texture repeat divided by 1.6 (beastmaster_large_stable_look.json) so the thatch and planks are as big as on the Stable; the content script adds it as a second placeable with the Stable's boxes times 1.6.",
-    "2.2 (unbreakable stables): a scavenger's swings broke a Large Stable in one hit (it fell to an item and its prompt went): the large animal bed's Destructible, OnDestroy and ServerTarget (monsters target it) are stripped from both stables, as the crafting stations have none of them; checked live: hit three times, it stays, with its prompt."
+    "2.2 (unbreakable stables): a scavenger's swings broke a Large Stable in one hit (it fell to an item and its prompt went): the large animal bed's Destructible, OnDestroy and ServerTarget (monsters target it) are stripped from both stables, as the crafting stations have none of them; checked live: hit three times, it stays, with its prompt.",
+    "2.3 (the Training Grounds, Beastmaster 1.21.0: the owner's training idea, 2026-11-23): a round wooden platform 5 m across with a training dummy in the middle and a hay bale, a bowl, a rope and bones near its rim. The dummy: a Blender block-out (analysis/models/training/_scripts/dummy_blockout.py), a concept picture from it (Meshy image-to-image 01a2080b-261f-719a-938a-c9a26a563d79, gpt-image-2), a model from the concept (image-to-3D 01a2080c-0334-746f-9a0c-a1cfeb84e673), 2 m tall; the platform the same way (block-out platform_blockout.py, concept 01a2080d-8569-775d-833e-65839437da66, image-to-3D 01a2080e-3b48-7586-9366-abfc2945ec70), 5 m across (assemble.py). Each part on the game's own materials (thatch and shed planks, beastmaster_training_dummy_look.json and ..._platform_look.json), joined (split_join.py). Content script beastmaster_training.lua: a copy of the large animal bed's object like the Stable, boxes for the round platform (0.32 m high) and the dummy; crafted at the Workbench (10 wood logs, 12 plant fibre, 3 animal fur). Text-to-3D alone made the dummy a mannequin or a skeleton figure: five tries, then the block-out route."
   ],
   "creatures": [
     {
@@ -1705,9 +1706,23 @@
         "0": "98275745-f4e6-4d24-a5f1-3b5c511b2d5e",
         "1": "f4469c8e-ce61-4672-badb-a03d84133987"
       }
+    },
+    {
+      "name": "beastmaster_training_grounds",
+      "glb": "../../../analysis/models/training/assembled/training_grounds_v2_game.glb",
+      "source_model_guid": "7dd9139a-fba7-4e60-8b5a-fa853c250ef7",
+      "source_model_json": "../../../analysis/models/stable/game/animalprops_farm_animal_sleep_large_01.json",
+      "model_guid": "bb3549a0-5088-4c3b-8057-3a7e48a59ad6",
+      "width": 5.0,
+      "yaw": 0,
+      "materials": {
+        "0": "98275745-f4e6-4d24-a5f1-3b5c511b2d5e",
+        "1": "f4469c8e-ce61-4672-badb-a03d84133987"
+      }
     }
   ],
   "content_scripts": [
-    "beastmaster_stable.lua"
+    "beastmaster_stable.lua",
+    "beastmaster_training.lua"
   ]
 }

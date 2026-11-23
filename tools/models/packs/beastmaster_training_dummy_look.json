@@ -1,0 +1,39 @@
+{
+  "notes": "The Training Grounds' dummy on the game's own materials (blender/game_materials.py, then joined with the platform: beastmaster_training_platform_look.json): its straw sack, head and rope bands (bright, in the upper 54 % of its height) wear the thatch of the game's straw roofs (slot 0); the post, foot, arms and the leather pad its sheds' planks (slot 1), at the Stable's densities. The model: Meshy image-to-3D 01a2080c-0334-746f-9a0c-a1cfeb84e673 from a concept (image-to-image 01a2080b-261f-719a-938a-c9a26a563d79) of a Blender block-out.",
+  "rules": [
+    {
+      "material": 0,
+      "min_saturation": 0.2,
+      "min_value": 0.38,
+      "min_height": 0.46
+    }
+  ],
+  "default": 1,
+  "materials": {
+    "0": {
+      "repeat": [
+        1.39,
+        0.705
+      ],
+      "region": [
+        0.0391,
+        0.0293,
+        0.5859,
+        0.3076
+      ]
+    },
+    "1": {
+      "repeat": [
+        1.15,
+        1.37
+      ],
+      "region": [
+        0.4199,
+        0.0586,
+        0.9668,
+        0.7129
+      ]
+    }
+  },
+  "smooth_angle": 40
+}
