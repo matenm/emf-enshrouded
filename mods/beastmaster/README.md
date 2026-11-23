@@ -386,7 +386,7 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 | `beastmaster.spawn <species>` | **console, admin:** puts a wild beast of that species 5 m in front of you, to try taming it. Since 1.16.1 a beast being tamed stops fighting you, a tamed beast loses its debuffs (a bleed no longer kills it after taming), and a beast brought back from far away drops its chase and follows you again |
 | `beastmaster.loyalty <name or number> <1-10>` | **host console only:** set a beast's loyalty (tests); the reply says its talent points |
 | `beastmaster.give <species>` | **host console only:** add a beast to your collection without taming it (wolf, boar, sabretooth, hound, bear, aurochs, snake, crimson_snake, golden_snake, albino_snake; with the wilds pack fox, arctic_fox, silver_fox, sand_fox, white_wolf, black_wolf, red_wolf, brown_bear, black_bear, snow_bear, cinnamon_bear, wilds_panther, black_panther, jaguar, snow_leopard, tiger, lynx, snow_lynx, dark_lynx, red_lynx) |
-| `beastmaster.wild_swap <entity> [roll 0-1]` | **console:** a wild wolf, sabretooth or goat becomes one of the wilds pack's animals now (a roll under `wild_coat_pct`: a colour version), for checks in game (1.21.0) |
+| `beastmaster.wild_swap <entity> [roll 0-1]` | **console:** a wild wolf, sabretooth, goat or yak becomes one of the wilds pack's animals now (a roll under `wild_coat_pct`: a colour version), for checks in game (1.21.0) |
 | `beastmaster.as <#k or player entity> <word> [...]` | **host or server console only:** run a word as that player (#2: the second player, lowest entity id first): `give`, `loyalty`, `open [name]` (their Beasts window, on that beast's tab), or any `/beastmaster` word; for tests on a dedicated server |
 | `beastmaster.species <graph guid> <faction> [scale]` | for modders: which beast a creature is, by the animation graph its template runs, its faction number and its scale (render models are not on the server world; the bear its own copy of the wolf's graph at 1.4x (the bear pack 1.0's: the wolf's graph at 1.4x), the aurochs the boar's at 1.3x, the snake and each rare snake its own copy of the wolf's graph) |
 
@@ -427,7 +427,7 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 | A tank (boar, bear, aurochs) draws, Another beast draws (`tank_share_pct`, `damage_share_pct`) | 50 %, 20 % | of the monsters in a fight, before Menace |
 | All your beasts draw at most (`beasts_share_max_pct`), Of a boss (`boss_share_max_pct`) | 90 %, 35 % | |
 | Rare wild bears, aurochs and snakes (`wild_bears`), About every (`wild_bear_minutes`) | on, 30 min | needs their pack |
-| Our animals in place of the game's wolves, sabretooths and goats (`wild_replace_pct`), Rare colour versions of them (`wild_coat_pct`), Rare colours are stronger (`wild_coat_strength`) | 15 %, 4 %, 125 % | needs the wilds pack; 0-50 %, 0-20 %, 100-200 % health and damage (1.21.0) |
+| Our animals in place of the game's wolves, sabretooths, goats and yaks (`wild_replace_pct`), Rare colour versions of them (`wild_coat_pct`), Rare colours are stronger (`wild_coat_strength`) | 15 %, 4 %, 125 % | needs the wilds pack; 0-50 %, 0-20 %, 100-200 % health and damage (1.21.0) |
 | Markers over your beasts (`beast_markers`) | off | each player can choose: `/beastmaster markers on\|off` |
 | Stables on the map (`stable_markers`) | off | each player can choose: `/beastmaster stable_markers on\|off` |
 

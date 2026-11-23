@@ -2,14 +2,14 @@
 --   template:   the game template a call spawns (it runs the enemy AI, which follows StartGuardingEvent)
 --   graph:      the animation graph a wild creature of that kind runs (its template data on the server world:
 --               world:template("AnimationGraphResourceComponent2", id).animationGraph; render models are client-side)
---   also:       another graph that is this kind too (the bear pack 2's bear runs its own graph copy, the older
---               pack's ran the wolf's)
+--   also:       another graph that is this kind too (the bear pack 2's bear ran a graph copy of its own: an old
+--               pack still installed)
 --   factions:   when several kinds share a graph: the factions that make it this kind (the wolf's graph is also the
 --               scavengers' hound's)
 --               a beast on a skeleton of its own (the beasts pack's snake) runs its own copy of a game graph: its
 --               graph alone tells it apart
 --   min_scale / max_scale: when kinds share a graph and a faction, the creature's ScaleComponent tells them apart
---               (the bear pack's bear runs the wolf's graph at 1.4x: seen in game, game wolves have no ScaleComponent;
+--               (the bear pack's bear runs the sabretooth's graph at 1.4x, game sabretooths have no ScaleComponent;
 --               the beasts pack's aurochs runs the boar's graph at 1.3x).
 --               M.of takes the first that fits, in list order
 --   pack:       the content pack (an EML data patch, built by EMF at the game's start) the beast comes from, named for notes; a game without that pack
@@ -59,7 +59,7 @@ M.list = {
 		model = "b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f01", pack = "the bear pack (emf_beastmaster_bear)", health_mul = 2.5,
 		plural = "bears",
 		graph = SABRE_GRAPH, also = "b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f05",
-		factions = { [WILDBEAST] = true }, min_scale = BEAR_SCALE, sleeps = true },
+		factions = { [WILDBEAST] = true }, min_scale = BEAR_SCALE },
 	-- the beasts pack (tools/models/packs/beastmaster_beasts.json); GUIDs fixed forever
 	{ id = "aurochs", name = "Aurochs", tank = true, scale = 1.3, role_health = 2.0, role_damage = 1.0, template = "d5f2b8e3-7c4a-4e9f-8b21-6a3c8d4e0f02",
 		model = "d5f2b8e3-7c4a-4e9f-8b21-6a3c8d4e0f01", pack = PACK, health_mul = 3,

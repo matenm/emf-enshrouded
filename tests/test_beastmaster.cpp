@@ -5218,13 +5218,18 @@ TEST_CASE("idle: a hound lies down like a wolf; a sabretooth (no sleep states) w
     CHECK(ai_now(b, 1235).state == AiState::Roaming);
 }
 
-TEST_CASE("idle: a bear lies down too (its pack's graph is a copy of the wolf's)") {
-    RollRig b;
-    b.roll(0.0);
+TEST_CASE("idle: a bear runs the sabretooth's graph, which has no sleep states: it never settles to lie down") {
+    RollRig b({{"call_cooldown_s", "0"}});
+    b.roll(0.0);  // the roll that settles a wolf
     b.reply("beastmaster.give bear");
     roaming(b, "Bear", 1234, 0, 4);
     b.seconds(11);
-    CHECK(asleep(b, 1234));
+    CHECK_FALSE(asleep(b, 1234));
+    const std::string idle = b.reply("beastmaster.idle");
+    CAPTURE(idle);
+    CHECK(has(idle, "Bear "));
+    CHECK_FALSE(has(idle, "settles"));
+    CHECK_FALSE(has(idle, "lying down"));
 }
 
 TEST_CASE("idle: each player's beasts follow only their own stillness") {

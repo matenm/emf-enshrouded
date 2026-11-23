@@ -1,5 +1,5 @@
--- Our animals in the wild (the wilds pack, emf_beastmaster_wilds): the game's wolves, sabretooths and goats are now and
--- then one of the pack's animals instead (wild_replace_pct of them) or a stronger colour version (wild_coat_pct,
+-- Our animals in the wild (the wilds pack, emf_beastmaster_wilds): the game's wolves, sabretooths, goats and yaks are
+-- now and then one of the pack's animals instead (wild_replace_pct of them) or a stronger colour version (wild_coat_pct,
 -- stronger by wild_coat_strength in health and damage). The kinds and their pools are in species_wilds.lua.
 --   When: the server world is walked every WALK_S in slices; a wild creature of a kind there that the walk had not
 --   seen is rolled once, after the walk that found it (its players complete). What the first walk with a player in the
@@ -328,7 +328,7 @@ end
 function R:roll_now(world, id, roll)
 	local f = get(world, "Faction", id)
 	local graph = f and not get(world, "PlayerState", id) and kind_graph(world, id, f)
-	if not graph then return "That is not a wild wolf, sabretooth or goat." end
+	if not graph then return "That is not a wild wolf, sabretooth, goat or yak." end
 	local k = kind_of(graph, f.faction, nil)
 	if not k then return "No kind of ours replaces it." end
 	local s = self.env.setting
