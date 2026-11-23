@@ -53,6 +53,18 @@ struct Rig {
         ImGui::GetIO().AddKeyEvent(k, false);
         frame();
     }
+    // `k` with Ctrl held (and Shift when `shift`).
+    void ctrl(ImGuiKey k, bool shift = false) {
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddKeyEvent(ImGuiMod_Ctrl, true);
+        if (shift) io.AddKeyEvent(ImGuiMod_Shift, true);
+        io.AddKeyEvent(k, true);
+        frame();
+        io.AddKeyEvent(k, false);
+        if (shift) io.AddKeyEvent(ImGuiMod_Shift, false);
+        io.AddKeyEvent(ImGuiMod_Ctrl, false);
+        frame();
+    }
 };
 // The scrollback child window (ImGui names children "<parent>/<name>_<id>").
 ImGuiWindow* scrollback() {
@@ -704,3 +716,67 @@ TEST_CASE("read_overlay_config: debug_keys is off by default; debug_keys=1 turns
     CHECK(c.debug_keys);
     DeleteFileW(ini.c_str());
 }
+
+// ---- the find line (GitHub #60) ----
+
+TEST_CASE("console UI: Ctrl+F opens the find line; Enter steps to older matches again and again and runs no command") {
+    Headless h;
+    Rig r;
+    for (int i = 0; i < 30; ++i) r.model.add_line(i % 10 == 0 ? "wood " + std::to_string(i) : "x " + std::to_string(i));
+    r.frame();
+    r.frame();
+    r.type("gi");  // a command half typed
+    r.ctrl(ImGuiKey_F);
+    REQUIRE(r.ui.find_open);
+    for (int i = 0; i < 3; ++i) r.frame();
+    r.type("wood");
+    CHECK(r.ui.find_text == "wood");
+    r.frame();  // the matches follow on the next frame
+    REQUIRE(r.ui.find_matches.size() == 3);
+    CHECK(r.ui.find_current == 2);  // the newest
+    r.press(ImGuiKey_Enter);
+    for (int i = 0; i < 3; ++i) r.frame();
+    CHECK(r.ui.find_current == 1);
+    r.press(ImGuiKey_Enter);
+    for (int i = 0; i < 3; ++i) r.frame();
+    CHECK(r.ui.find_current == 0);
+    CHECK(r.submitted.empty());
+    CHECK(r.ui.input == "gi");
+}
+
+TEST_CASE("console UI: a jump to a match stays put while new lines come in") {
+    Headless h;
+    Rig r;
+    for (int i = 0; i < 200; ++i) r.model.add_line(i == 20 ? "the needle" : "hay " + std::to_string(i));
+    for (int i = 0; i < 3; ++i) r.frame();
+    r.ctrl(ImGuiKey_F);
+    for (int i = 0; i < 3; ++i) r.frame();
+    r.type("needle");
+    for (int i = 0; i < 3; ++i) r.frame();
+    ImGuiWindow* w = scrollback();
+    REQUIRE(w != nullptr);
+    const float jumped = w->Scroll.y;
+    CHECK(jumped < w->ScrollMax.y - 100.0f);  // up at line 20, not at the bottom
+    r.model.add_line("a mod prints");
+    for (int i = 0; i < 3; ++i) r.frame();
+    CHECK(w->Scroll.y == doctest::Approx(jumped));
+}
+
+TEST_CASE("console UI: Esc closes the find line first and the input keeps what was typed (not all selected)") {
+    Headless h;
+    Rig r;
+    r.model.add_line("wood");
+    r.frame();
+    r.frame();
+    r.type("gi");
+    r.ctrl(ImGuiKey_F);
+    for (int i = 0; i < 3; ++i) r.frame();
+    r.type("wo");
+    CHECK(r.ui.wants_escape);  // the next Esc is the find line's
+    r.ui.escape = true;        // the router sent it to the console
+    for (int i = 0; i < 4; ++i) r.frame();
+    CHECK_FALSE(r.ui.find_open);
+    r.type("ve");
+    CHECK(r.ui.input == "give");
+}
+

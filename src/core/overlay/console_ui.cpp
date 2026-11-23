@@ -142,6 +142,10 @@ void set_line(ImGuiInputTextCallbackData* d, const LineEdit& e) {
 int input_callback(ImGuiInputTextCallbackData* d) {
     auto* c = static_cast<CallbackCtx*>(d->UserData);
     ConsoleUiState& ui = *c->ui;
+    if (ui.caret_to_end) {
+        ui.caret_to_end = false;
+        d->CursorPos = d->SelectionStart = d->SelectionEnd = d->BufTextLen;
+    }
     if (ui.suggest)  // the suggestions follow the line and the caret (they recompute only when either changed)
         ui.suggester.update(std::string_view(d->Buf, static_cast<size_t>(d->BufTextLen)),
                             static_cast<size_t>(d->CursorPos), *c->sources);
@@ -335,12 +339,6 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
             ui.find_jump = !ui.find_matches.empty();
         }
     }
-    if (ui.find_jump && ui.find_current < ui.find_matches.size()) {
-        ui.find_jump = false;
-        ui.follow = false;
-        ImGui::SetScrollY((std::max)(0.0f, static_cast<float>(ui.find_matches[ui.find_current]) * line_h -
-                                               ImGui::GetWindowHeight() * 0.5f));
-    }
     const bool marking = ui.find_open && !ui.find_matches.empty();
     ImGuiListClipper clipper;
     clipper.Begin(static_cast<int>(count), line_h);
@@ -373,10 +371,17 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
     }
     if (ImGui::GetScrollY() < ImGui::GetScrollMaxY() - line_h) {
         if (io.MouseWheel > 0.0f || ImGui::IsKeyPressed(ImGuiKey_PageUp)) ui.follow = false;
-    } else {
-        ui.follow = true;
+    } else if (!ui.find_jump && !(ui.find_open && !ui.find_matches.empty() && !ui.follow)) {
+        ui.follow = true;  // at the bottom (not while the view rests on a match found: it moves there next frame)
     }
     const float view_h = ImGui::GetWindowHeight();  // a resize moves the bottom too
+    if (ui.find_jump && ui.find_current < ui.find_matches.size()) {
+        // after the follow check, which still sees this frame's scroll (SetScrollY applies next frame): the jump wins
+        ui.find_jump = false;
+        ui.follow = false;
+        ImGui::SetScrollY((std::max)(0.0f, static_cast<float>(ui.find_matches[ui.find_current]) * line_h -
+                                               ImGui::GetWindowHeight() * 0.5f));
+    }
     if (ui.follow && (version != ui.seen_version || view_h != ui.seen_height)) ImGui::SetScrollHereY(1.0f);
     ui.seen_version = version;
     ui.seen_height = view_h;
@@ -387,17 +392,19 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
         ui.escape = false;  // the console)
         if (ui.find_open) {
             ui.find_open = false;
+            ui.find_focus = false;
             ui.focus_input = true;
         } else {
             ui.suggester.escape();
         }
     }
     // Ctrl+F opens the find line (or goes back to it); Ctrl+Shift+C copies, as the Copy button
-    if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+    if (io.KeyCtrl && !io.KeyShift && !io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
         ui.find_open = true;
         ui.find_focus = true;
+        ui.find_typing = true;
     }
-    const bool copy_key = io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_C, false);
+    const bool copy_key = io.KeyCtrl && io.KeyShift && !io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_C, false);
     char buf[kInputCap];
     const size_t n = (std::min)(ui.input.size(), kInputCap - 1);
     std::memcpy(buf, ui.input.data(), n);
@@ -406,17 +413,21 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
     const float button_w = ImGui::CalcTextSize("Find").x + ImGui::CalcTextSize("Copy").x +
                            footer_style.FramePadding.x * 4.0f + footer_style.ItemSpacing.x * 2.0f;
     const float find_w = ui.find_open ? (std::max)(160.0f, ImGui::GetContentRegionAvail().x * 0.25f) : 0.0f;
-    const float count_w = ui.find_open ? ImGui::CalcTextSize("0000 of 0000").x + footer_style.ItemSpacing.x * 2.0f : 0.0f;
+    const float count_w = ui.find_open ? ImGui::CalcTextSize("00000 of 00000").x + footer_style.ItemSpacing.x * 3.0f : 0.0f;
     ImGui::PushItemWidth(-(button_w + find_w + count_w));
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(1.0f, 1.0f, 1.0f, 0.07f));
-    if (ui.focus_input && !ui.find_focus) {
+    if (ui.find_focus) ui.focus_input = false;  // the find line asked for the keys
+    if (ui.focus_input) {
+        if (ui.find_typing) ui.caret_to_end = true;  // back from the find line: keep what was typed
+        ui.find_typing = false;
         ImGui::SetKeyboardFocusHere();
         ui.focus_input = false;
     }
     CallbackCtx ctx{&model, &ui, &sources};
     ImGuiInputTextFlags in_flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion |
                                    ImGuiInputTextFlags_CallbackHistory | ImGuiInputTextFlags_CallbackEdit;
-    if (ui.suggest) in_flags |= ImGuiInputTextFlags_CallbackAlways;  // the caret, every frame the line is active
+    if (ui.suggest || ui.caret_to_end) in_flags |= ImGuiInputTextFlags_CallbackAlways;  // the caret, every frame the line
+                                                                                         // is active
     // A new press of Right with the caret at the end of the line (last frame's caret: the press cannot move it
     // further). Not its auto-repeats: holding Right to walk to the end of the line must not take a row there.
     ui.accept_right = ui.suggest && ImGui::IsKeyPressed(ImGuiKey_RightArrow, false) && !io.KeyCtrl && !io.KeyShift &&
@@ -442,12 +453,17 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
             ImGui::SetKeyboardFocusHere();
             ui.find_focus = false;
         }
-        if (ImGui::InputTextWithHint("##find", "find", fbuf, sizeof(fbuf), ImGuiInputTextFlags_EnterReturnsTrue) &&
-            !ui.find_matches.empty()) {
-            const size_t n_matches = ui.find_matches.size();
-            ui.find_current = io.KeyShift ? (ui.find_current + 1) % n_matches : (ui.find_current + n_matches - 1) % n_matches;
-            ui.find_jump = true;
+        const bool find_entered =
+            ImGui::InputTextWithHint("##find", "find", fbuf, sizeof(fbuf), ImGuiInputTextFlags_EnterReturnsTrue);
+        if (ImGui::IsItemActive()) ui.find_typing = true;
+        if (find_entered) {
             ui.find_focus = true;  // Enter leaves the line: back to it for the next one
+            if (!ui.find_matches.empty()) {
+                const size_t n_matches = ui.find_matches.size();
+                ui.find_current =
+                    io.KeyShift ? (ui.find_current + 1) % n_matches : (ui.find_current + n_matches - 1) % n_matches;
+                ui.find_jump = true;
+            }
         }
         ImGui::PopStyleColor();
         ImGui::PopItemWidth();
@@ -466,6 +482,7 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
     if (ImGui::SmallButton("Find")) {
         ui.find_open = !ui.find_open;
         ui.find_focus = ui.find_open;
+        ui.find_typing = ui.find_open;
         if (!ui.find_open) ui.focus_input = true;
     }
     ImGui::SameLine();
@@ -480,7 +497,6 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
             text = model.text(0, model.size(), ui.timestamps);
         }
         ImGui::SetClipboardText(text.c_str());
-        ui.focus_input = !ui.find_open;
     }
     if (ui.suggest && !entered && input_active) {  // grey ghost text completes the top match after the caret
         const std::string ghost = ui.suggester.ghost();
@@ -511,8 +527,12 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
         ui.follow = true;
         ui.focus_input = true;
     }
-    if (!entered && !ImGui::IsAnyItemActive())
-        ui.focus_input = true;  // keep typing going to the input line while the console is open (also after a click)
+    if (!entered && !ImGui::IsAnyItemActive()) {  // keep typing going to the line that had the keys (also after a click)
+        if (ui.find_open && ui.find_typing)
+            ui.find_focus = true;
+        else
+            ui.focus_input = true;
+    }
     const ImVec2 under = ImVec2(input_lo.x, input_hi.y + 2.0f);
     ImGui::End();
     ImGui::PopStyleVar(2);

@@ -125,9 +125,19 @@ std::vector<size_t> ConsoleModel::find_all(std::string_view needle) const {
     std::vector<size_t> out;
     if (needle.empty()) return out;
     const std::string n = lower(needle);
+    const auto low = [](char c) { return c >= 'A' && c <= 'Z' ? char(c - 'A' + 'a') : c; };
+    const auto holds = [&](const std::string& text) {  // any case, without a copy of each line
+        if (text.size() < n.size()) return false;
+        for (size_t at = 0; at + n.size() <= text.size(); ++at) {
+            size_t k = 0;
+            while (k < n.size() && low(text[at + k]) == n[k]) ++k;
+            if (k == n.size()) return true;
+        }
+        return false;
+    };
     const SrwShared lock(lock_);
     for (size_t i = 0; i < lines_.size(); ++i)
-        if (contains(lower(lines_[i].text), n)) out.push_back(i);
+        if (holds(lines_[i].text)) out.push_back(i);
     return out;
 }
 

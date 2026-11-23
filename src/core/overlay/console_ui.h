@@ -48,6 +48,9 @@ struct ConsoleUiState {
     bool find_jump = false;             // scroll to the current match on the next frame
     uint64_t find_seen_version = 0;     // the scrollback's version find_matches belong to
     std::string find_seen_text;         // and the text
+    bool find_typing = false;           // the find line, not the input line, had the keys last (they go back to it)
+    bool caret_to_end = false;          // the input line just got the keys back: its caret to the end, nothing
+                                        // selected (focus set by code selects all of a line another line used last)
     // The look ([overlay] height, opacity, background, tabs_font).
     float height = 0.50f;   // the console's height, a fraction of the screen
     float opacity = 0.80f;  // its background's
