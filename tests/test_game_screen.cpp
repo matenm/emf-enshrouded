@@ -282,6 +282,18 @@ TEST_CASE("key filter: a key the router hides from mods reads as up; the others 
     CHECK(mod_read(k, VK_F3, false, gate, &r) == 0);
     CHECK(mod_read(k, 'W', false, gate, &r) == static_cast<SHORT>(0x8001));
     CHECK(k.reads == 2);
-    CHECK(mod_read(k, 'W', true, gate, &r) == 0);  // typing and hiding together: the gate first
+    CHECK(mod_read(k, 'W', true, gate, &r) == 0);  // typing
     CHECK(k.reads == 3);
+}
+
+TEST_CASE("key filter: typing and a hidden key together: the gate marks the key first, so it stays up after both end") {
+    TypingKeyGate gate;
+    FakeRouter r;
+    r.hidden = 'W';
+    Keys k{{'W'}};
+    CHECK(mod_read(k, 'W', true, gate, &r) == 0);
+    r.hidden = 0;  // the router no longer hides it, the chat closed, W still held
+    CHECK(mod_read(k, 'W', false, gate, &r) == 0);  // held up by the gate until let go
+    gate.released('W');
+    CHECK(mod_read(k, 'W', false, gate, &r) == static_cast<SHORT>(0x8001));
 }

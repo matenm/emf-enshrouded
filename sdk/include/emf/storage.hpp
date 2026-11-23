@@ -72,9 +72,10 @@ public:
         const uint32_t loads = loads_;
         if (players_state_ == PlayersState::Unreadable && file_session_ == session && read_loads_ == loads && file_slot_)
             load_players();  // another program had it open: read it again
-        if (loaded_session_ != session || (file_session_ == session && read_loads_ == loads) || !slot_) return false;
+        const uint16_t slot = slot_;
+        if (loaded_session_ != session || (file_session_ == session && read_loads_ == loads) || !slot) return false;
         std::string text;
-        const std::wstring file = file_of(slot_);
+        const std::wstring file = file_of(slot);
         if (!read_into(file, text)) {  // there, but another program holds it: never handed over as "" (no file)
             // nothing of this world is read: the last world's text and slot are not this one's
             file_slot_ = 0;
@@ -88,7 +89,7 @@ public:
             return false;  // not read: not ready, so nothing is saved over it; the next poll tries again
         }
         unreadable_said_ = false;
-        file_slot_ = slot_;
+        file_slot_ = slot;
         file_session_ = session;
         read_loads_ = loads;
         written_ = text;

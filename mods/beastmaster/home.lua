@@ -563,7 +563,7 @@ function H:step(world)
 	if self.restrength then
 		self.restrength = nil
 		for id, e in pairs(self.ids) do
-			if ours(world, id) then self:health(world, e) end
+			if still(world, e) and ours(world, id) then self:health(world, e) end
 		end
 	end
 	for id, e in pairs(self.ids) do

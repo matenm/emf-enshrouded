@@ -58,15 +58,15 @@ enum class ArchiveKind {
 const char* kind_id(ArchiveKind k);     // "emf-mod", "eml-mod", ... (stable, for the app's page)
 const char* kind_label(ArchiveKind k);  // "EMF mod", "EML mod", ... (shown to players)
 
+// The DLL names mods use to get into the game, lower case (the same list as core::proxy_dll_names; a test keeps them
+// equal).
+const std::vector<std::string>& proxy_names();
+
 // What is next to the game now, the same shape and tool words as core::GameFolderView::proxies (known_tools.txt):
 // proxy DLL file name -> tool word ("emf", "eml", "shroudforge", "shroudtopia", "greeneye", "aldrich-modmenu",
 // "modloader-proxy"; "" = a tool EMF does not know). `known` = the app looked; without it nothing is said about
 // what is installed. `chained`: tool words of the DLLs EMF starts through dinput8-chain.ini
 // (core::GameFolderView::chained_tools); EML running as a chained eml.dll counts as installed.
-// The DLL names mods use to get into the game, lower case (the same list as core::proxy_dll_names; a test keeps them
-// equal).
-const std::vector<std::string>& proxy_names();
-
 struct GameState {
     std::vector<std::pair<std::string, std::string>> proxies;
     bool known = false;

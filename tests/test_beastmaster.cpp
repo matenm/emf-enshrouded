@@ -4313,8 +4313,8 @@ TEST_CASE("threat: never on a monster not in the fight, a player-side creature, 
 }
 
 // A creature the game keeps pacified (the game's Beastmaster skill on Vukah) is no foe: the beasts never draw it into
-// the fight, a hit on its player does not make a beast taunt it, and one held that becomes pacified is let go.
-TEST_CASE("threat (1.20): a pacified monster is never drawn to the beasts, nor taunted; one held that becomes pacified gets its own pick back") {
+// the fight, not even when it hits their player, and one held that becomes pacified is let go.
+TEST_CASE("threat (1.20): a pacified monster is never drawn to the beasts, even after hitting their player; one held that becomes pacified gets its own pick back") {
     RollRig b;
     b.reply("beastmaster.give boar");
     out_at(b, "Boar", 1234, 0, 4);
