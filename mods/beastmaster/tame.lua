@@ -62,9 +62,21 @@ local function bait_of(self, sp)
 	return self.env.setting("bait_" .. sp.id) or sp.bait
 end
 
+-- The kinds a player can tame, for a message: "wolf, boar, ..., or snake" (the game's and the packs' own, not the rare
+-- ones or the wilds pack's, which are told apart only when met).
+local function kinds_text()
+	local names = {}
+	for _, sp in ipairs(species.list) do
+		if not sp.rare_of and not sp.wilds then names[#names + 1] = sp.name:lower() end
+	end
+	if #names < 2 then return names[1] or "" end
+	return table.concat(names, ", ", 1, #names - 1) .. " or " .. names[#names]
+end
+
 -- The tameable beast the player looks at; with none under the crosshair, the nearest one within range (in a fight
 -- the beast is often at the player's side, under or beside the camera). `weak_first`: a beast beaten down to the
--- taming threshold goes before a nearer healthy one.
+-- taming threshold goes before a nearer healthy one; a small critter (species `small`: the rat, which is everywhere)
+-- goes after any other kind.
 function T:target(world, player, weak_first)
 	local range = self.env.setting("tame_range_m")
 	local id = aim.pick(world, player, range, function(e) return M.species_of(world, e) ~= nil end)
@@ -72,20 +84,27 @@ function T:target(world, player, weak_first)
 	local px, py, pz = world:position(player)
 	if not px then return nil end
 	local pct = self.env.setting("tame_health_pct")
-	local best, best_d, best_weak
+	local best, best_d, best_weak, best_small
 	for _, e in ipairs(world:entities()) do
 		if e ~= player then
 			local x, y, z = world:position(e)
 			if x then
 				local d = math.sqrt((x - px) ^ 2 + (y - py) ^ 2 + (z - pz) ^ 2)
-				if d <= range and M.species_of(world, e) then
+				local sp = d <= range and M.species_of(world, e)
+				if sp then
 					local weak = false
 					if weak_first then
 						local cur, max = emf.health(world, e)
 						weak = max ~= nil and max > 0 and cur * 100 <= max * pct
 					end
-					if not best or (weak and not best_weak) or (weak == best_weak and d < best_d) then
-						best, best_d, best_weak = e, d, weak
+					local small = sp.small == true
+					local better
+					if not best then better = true
+					elseif weak ~= best_weak then better = weak
+					elseif small ~= best_small then better = not small
+					else better = d < best_d end
+					if better then
+						best, best_d, best_weak, best_small = e, d, weak, small
 					end
 				end
 			end
@@ -194,7 +213,7 @@ end
 -- beastmaster.tame: start the channel on the beast in front of the player. Returns the reply text.
 function T:tame(world, player)
 	local id = self:target(world, player, true)
-	if not id then return "There is no beast to tame near you (wolf, boar, sabretooth, hound or bear, within "
+	if not id then return "There is no beast to tame near you (" .. kinds_text() .. ", within "
 		.. self.env.setting("tame_range_m") .. " m)." end
 	local sp = M.species_of(world, id)
 	local other = holder(self, id)

@@ -11,7 +11,7 @@ K.__index = K
 
 local STABLE_NEAR_M = 200   -- stables show in the world within this distance (always on the map)
 local HEIGHT = 1.7          -- metres above a beast's position
-local TALL = { bear = 2.4, aurochs = 2.4 }
+local TALL = { bear = 2.4, aurochs = 2.4, rat = 0.8 }  -- metres above, by kind (a rat is small)
 local KEYS = { markers = "beast_markers", stable_markers = "stable_markers" }
 local BAR_STEP = 0.05       -- the health bar moves in 5 % steps (each step is a marker sent again)
 local bars = true           -- false on an older EMF, whose markers have no bar (Lua 1.40): sent without

@@ -202,6 +202,19 @@ TEST_CASE("beastmaster: a rat of houses and ruins is a beast too: known by its g
     CHECK(b.reply("beastmaster.give rat").find("added") != std::string::npos);
 }
 
+TEST_CASE("beastmaster: with nothing under the crosshair, taming takes another beast before a rat; no beast near names every kind") {
+    BeastRig b;
+    const std::string none = b.reply("beastmaster.tame");
+    CHECK(none.find("wolf, boar, sabretooth, hound, rat, bear, aurochs or snake") != std::string::npos);
+    const char* rat_graph = "57a2f080-1f1e-4d18-8170-2d80b756fe56";
+    b.look(1, 0, 10.5, 0, 180);  // looking away from both: the nearest one counts
+    b.beast(50, rat_graph, 0, 3, kWildBeast, 20, 100);  // rats are many in houses and ruins
+    b.beast(51, kWolfGraph, 0, 6, kWildBeast, 20, 100);
+    CHECK(b.reply("beastmaster.tame").find("Taming") != std::string::npos);
+    b.seconds(4);
+    CHECK(b.noted("You tamed a wolf"));
+}
+
 TEST_CASE("beastmaster: the channel breaks when you walk away (more than 8 m) or the beast dies") {
     BeastRig b;
     b.look(1, 0, 10.5, 0, 0);

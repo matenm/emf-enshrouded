@@ -24,6 +24,8 @@
 --   sleeps:     its animation graph has sleep states: held in the game's Sleep state while its owner stands still, it
 --               lies down (idle.lua); without them it stands there
 --   stays:      false: the Sleep state never holds it while its owner stands still (it only turns, and roams)
+--   small:      a critter that is everywhere (the rat): taming with nothing under the crosshair takes any other kind
+--               near first
 -- Baits are settings ("bait_<id>"), read when used.
 local M = {}
 
@@ -46,7 +48,7 @@ M.list = {
 	-- the rats of houses and ruins (Enemy_Wildbeast_Rat_hook; its Coldheights kin runs the same graph): small, a friend
 	-- more than a fighter (GitHub #47)
 	{ id = "rat", name = "Rat", plural = "rats", role_health = 1.1, role_damage = 1.0, template = "927e63d6-a53e-4eda-af44-c7a229ac22a1",
-		graph = "57a2f080-1f1e-4d18-8170-2d80b756fe56", factions = { [WILDBEAST] = true } },
+		graph = "57a2f080-1f1e-4d18-8170-2d80b756fe56", factions = { [WILDBEAST] = true }, small = true },
 	-- the bear pack (tools/models/packs/beastmaster_bear.json); GUIDs fixed forever. Pack 2.0: a bear on a skeleton
 	-- of its own with its own graph copy; 1.0's bear ran the wolf's graph (both at 1.4x)
 	{ id = "bear", name = "Bear", tank = true, scale = 1.4, role_health = 2.2, role_damage = 1.1, template = "b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f02",
