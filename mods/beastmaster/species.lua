@@ -43,6 +43,10 @@ M.list = {
 		graph = "9c1b120e-4901-495c-9cc0-5de134fbe140" },
 	{ id = "hound", name = "Hound", role_health = 1.3, role_damage = 1.1, template = "87575915-bc75-4611-ab71-0cd4e79535b1",
 		graph = WOLF_GRAPH, factions = { [SCAVENGER] = true }, sleeps = true },
+	-- the rats of houses and ruins (Enemy_Wildbeast_Rat_hook; its Coldheights kin runs the same graph): small, a friend
+	-- more than a fighter (GitHub #47)
+	{ id = "rat", name = "Rat", plural = "rats", role_health = 1.1, role_damage = 1.0, template = "927e63d6-a53e-4eda-af44-c7a229ac22a1",
+		graph = "57a2f080-1f1e-4d18-8170-2d80b756fe56", factions = { [WILDBEAST] = true } },
 	-- the bear pack (tools/models/packs/beastmaster_bear.json); GUIDs fixed forever. Pack 2.0: a bear on a skeleton
 	-- of its own with its own graph copy; 1.0's bear ran the wolf's graph (both at 1.4x)
 	{ id = "bear", name = "Bear", tank = true, scale = 1.4, role_health = 2.2, role_damage = 1.1, template = "b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f02",

@@ -1,6 +1,6 @@
 # Beastmaster (`beastmaster`, a Lua mod)
 
-A Beastmaster class for Enshrouded. Tame wild wolves, boars, sabretooths, hounds, bears, aurochs and snakes, keep up to 8 in
+A Beastmaster class for Enshrouded. Tame wild wolves, boars, sabretooths, hounds, rats, bears, aurochs and snakes, keep up to 8 in
 your collection, and call as many to fight beside you as you have active slots (1 at the start, up to 4 as your character
 levels up). Build a stable to choose which beasts are active. They follow you, come back when they stray, step aside
 while you glide, rest after they fall and then come back by themselves, and are kept with the world. Their kills are yours: XP and loot. Loyal beasts earn talent points: make each
@@ -24,7 +24,7 @@ page says who applies them). Without them everything else works and those beasts
    - **By bait:** choose **Feed** 3 times within 10 s (the beast you look at, else the nearest within 8 m). Each feed
      takes one bait from your bag, one that suits the beast and when you meet it: raw lean meat (goats, hophares and
      rats drop it) for wolves, boars and snakes; the game's animal baits from the Farmer for the rest: dog bait for
-     hounds, cat bait for sabretooths, goat bait for aurochs; red berries for bears; for the rare snakes game meat
+     hounds, cat bait for sabretooths, goat bait for aurochs; red berries for bears and rats; for the rare snakes game meat
      (crimson), turkey bait (golden king) and yak bait (albino).
 2. A tamed beast becomes your ally, guards you, and joins your collection with a name: "Wolf", "Wolf 2", "Boar"... For its first
    5 s it cannot fall (a swing it began as a wild beast can land on itself).
@@ -137,6 +137,7 @@ health and damage a wild one of its kind has at that level, changed by its role:
 |---|---|---|---|
 | Wolf | fast hunter | x1.2 | x1.15 |
 | Hound | like the wolf, a bit sturdier | x1.3 | x1.1 |
+| Rat | a small friend from houses and ruins (it fights as a rat does) | x1.1 | x1 |
 | Sabretooth | the striker | x1.15 | x1.25 |
 | Snake | quick biter | x1.2 | x1.15 |
 | Crimson, golden king, albino snake | (their bites are strong already) | x1.2 | x1, x0.95, x0.9 |
@@ -238,7 +239,7 @@ them:
 | Beasts | Draws | With Menace (3 points) |
 |---|---|---|
 | Tanks: boar, bear, aurochs | 50 % | 80 % |
-| The others: wolf, hound, sabretooth, snakes | 20 % | 50 % |
+| The others: wolf, hound, rat, sabretooth, snakes | 20 % | 50 % |
 
 The shares of several beasts add up; you keep the rest. Your beasts draw at most 90 % of the monsters in all, and of a
 boss (or a mini-boss) at most 35 %, also when they stand much nearer to it than you do. The beast's tab says what it
@@ -398,7 +399,7 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 | Beasts come back from (`leash_m`), At once from (`leash_far_m`) | 60 m, 120 m | |
 | Aggressive beasts go at foes within (`aggro_m`) | 25 m | |
 | You get your beasts' kills (`xp_credit`) | on | XP and loot for the owner |
-| Beasts leave small critters alone (`spare_critters`) | on | rats in houses and ruins: beasts neither go after them nor fight them, unless one bites you or a beast (then for 30 s); Attack on one is still your call (1.21.0) |
+| Beasts leave small critters alone (`spare_critters`) | on | rats in houses and ruins: beasts neither go after them nor fight them, unless one bites you or a beast (then for 30 s); Attack on one is still your call (1.21.0). A rat can also be tamed as a beast with red berries |
 | Beasts step aside while someone builds next to them (`make_room`) | on | while you, or a player within 20 m of them, hold something to build or place, your beasts leave and come back after |
 | Beasts pass the time while you stand still (`idle`) | on | off: they keep following you as before (see When you stand still) |
 | After you stand still for (`idle_s`) | 10 s | 5-60 |

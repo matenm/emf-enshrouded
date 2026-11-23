@@ -187,6 +187,20 @@ TEST_CASE("beastmaster: a wolf at 20 % health in front of you is tamed after a 3
     CHECK(b.reply("beastmaster.list").find("1. Wolf - wolf, loyalty 1, out") != std::string::npos);
 }
 
+TEST_CASE("beastmaster: a rat of houses and ruins is a beast too: known by its graph, its own bait, tamed like a wolf (GitHub #47)") {
+    BeastRig b;
+    const char* rat_graph = "57a2f080-1f1e-4d18-8170-2d80b756fe56";  // Enemy_Wildbeast_Rat_hook and its Coldheights kin
+    CHECK(b.reply(std::string("beastmaster.species ") + rat_graph + " 6") == "rat");
+    CHECK(b.r.fake.settings["beastmaster.bait_rat"] == "Food_T1_raw_fruit_Red_Berries");  // a rat takes berries
+    b.look(1, 0, 10.5, 0, 0);
+    b.beast(50, rat_graph, 0, 5, kWildBeast, 20, 100);
+    CHECK(b.reply("beastmaster.tame").find("Taming") != std::string::npos);
+    b.seconds(4);
+    CHECK(b.noted("You tamed a rat: Rat"));
+    CHECK(b.reply("beastmaster.list").find("1. Rat - rat, loyalty 1, out") != std::string::npos);
+    CHECK(b.reply("beastmaster.give rat").find("added") != std::string::npos);
+}
+
 TEST_CASE("beastmaster: the channel breaks when you walk away (more than 8 m) or the beast dies") {
     BeastRig b;
     b.look(1, 0, 10.5, 0, 0);
@@ -3896,7 +3910,7 @@ TEST_CASE("beastmaster: mod.json asks EMF for a portrait of every kind, the wild
     const std::regex entry(R"re(\{ id = "([a-z_]+)",[^\n]*template = "([0-9a-f-]{36})")re");
     for (auto it = std::sregex_iterator(species.begin(), species.end(), entry); it != std::sregex_iterator(); ++it)
         kinds[(*it)[1]] = (*it)[2];
-    REQUIRE(kinds.size() == 10u);  // wolf, boar, sabretooth, hound, bear, aurochs and four snakes
+    REQUIRE(kinds.size() == 11u);  // wolf, boar, sabretooth, hound, rat, bear, aurochs and four snakes
     // and the wilds pack's fighting animals (species_wilds.lua: an entry spans lines)
     const std::string wilds_file = slurp(std::filesystem::path(dir + "species_wilds.lua").wstring());
     const size_t from = wilds_file.find("M.beasts = {"), to = wilds_file.find("M.kinds = {");
@@ -3906,7 +3920,7 @@ TEST_CASE("beastmaster: mod.json asks EMF for a portrait of every kind, the wild
     const std::regex wild_entry(R"re(\{ id = "([a-z_]+)",[^}]*?template = "([0-9a-f-]{36})")re");
     for (auto it = std::sregex_iterator(wilds.begin(), wilds.end(), wild_entry); it != std::sregex_iterator(); ++it)
         kinds[(*it)[1]] = (*it)[2];
-    REQUIRE(kinds.size() == 30u);
+    REQUIRE(kinds.size() == 31u);
     std::vector<std::string> problems;
     const auto items = emf::loader::read_portrait_lists(
         {{"beastmaster", slurp(std::filesystem::path(dir + "mod.json").wstring())}}, &problems);
