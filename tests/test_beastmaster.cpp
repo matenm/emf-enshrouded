@@ -665,6 +665,26 @@ TEST_CASE("beastmaster: attack writes the creature you look at as every beast's 
     CHECK_FALSE(held(b, 1234));
 }
 
+TEST_CASE("pack beast: the pack llama never fights: Attack orders only the others, and a fight the game gives it is taken away at once") {
+    BeastRig b({{"call_cooldown_s", "0"}, {"call_mana_pct", "0"}});
+    wolf_out(b);  // 1234
+    armed(b, 1234);
+    b.reply("beastmaster.give packllama");
+    b.spawnable(1);
+    REQUIRE(b.reply("beastmaster.call Pack llama").find("comes") != std::string::npos);  // 1235
+    armed(b, 1235);
+    b.look(1, 0, 10.5, 0, 0);
+    b.beast(60, "00000000-0000-0000-0000-000000000099", 0, 6, 4 /* Scavenger */, 100, 100);
+    CHECK(b.reply("beastmaster.attack") == "Your beasts attack (1).");
+    CHECK(ordered(b, 1234) == 60u);
+    CHECK(ordered(b, 1235) == 0u);
+    // the game's own senses pick the monster for it: the next step takes it away
+    reinterpret_cast<ecs::SelectedTargets*>(b.r.fake.components.at({ecs::SelectedTargets::kHash, 1235}).data())
+        ->targets[0].targetEntityId.id = 60;
+    b.seconds(1);
+    CHECK(ordered(b, 1235) == 0u);
+}
+
 TEST_CASE("beastmaster: attack with nothing under the crosshair goes for the nearest monster where you look, never an animal there or a monster behind") {
     BeastRig b;
     wolf_out(b);
@@ -4231,6 +4251,18 @@ TEST_CASE("threat: a monster that goes for you joins the fight and is held on a 
     b.seconds(2);
     CHECK(pick_of(b, 70) == 0);  // nothing written
     CHECK(switches(b, 70));
+}
+
+TEST_CASE("pack beast: a monster is never held on the pack llama (it draws none)") {
+    RollRig b;
+    b.reply("beastmaster.give packllama");
+    out_at(b, "Pack llama", 1234, 0, 4);
+    monster(b, 70, 10, 2, 1);  // going for you, as far from you as from the llama
+    b.roll(0.95);              // a roll that would give it to a beast
+    b.seconds(1);
+    CHECK(pick_of(b, 70) != 1234u);
+    b.seconds(4);
+    CHECK(pick_of(b, 70) != 1234u);
 }
 
 TEST_CASE("threat: a monster that hits your beast, or that you or your beast hit, joins the fight") {

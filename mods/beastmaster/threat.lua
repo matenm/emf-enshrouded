@@ -34,9 +34,11 @@ local OUT_OF_FIGHT = { [2] = true, [7] = true, [8] = true, [9] = true, [16] = tr
                                                                                          -- WaitAtHome, Flee
 
 -- The share of the monsters in a fight `beast` draws (0..1): a tank's (boar, bear, aurochs) or a damage beast's
--- setting, and Menace on top; the settings and caps for all of a player's beasts are applied when a monster picks.
+-- setting, and Menace on top; the settings and caps for all of a player's beasts are applied when a monster picks. A
+-- pack beast (species carrier) draws none.
 function M.share(beast, setting)
 	local sp = species.by_id(beast.species)
+	if sp and sp.carrier then return 0 end
 	local pct = (sp and sp.tank) and setting("tank_share_pct") or setting("damage_share_pct")
 	return math.min(1, (pct or 0) / 100 + talents.menace(beast))
 end
@@ -97,6 +99,7 @@ function T:usable(world, m, id, account, is_player)
 		local e = self.env.ids()[id]
 		local f = e and e.account == account and world:get("Faction", id)
 		if not (f and f.faction == PLAYER_ALLY) then return false end
+		if e.beast and species.is_carrier(e.beast.species) then return false end  -- a pack beast never fights
 	end
 	local cur = emf.health(world, id)
 	if (cur == nil and not is_player) or (cur ~= nil and cur <= 0) then return false end  -- a player's may be unknown

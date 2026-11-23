@@ -596,7 +596,8 @@ function P:attack(world, account, target, hunting)
 	local now = self.env.now(world)
 	self.idle:stop(world, account)  -- every beast of theirs gets up
 	for _, b in ipairs(self.env.beasts():list(account)) do
-		if b.out and b.entity and ours(world, b.entity) and not (hunting and self.orders[b.entity]) then
+		if b.out and b.entity and ours(world, b.entity) and not species.is_carrier(b.species)  -- a pack beast never fights
+			and not (hunting and self.orders[b.entity]) then
 			self.sent[b.entity] = now + SENT_S
 			self.orders[b.entity] = target
 			self.hunts[b.entity] = hunting or nil
@@ -893,7 +894,8 @@ function P:step(world)
 	local spared = function(e) return self:spared(world, e, now) end
 	for id, e in pairs(self.ids) do
 		local passive = self.env.mode and self.env.mode(e.account) == "passive" and now >= (self.sent[id] or 0)
-		if passive or now < (self.recall[id] or 0) then
+		local carrier = e.beast ~= nil and species.is_carrier(e.beast.species)  -- a pack beast never fights: always calm
+		if passive or carrier or now < (self.recall[id] or 0) then
 			calm(world, id)
 		else
 			calm(world, id, "pacified", self.orders[id], spared)
