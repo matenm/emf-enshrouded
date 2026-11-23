@@ -953,6 +953,8 @@ void cmd_reset(EmfWorld*, int argc, const char* const* argv, void* u) {
                                        : id + ":";
     if (!failed.empty()) line += (done.empty() ? " refused: " : "; refused: ") + failed;
     command_reply_line(line);
+}
+
 // keys: every key EMF and the mods use, by key (key settings and EMF's own keys), the ones two running users share first
 void cmd_keys(EmfWorld*, int, const char* const*, void* u) {
     auto& c = ctx_of(u);
