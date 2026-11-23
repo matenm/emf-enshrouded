@@ -483,16 +483,18 @@ load.
 
 ## Our animals in the wild: the wilds pack (`emf_beastmaster_wilds`, 1.21.0)
 
-An EML data patch with 38 animals made in the game's style, each fitted straight onto a game animal's skeleton, so it
+An EML data patch with 43 animals made in the game's style, each fitted straight onto a game animal's skeleton, so it
 moves with that animal's own animations and AI: the fox and the coloured wolves on the wolf's, the bear, panther and
-lynx on the sabretooth's, the goat, ram, deer and elk on the goat's, and the pack llama (for a later version). With it
-installed:
-- **In the wild:** a game wolf, sabretooth or goat that turns up is now and then one of these instead (15 %), and more
+lynx on the sabretooth's, the goat, ram, deer and elk on the goat's, the Wild Ox on the yak's, and the pack llama
+("The pack llama" above). With it installed:
+- **In the wild:** a game wolf, sabretooth, goat or yak that turns up is now and then one of these instead (15 %), and more
   rarely a colour version (4 %) with more health and damage (125 %). A wolf can be a fox, or an arctic, silver or sand
   fox or a white, black or red wolf. A sabretooth can be a bear, panther or lynx, or a black or cinnamon bear, a black
   panther, jaguar or tiger, or a dark or red lynx. A snow sabretooth of the Cold Heights can be a bear or lynx, or a
   snow bear, snow leopard or snow lynx. A goat can be a goat or deer (a black or piebald goat, a dark or fallow deer);
-  a mountain goat a ram or elk (a chamois, a black or golden ram, a mouflon, a white, dark or grey elk, a white deer).
+  a mountain goat a ram or elk (a chamois, a black or golden ram, a mouflon, a white, dark or grey elk, a white deer);
+  a yak a Wild Ox (a white, black or red ox). The goat's, ram's, deer's, elk's and ox's kinds keep the game's wild
+  animal mind, so they are never tamed.
   Each has the level of the creature it replaced and that creature's loot.
 - Never a creature within 25 m of a player (nothing changes in front of you), within 40 m of a flame altar, hurt, or
   one that was there when the world loaded.

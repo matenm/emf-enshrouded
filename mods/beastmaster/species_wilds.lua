@@ -16,6 +16,7 @@
 local WOLF_GRAPH = "3180813f-a50d-47fc-be92-29a2383bd47d"
 local SABRE_GRAPH = "9c1b120e-4901-495c-9cc0-5de134fbe140"
 local GOAT_GRAPH = "1fc6e01e-f25b-4aeb-a5a0-2d3fb2c727f5"
+local YAK_GRAPH = "e810f838-698f-417d-aaee-1371395c68fc"  -- Animal_Wildlife_T5_Yak_AG2's; the farm yak's too (FarmAnimal)
 local WILDLIFE, WILDBEAST = 5, 6
 local PACK = "the wilds pack (emf_beastmaster_wilds)"
 
@@ -173,6 +174,17 @@ M.kinds = {
 			{ name = "wilds_goat_piebald", template = "918db95d-e945-40b3-8382-bfc9d3a70f78", scale = 1.1 },
 			{ name = "wilds_deer_dark", template = "a5e4052a-f4f7-4872-9124-3c7e862fa925", scale = 1.32 },
 			{ name = "wilds_deer_fallow", template = "4e6c70fb-52ae-4e3f-a8d3-efe6214a982a", scale = 1.32 },
+		},
+	},
+	-- the Wild Ox, on the yak's skeleton and graph (the wildlife AI: never tamed); a farm yak is FarmAnimal, never one
+	{ id = "yak", graph = YAK_GRAPH, faction = WILDLIFE, model = "d0211f52-8b8f-4090-89b0-4b853d67d320",
+		animals = {
+			{ name = "wilds_ox", template = "12454bfc-06a3-402b-a332-d3cf40a5db16", scale = 1.0 },
+		},
+		coats = {
+			{ name = "wilds_ox_white", template = "9678a7cc-74f3-4864-b215-232b3df29321", scale = 1.1 },
+			{ name = "wilds_ox_black", template = "d6793ae5-58cc-4c29-9625-1a1927c8c055", scale = 1.1 },
+			{ name = "wilds_ox_red", template = "e0ecf31d-0ede-49d0-b5a6-6feb1c87b261", scale = 1.1 },
 		},
 	},
 	{ id = "mountain_goat", graph = GOAT_GRAPH, faction = WILDLIFE, model = "7bab51e4-2877-4d63-990f-ce46a2178479",

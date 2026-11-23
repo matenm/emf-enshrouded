@@ -70,9 +70,15 @@ class SpeciesWildsTests(unittest.TestCase):
         self.assertNotIn("wilds_llama", names)
         self.assertNotIn("wilds_wolf", names)
 
-    def test_the_five_game_kinds(self):
+    def test_the_game_kinds(self):
         kinds = {line[1] for line in self.lines if line[0] == "pool"}
-        self.assertEqual(kinds, {"wolf", "sabretooth", "snow_sabretooth", "goat", "mountain_goat"})
+        self.assertEqual(kinds, {"wolf", "sabretooth", "snow_sabretooth", "goat", "mountain_goat", "yak"})
+
+    def test_the_wild_ox_stands_in_for_the_yak(self):
+        pools = {line[3]: line[1] for line in self.lines if line[0] == "pool"}
+        for name in ("wilds_ox", "wilds_ox_white", "wilds_ox_black", "wilds_ox_red"):
+            with self.subTest(name=name):
+                self.assertEqual(pools.get(name), "yak")
 
 
 if __name__ == "__main__":
