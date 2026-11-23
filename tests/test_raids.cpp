@@ -1127,6 +1127,34 @@ TEST_CASE("walls: through: wall_clear releases the workers and ends the spot") {
     CHECK(w.wall_clear(*spot).empty());
 }
 
+// A refused hit that says breaking (or breaking terrain) is not there: the wall spots end at once instead of sending
+// refused hits until they expire after 2 minutes; a gate spot (an enemy order on the door) goes on.
+TEST_CASE("walls: give_up_walls ends every wall spot and releases its workers; gate spots stay; the workers may look again") {
+    WallWork w;
+    const auto s = walls_on();
+    const Vec3 pos{kAltar.x + 20, kAltar.y, kAltar.z};
+    const Gate gate{77, {pos.x - 3, pos.y, pos.z + 10}, 600};
+    REQUIRE(w.assign(1, pos, Vec3{pos.x - 1, pos.y + 1.2, pos.z}, std::nullopt, s, 0));
+    REQUIRE(w.assign(2, pos, Vec3{pos.x - 1, pos.y + 1.2, pos.z}, std::nullopt, s, 0));
+    REQUIRE(w.assign(3, {pos.x, pos.y, pos.z + 30}, Vec3{pos.x - 1, pos.y + 1.2, pos.z + 30}, std::nullopt, s, 0));
+    REQUIRE(w.assign(4, {pos.x - 2, pos.y, pos.z + 10}, std::nullopt, gate, s, 0));
+    const auto a = w.give_up_walls();
+    CHECK(of_kind(a, WallAction::Release).size() == 3);
+    CHECK(of_kind(a, WallAction::GiveUp).size() == 2);
+    CHECK_FALSE(w.working(1));
+    CHECK_FALSE(w.working(3));
+    CHECK(w.working(4));
+    REQUIRE(w.spots().size() == 1);
+    CHECK(w.spots()[0].gate);
+    CHECK(w.give_up_walls().empty());
+    // not held back like a spot given up after 2 minutes: a released worker looks again after 10 s without progress
+    // (the core then finds no wall to break, but a closed door may be on its way)
+    std::map<uint32_t, Vec3> raiders{{1, pos}, {4, {pos.x - 2, pos.y, pos.z + 10}}};
+    w.tick(raiders, s, kSec);
+    CHECK_FALSE(w.wants_look(1, pos, kAltar, 40, kSec));
+    CHECK(w.wants_look(1, pos, kAltar, 40, 12 * kSec));
+}
+
 TEST_CASE("walls: holding while the spot took damage in the last 5 s (a swing comes about every 4 s), not after") {
     WallWork w;
     const auto s = walls_on();

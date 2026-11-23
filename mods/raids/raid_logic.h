@@ -587,6 +587,21 @@ public:
         }
         return out;
     }
+    // A hit was refused because breaking (or breaking terrain) is not there: every wall spot ends now and its workers go
+    // back to marching (and may look again: a closed door may be on their way). Gate spots go on.
+    std::vector<WallAction> give_up_walls() {
+        std::vector<WallAction> out;
+        for (size_t i = 0; i < spots_.size();) {
+            if (spots_[i].gate) {
+                ++i;
+                continue;
+            }
+            for (const auto& w : spots_[i].workers) out.push_back(action(WallAction::Release, spots_[i], w.first));
+            out.push_back(action(WallAction::GiveUp, spots_[i], 0));
+            spots_.erase(spots_.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+        return out;
+    }
     // It works a spot that took damage within the last 3 s (the stuck clock waits meanwhile).
     bool holding(uint32_t raider, uint64_t now) const {
         for (const auto& sp : spots_)

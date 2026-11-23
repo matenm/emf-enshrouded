@@ -458,6 +458,7 @@ void wall_look(emf::World w, uint32_t id, const raids::Vec3& p, const Config& c)
 
 void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, const Config& c) {
     const EmfApi* a = emf::api();
+    bool give_up = false;  // breaking (or breaking terrain) turned out not to be there: the wall spots end after this batch
     for (const auto& x : acts) {
         switch (x.kind) {
             case raids::WallAction::Hit: {
@@ -472,15 +473,18 @@ void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, cons
                 if (!emf::break_blocks(w, r, on_wall_hit, ctx)) {
                     delete ctx;
                     if ((r.flags & EMF_BREAK_TERRAIN) && raids::terrain_unavailable(r.why)) {
-                        if (!g_terrain_unavailable)
+                        if (!g_terrain_unavailable) {
                             EMF_LOG(kMod, "breaking terrain walls is not available (%s): raiders break building blocks only",
                                     r.why);
+                            give_up = true;  // a terrain wall's spot would only send hits that break nothing: all look again
+                        }
                         g_terrain_unavailable = true;
                         break;
                     }
                     wall_say_once("hit", std::string("a wall hit was refused: ") + r.why);
                     if (raids::breaking_unavailable(r.why) && !g_walls_unavailable) {
                         g_walls_unavailable = true;
+                        give_up = true;
                         EMF_LOG(kMod, "wall breaking is not available (%s): raiders go for closed doors only", r.why);
                     }
                 }
@@ -556,6 +560,7 @@ void wall_actions(emf::World w, const std::vector<raids::WallAction>& acts, cons
             case raids::WallAction::Done: swing_target_remove(w, x.spot); break;
         }
     }
+    if (give_up) wall_actions(w, g_walls.give_up_walls(), c);
 }
 
 // Once a second while a raid fights: looks for held-up raiders, hits, orders, and watches the gates being broken.
