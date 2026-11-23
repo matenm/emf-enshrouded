@@ -71,6 +71,19 @@ std::optional<int> WheelModel::finish(int result) {
 std::optional<int> WheelModel::key(const KeyEvent& e, uint64_t now_ms) {
     if (!open_) return std::nullopt;
     if (e.down && e.scan == InputRouter::kEscScan && !e.extended) return finish(-1);
+    if (e.down) {
+        // 1-8 pick the slice with that number on the page shown: the top row by its scan code (0x02-0x09: the same
+        // physical keys on every layout, also where they type other characters without Shift), the numpad by its key
+        int slice = -1;
+        if (!e.extended && e.scan >= kScan1 && e.scan < kScan1 + kPerPage) slice = e.scan - kScan1;
+        else if (e.vkey >= kVkNumpad1 && e.vkey < kVkNumpad1 + kPerPage) slice = e.vkey - kVkNumpad1;
+        if (slice >= 0) {
+            if (static_cast<size_t>(slice) < page_count()) return finish(static_cast<int>(page_first()) + slice);
+            return std::nullopt;  // no entry with that number
+        }
+        if (e.vkey == kVkRight) scroll(-1.0f);  // the next page (as a notch of the mouse wheel down)
+        if (e.vkey == kVkLeft) scroll(1.0f);
+    }
     if (hold_mode_ && !e.down && e.vkey == hold_vk_) {
         const int h = highlighted();
         const bool flick = std::sqrt(x_ * x_ + y_ * y_) >= kTapPickRadius;

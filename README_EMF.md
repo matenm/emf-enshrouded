@@ -670,8 +670,9 @@ wild pickables around a chest.
      bushes with twigs or plant fibre, berries...) into the chest and rests 20 s after each one; the game decides when
      they grow back. Crops, containers and anything the game marks as a placed item (loose stones, keys, weapons,
      potions, rewards) are left alone. A full chest pauses the job for a minute, noted once.
-   Move the mouse toward an entry and release K (or tap K and click). Esc, a right click or releasing in the middle
-   cancels; the mouse wheel turns the page when there are more than 8.
+   Move the mouse toward an entry and release K (or tap K and click), or press its number (1-8, on the top row or the
+   numpad). Esc, a right click or releasing in the middle cancels; the mouse wheel or Left/Right turn the page when there
+   are more than 8.
 3. Crafting: the villager walks to the chest (sent there again every 10 s while it is more than 4 m away) and makes
    one item every `seconds_per_item` (default 30) while it is within 6 m. When the chest runs out of materials (or has
    no room) a note says so once; it goes on by itself when you refill the chest.

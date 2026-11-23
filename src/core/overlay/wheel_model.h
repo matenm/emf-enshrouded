@@ -19,6 +19,9 @@ public:
     static constexpr float kMaxRadius = 200.0f;  // the accumulated direction is clamped to this length
     static constexpr uint64_t kTapMs = 300;      // a hold-key release sooner than this is a tap...
     static constexpr float kTapPickRadius = 120.0f;  // ...that picks only after a flick at least this long
+    static constexpr uint16_t kScan1 = 0x02;      // the top row's 1 (scan code); 2-8 follow
+    static constexpr uint16_t kVkNumpad1 = 0x61;  // VK_NUMPAD1; 2-8 follow
+    static constexpr uint16_t kVkLeft = 0x25, kVkRight = 0x27;  // VK_LEFT, VK_RIGHT: the previous / next page
 
     // hold_mode: the wheel stays open while the key `hold_vk` is held and its release picks; otherwise a left click
     // picks. A quick tap (the release within kTapMs of opening, without a flick of kTapPickRadius) switches to the
@@ -40,7 +43,9 @@ public:
     size_t page_first() const { return page_ * kPerPage; }
     size_t page_count() const;
 
-    // Each returns the result when the wheel closes (an entry index, or -1 = cancelled), else nothing.
+    // Each returns the result when the wheel closes (an entry index, or -1 = cancelled), else nothing. key: Esc
+    // cancels, 1-8 (top row or numpad) pick the slice with that number on the page shown, Left/Right turn the pages,
+    // the hold key's release picks what the mouse points at.
     std::optional<int> key(const KeyEvent& e, uint64_t now_ms);
     std::optional<int> button(int which);  // 0 = left (down), 1 = right
     std::optional<int> cancel();

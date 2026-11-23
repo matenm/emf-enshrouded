@@ -16,11 +16,12 @@ std::vector<std::string> names(int n) {
     for (int i = 0; i < n; ++i) v.push_back("item" + std::to_string(i));
     return v;
 }
-KeyEvent key(uint16_t scan, uint16_t vk, bool down) {
+KeyEvent key(uint16_t scan, uint16_t vk, bool down, bool extended = false) {
     KeyEvent e;
     e.scan = scan;
     e.vkey = vk;
     e.down = down;
+    e.extended = extended;
     return e;
 }
 constexpr uint16_t kJ = 0x4A;
@@ -262,4 +263,34 @@ TEST_CASE("wheel: smooth mouse wheels turn a page per whole notch") {
     w.open("", names(20), true, kJ, 0);  // opening again forgets a half notch
     w.scroll(-0.5f);
     CHECK(w.page() == 0);
+}
+
+TEST_CASE("wheel: 1-8 choose the slice with that number on the page shown (top row by scan code, numpad by key)") {
+    WheelModel w;
+    w.open("Orders", names(5), false, 0, 0);
+    CHECK(w.key(key(0x02, '1', true), 10) == 0);  // 1: the top slice
+    w.open("Orders", names(5), false, 0, 0);
+    CHECK(w.key(key(0x06, 0x00DE, true), 10) == 4);  // 5 on an AZERTY keyboard types '(' : its scan code counts
+    w.open("Orders", names(5), false, 0, 0);
+    CHECK(!w.key(key(0x07, '6', true), 10));  // no sixth entry: nothing
+    CHECK(w.is_open());
+    CHECK(!w.key(key(0x03, '2', false), 10));  // a release picks nothing
+    CHECK(w.key(key(0x4F, 0x61, true), 10) == 0);  // numpad 1
+    w.open("Recipes", names(12), true, kJ, 0);
+    w.scroll(-1.0f);                                 // the second page: entries 8-11
+    CHECK(w.key(key(0x03, '2', true), 10) == 9);
+    w.open("Recipes", names(12), true, kJ, 0);
+    CHECK(!w.key(key(0x02, '1', true, true), 10));  // an extended key with that scan code is another key
+}
+
+TEST_CASE("wheel: Left and Right turn the pages") {
+    WheelModel w;
+    w.open("Recipes", names(20), false, 0, 0);
+    CHECK(w.page() == 0);
+    CHECK(!w.key(key(0x4D, 0x27, true, true), 10));  // Right
+    CHECK(w.page() == 1);
+    w.key(key(0x4B, 0x25, true, true), 10);  // Left
+    w.key(key(0x4B, 0x25, true, true), 10);  // and round to the last page
+    CHECK(w.page() == 2);
+    CHECK(w.is_open());
 }

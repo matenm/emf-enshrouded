@@ -128,6 +128,10 @@ void draw_wheel(const WheelModel& wheel, ImVec2 display, const TextLook& look) {
             centered_text(dl, look, ImVec2(at.x, y), l.dim ? text_dim : on ? text_on : text_off, fit(l.text, width));
             y += step;
         }
+        // its number (1-8 choose it), small, near the outer edge
+        const char digit[2] = {static_cast<char>('1' + i), '\0'};
+        const float rn = outer - line_h * 0.7f;
+        centered_text(dl, look, ImVec2(c.x + std::cos(mid) * rn, c.y + std::sin(mid) * rn - line_h * 0.5f), text_dim, digit);
     }
     // Centre: title (bold), page, and a dot showing where the mouse points.
     dl->AddCircleFilled(c, inner * 0.92f, IM_COL32(10, 11, 14, 225), 64);
@@ -149,8 +153,8 @@ void draw_wheel(const WheelModel& wheel, ImVec2 display, const TextLook& look) {
     dl->AddCircleFilled(ImVec2(c.x + dx * k, c.y + dy * k), 5.0f, IM_COL32(255, 255, 255, lit >= 0 ? 230 : 120), 16);
     // Hint under the ring.
     std::string hint = wheel.hold_mode() ? "release the key to choose" : "click to choose";
-    hint += ", Esc or right click to cancel";
-    if (wheel.pages() > 1) hint += ", mouse wheel: more";
+    hint += ", 1-8: choose, Esc or right click to cancel";
+    if (wheel.pages() > 1) hint += ", mouse wheel or Left/Right: more";
     centered_text(dl, look, ImVec2(c.x, c.y + outer + line_h * 1.4f), (look.colour & 0xFFFFFF00u) | 0xE6u, hint);
     if (look.font) ImGui::PopFont();
 }

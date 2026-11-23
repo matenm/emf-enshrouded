@@ -195,7 +195,7 @@ value that moves is reported to the mod as a change.
 
 | C++ | C | Rules |
 |---|---|---|
-| `emf::wheel(title, items, hold_vk, kind, f)` | `wheel_open(&EmfWheel)` | a radial menu in the middle of the screen (1-64 entries, 8 per page; `"Name (details)"` shows details on a second line). With `hold_vk` held when it opens, releasing the key picks; a quick tap or no key: a click picks; Esc / right click cancel. `f(World, choice)` (−1 = cancelled) after the next step of a world of `kind`. One wheel at a time; refused while the console is open. |
+| `emf::wheel(title, items, hold_vk, kind, f)` | `wheel_open(&EmfWheel)` | a radial menu in the middle of the screen (1-64 entries, 8 per page; `"Name (details)"` shows details on a second line). With `hold_vk` held when it opens, releasing the key picks; a quick tap or no key: a click picks; 1-8 (top row or numpad) pick the slice with that number on the page shown; Left/Right turn the pages; Esc / right click cancel. `f(World, choice)` (−1 = cancelled) after the next step of a world of `kind`. One wheel at a time; refused while the console is open. |
 | `api()->notify(fmt, ...)` | `notify(fmt, ...)` | a line at the top of the screen for a few seconds (and in the console and log). Any thread. |
 
 ## v11: items with level and rarity, taking items
