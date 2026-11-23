@@ -339,6 +339,15 @@ TEST_CASE("raids glue: a break refused because breaking is not available or off 
     CHECK_FALSE(raids::breaking_unavailable(""));
 }
 
+// A look's wall comes back a step later with its path answer: by then a refused hit may have shown that breaking (or
+// breaking terrain) is not there, and the spots were given up. Such a wall gets no spot; the raider looks again.
+TEST_CASE("raids glue: a looked wall is used only while breaking is there and the find flags are the ones it was found with") {
+    CHECK(raids::looked_wall_usable(false, EMF_FIND_TERRAIN, EMF_FIND_TERRAIN));
+    CHECK(raids::looked_wall_usable(false, 0, 0));
+    CHECK_FALSE(raids::looked_wall_usable(true, 0, 0));                  // breaking turned out not to be there
+    CHECK_FALSE(raids::looked_wall_usable(false, EMF_FIND_TERRAIN, 0));  // breaking terrain turned out not to be there
+}
+
 // Night Raids 1.3.0 (API v47): walls of terrain blocks a player placed (Stone, Granite ...), with the setting.
 TEST_CASE("raids glue: a terrain wall a player placed is breakable; the world's own ground never; a terrain refusal stops terrain only") {
     EmfBlockInfo b{};

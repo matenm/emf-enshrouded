@@ -403,6 +403,7 @@ void wall_assign(emf::World, uint32_t id, const raids::Vec3& p, std::optional<ra
 struct LookCtx {
     uint32_t raider, session;
     std::optional<raids::Vec3> wall;
+    uint32_t flags;  // find_wall's flags the wall was found with
 };
 void on_gate_path(EmfWorld* raw, uint32_t, const EmfPathResult* r, const EmfPathPoint* pts, void* user) {
     const std::unique_ptr<LookCtx> ctx(static_cast<LookCtx*>(user));
@@ -420,7 +421,8 @@ void on_gate_path(EmfWorld* raw, uint32_t, const EmfPathResult* r, const EmfPath
             const uint32_t st = emf::has_v38() && emf::api()->door_state ? emf::api()->door_state(raw, g->first) : 0;
             if ((st & 0xFu) == EMF_DOOR_CLOSED) gate = raids::Gate{g->first, g->second, raids::door_max_health(w, g->first)};
         }
-    wall_assign(w, ctx->raider, *p, ctx->wall, gate, config());
+    const bool usable = raids::looked_wall_usable(g_walls_unavailable, ctx->flags, wall_find_flags(config().walls));
+    wall_assign(w, ctx->raider, *p, usable ? ctx->wall : std::nullopt, gate, config());
 }
 
 // Looks for the wall in front of a held-up raider (now) and the first closed door on its way (a path query: the answer
@@ -446,7 +448,7 @@ void wall_look(emf::World w, uint32_t id, const raids::Vec3& p, const Config& c)
         q.moves = EMF_PATH_WALK | EMF_PATH_OPEN_DOOR;
         q.closest = 1;
         q.max_nodes = 5000;
-        auto* ctx = new LookCtx{id, emf::server_session(), wall};
+        auto* ctx = new LookCtx{id, emf::server_session(), wall, wall_find_flags(c.walls)};
         if (emf::api()->path_find(w.raw(), &q, on_gate_path, ctx)) {
             g_wall_looking.insert(id);
             return;

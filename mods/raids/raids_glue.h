@@ -219,6 +219,13 @@ inline bool terrain_unavailable(const std::string& why) {
     return why.rfind("breaking terrain", 0) == 0 || why == "unknown flags";
 }
 
+// Whether a wall a look found with `look_flags` (find_wall's) may still get a spot when the look's path answer comes a
+// step later: not when breaking turned out not to be there meanwhile, nor when the find flags changed (breaking terrain
+// turned out not to be there: a terrain wall's hits would break nothing). The raider looks again 10 s later.
+inline bool looked_wall_usable(bool walls_unavailable, uint32_t look_flags, uint32_t now_flags) {
+    return !walls_unavailable && look_flags == now_flags;
+}
+
 inline void wall_hit_damage(double scale, int32_t out[5]) {
     const int32_t def[5] = EMF_BREAK_DEFAULT_DAMAGE;
     for (int i = 0; i < 5; ++i)
