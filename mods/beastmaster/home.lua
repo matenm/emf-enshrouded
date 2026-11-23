@@ -34,10 +34,15 @@
 --   After the script's start (a reload) the player-side creatures running a beast's animation graph within ROAM_M of a
 --   Large Stable's middle that are none of ours and guard no player (a beast out guards its owner) are the beasts the
 --   script had there before: taken out of the world at the first check that has a Large Stable.
--- M.new(env) where env has: now(world), setting(key), beasts() (the roster), homes() (the Large Stables: stable.lua
--- S:homes()), present() (account -> player entity, nil before the first check), log(text), on_spawn(world, id, sp,
--- health_mul) (optional: the health watch), tell(world, player, text) and gain(world, account, beast) (a loyalty
--- point; both optional: a pet then only settles the beast).
+-- M.new(env [, place]) where env has: now(world), setting(key), beasts() (the roster), homes() (the Large Stables:
+-- stable.lua S:homes()), present() (account -> player entity, nil before the first check), log(text), on_spawn(world,
+-- id, sp, health_mul) (optional: the health watch), tell(world, player, text) and gain(world, account, beast) (a
+-- loyalty point; both optional: a pet then only settles the beast).
+-- `place` (optional; M.LARGE_STABLE by default) makes it serve another kind of place the same way (training.lua's
+-- Training Grounds): name, log, room(env), spots (frame metres {x, z}), floor(lx, lz), spawn_y, roam_m, places(env)
+-- (the places now), on(env) (shown at all), belongs(b) (a beast that may be shown at such a place), fits(b, key) (at
+-- that place), key(h), scene(home, world, e, h, now, x, z) (optional: the place's own scenes instead of the stroll and
+-- the rest), yaw(h, e) (optional: where a beast faces when put back), words(e) (optional: what it does, for text).
 local species = require("species")
 local loyalty = require("loyalty")
 local idle_mod = require("idle")
@@ -73,8 +78,8 @@ local LEASE_S, RENEW_S = 120, 5  -- the Sleep lease: the game's time plus LEASE_
 local CHECK_AHEAD_NS = 1000000000000000000
 local NS = 1000000000
 
-function M.new(env)
-	local h = setmetatable({ env = env }, H)
+function M.new(env, place)
+	local h = setmetatable({ env = env, p = place or M.LARGE_STABLE }, H)
 	h:reset()
 	return h
 end
@@ -101,6 +106,22 @@ local function key_of(h)
 	return string.format("%.1f %.1f %.1f", h.x, h.y, h.z)
 end
 
+-- The Large Stable: the place the beasts at home live in.
+M.LARGE_STABLE = {
+	name = "Large Stable",
+	log = "home",
+	room = function() return ROOM end,
+	spots = SPOTS,
+	floor = function(lx, lz) return lx >= FLOOR.x0 and lx <= FLOOR.x1 and lz >= FLOOR.z0 and lz <= FLOOR.z1 end,
+	spawn_y = SPAWN_Y,
+	roam_m = ROAM_M,
+	places = function(env) return env.homes() end,
+	on = function(env) return env.setting("home_beasts") end,
+	belongs = function(b) return not b.out and not b.training end,  -- one in training is at its Training Grounds
+	fits = function() return true end,
+	key = key_of,
+}
+
 local function dist(h, x, y, z)
 	return math.sqrt((h.x - x) ^ 2 + (h.y - y) ^ 2 + (h.z - z) ^ 2)
 end
@@ -125,18 +146,28 @@ local function rotate(qx, qy, qz, qw, vx, vy, vz)
 	return vx + qw * tx + (qy * tz - qz * ty), vy + qw * ty + (qz * tx - qx * tz), vz + qw * tz + (qx * ty - qy * tx)
 end
 
--- The world place of spot `i` of stable `h`.
-local function spot_at(h, i)
+-- The world place of the point (lx, lz) in place `h`'s frame, at `up` metres above it.
+function M.at(h, lx, lz, up)
 	local qx, qy, qz, qw = turn_of(h)
-	local dx, _, dz = rotate(qx, qy, qz, qw, SPOTS[i].x, 0, SPOTS[i].z)
-	return h.x + dx, h.y + SPAWN_Y, h.z + dz
+	local dx, _, dz = rotate(qx, qy, qz, qw, lx, 0, lz)
+	return h.x + dx, h.y + (up or 0), h.z + dz
 end
 
--- Whether (x, z) is on stable `h`'s floor.
-local function on_floor(h, x, z)
+-- (x, z) in place `h`'s frame.
+function M.local_of(h, x, z)
 	local qx, qy, qz, qw = turn_of(h)
 	local lx, _, lz = rotate(-qx, -qy, -qz, qw, x - h.x, 0, z - h.z)
-	return lx >= FLOOR.x0 and lx <= FLOOR.x1 and lz >= FLOOR.z0 and lz <= FLOOR.z1
+	return lx, lz
+end
+
+-- The world place of spot `i` of place `h` (place kind `p`).
+local function spot_at(p, h, i)
+	return M.at(h, p.spots[i].x, p.spots[i].z, p.spawn_y)
+end
+
+-- Whether (x, z) is on place `h`'s floor.
+local function on_floor(p, h, x, z)
+	return p.floor(M.local_of(h, x, z))
 end
 
 -- The yaw (degrees; 0 = +z, 90 = +x) out of stable `h`'s open side, give or take JITTER.
@@ -205,8 +236,9 @@ end
 
 -- Puts entry `e`'s beast back on its spot of stable `h`, facing out.
 function H:put_back(world, e, h, now)
-	local x, y, z = spot_at(h, e.spot)
-	if emf.teleport then emf.teleport(world, e.id, x, y, z, { ground = true, yaw = yaw_out(h) }) end
+	local x, y, z = spot_at(self.p, h, e.spot)
+	local yaw = self.p.yaw and self.p.yaw(h, e) or yaw_out(h)
+	if emf.teleport then emf.teleport(world, e.id, x, y, z, { ground = true, yaw = yaw }) end
 	e.moved, e.far = now, nil
 	e.faced = true
 end
@@ -222,7 +254,8 @@ function H:refuse(sp, why, now)
 	self.refused[sp.id] = now + RETRY_S
 	if not self.told[sp.id] then
 		self.told[sp.id] = true
-		self.env.log(string.format("home: %s for a Large Stable (%s); tried again in %d s", why, species.word(sp), RETRY_S))
+		self.env.log(string.format("%s: %s for a %s (%s); tried again in %d s", self.p.log, why, self.p.name,
+			species.word(sp), RETRY_S))
 	end
 end
 
@@ -251,9 +284,9 @@ function H:on_hit(world, source, target)
 	if not get(world, "PlayerState", target) or get(world, "PlayerState", source) then return end
 	local px, py, pz = world:position(target)
 	if not px then return end
-	for _, h in ipairs(self.env.homes()) do
+	for _, h in ipairs(self.p.places(self.env)) do
 		if dist(h, px, py, pz) <= BUILD_M then
-			self.busy[key_of(h)] = now + SHELTER_S
+			self.busy[self.p.key(h)] = now + SHELTER_S
 			self.next_check = 0
 		end
 	end
@@ -306,13 +339,13 @@ end
 function H:show(world, b, account, owner, h, spot, now)
 	local sp = species.by_id(b.species)
 	if not sp then return nil end
-	local x, y, z = spot_at(h, spot)
+	local x, y, z = spot_at(self.p, h, spot)
 	local id = emf.spawn(world, sp.template, x, y, z, loyalty.spawn_size(sp, b.points, self.env.setting("loyalty_pace")))
 	if not id or id == 0 then
 		self:refuse(sp, "the game refused the spawn" .. (sp.pack and (" (its pack: " .. sp.pack .. ")") or ""), now)
 		return nil
 	end
-	local e = { id = id, beast = b, account = account, key = key_of(h), spot = spot, scene = "stroll",
+	local e = { id = id, beast = b, account = account, key = self.p.key(h), spot = spot, scene = "stroll",
 		until_s = now + between(FIRST_S), sc = {}, faced = false, spawned = now }
 	self.at[b], self.ids[id] = e, e  -- kept before anything else: an error below leaves no creature nobody tracks
 	local f = get(world, "Faction", id)
@@ -348,7 +381,7 @@ end
 
 -- Whether beast `b` may be shown now.
 function H:allowed(b, now)
-	if b.out or b.training then return false end  -- one in training is at its Training Grounds
+	if not self.p.belongs(b) then return false end
 	local sp = species.by_id(b.species)
 	if not sp or now < (self.refused[sp.id] or 0) then return false end
 	return now >= (self.back_at[b] or 0)
@@ -363,7 +396,7 @@ function H:sweep(world, homes)
 			local x, y, z = world:position(id)
 			local near = false
 			for _, h in ipairs(homes) do
-				if dist(h, x, y, z) < ROAM_M then near = true end
+				if dist(h, x, y, z) < self.p.roam_m then near = true end
 			end
 			local ai = near and get(world, "DynamicEnemy01BehaviorState", id)
 			local g = ai and ai.guardEntityId or 0
@@ -373,22 +406,23 @@ function H:sweep(world, homes)
 			end
 		end
 	end
-	if n > 0 then self.env.log(string.format("home: %d beast%s left in a Large Stable before a reload taken out", n,
-		n == 1 and "" or "s")) end
+	if n > 0 then self.env.log(string.format("%s: %d beast%s left in a %s before a reload taken out", self.p.log, n,
+		n == 1 and "" or "s", self.p.name)) end
 end
 
 -- Who is shown where: the beasts shown stay while they may, then the others go to the nearest Large Stable with room.
 -- Returns the list {beast, account, owner, key, spot} in order.
 function H:assign(world, homes, present, now)
 	local by_key = {}
-	for _, h in ipairs(homes) do by_key[key_of(h)] = h end
+	for _, h in ipairs(homes) do by_key[self.p.key(h)] = h end
+	local room = self.p.room(self.env)
 	local taken, want, placed = {}, {}, {}
 	local function take(k, i)
 		taken[k] = taken[k] or {}
 		taken[k][i] = true
 	end
 	local function free(k)
-		for i = 1, ROOM do
+		for i = 1, room do
 			if not (taken[k] and taken[k][i]) then return i end
 		end
 		return nil
@@ -403,8 +437,8 @@ function H:assign(world, homes, present, now)
 		for _, b in ipairs(beasts:list(account)) do
 			local e = self.at[b]
 			local h = e and by_key[e.key]
-			if h and ox and self:allowed(b, now) and now >= (self.busy[e.key] or 0) and dist(h, ox, oy, oz) <= LEAVE_M
-				and not (taken[e.key] and taken[e.key][e.spot]) then
+			if h and ox and self:allowed(b, now) and self.p.fits(b, e.key) and now >= (self.busy[e.key] or 0)
+				and dist(h, ox, oy, oz) <= LEAVE_M and e.spot <= room and not (taken[e.key] and taken[e.key][e.spot]) then
 				take(e.key, e.spot)
 				placed[b] = { beast = b, account = account, owner = owner, key = e.key, spot = e.spot }
 			end
@@ -417,9 +451,10 @@ function H:assign(world, homes, present, now)
 			if not placed[b] and ox and self:allowed(b, now) then
 				local best, best_d
 				for _, h in ipairs(homes) do
-					local k = key_of(h)
+					local k = self.p.key(h)
 					local d = dist(h, ox, oy, oz)
-					if d <= HOME_M and now >= (self.busy[k] or 0) and free(k) and (not best_d or d < best_d) then
+					if d <= HOME_M and self.p.fits(b, k) and now >= (self.busy[k] or 0) and free(k)
+						and (not best_d or d < best_d) then
 						best, best_d = k, d
 					end
 				end
@@ -466,19 +501,20 @@ function H:upkeep(world, e, h, now)
 		end
 	end
 	local x, _, z = world:position(e.id)
-	if dist(h, x, h.y, z) >= ROAM_M then
+	if dist(h, x, h.y, z) >= self.p.roam_m then
 		e.far = e.far or now
 		if now - e.far >= AWAY_S and now - (e.moved or -math.huge) >= AWAY_S then self:put_back(world, e, h, now) end
 	else
 		e.far = nil
 	end
+	if self.p.scene then return self.p.scene(self, world, e, h, now, x, z) end
 	if self.night and e.scene == "stroll" and not e.no_hold then e.until_s = math.min(e.until_s, now) end
 	if now < e.until_s then return end
 	if e.scene == "stroll" then
 		e.sc.turned = true
 		local lease, check = self:game_now(world, LEASE_S * NS), self:game_now(world, CHECK_AHEAD_NS)
 		if not (lease and check) then return end  -- the game's time is not known yet: it strolls on
-		if not on_floor(h, x, z) then self:put_back(world, e, h, now) else face(world, e, h) end
+		if not on_floor(self.p, h, x, z) then self:put_back(world, e, h, now) else face(world, e, h) end
 		if idle_mod.hold(world, e.id, e.sc, now, lease, check) then
 			e.scene, e.until_s = "rest", now + between(REST_S)
 		else
@@ -518,7 +554,7 @@ function H:check(world, now)
 			if world:position(id) and (not cur or cur <= 0) then emf.destroy(world, id) end
 		end
 	end
-	local homes = self.env.setting("home_beasts") and self.env.homes() or {}
+	local homes = self.p.on(self.env) and self.p.places(self.env) or {}
 	local present = self.env.present() or {}
 	if not self.swept and #homes > 0 then
 		self.swept = true
@@ -537,7 +573,7 @@ function H:check(world, now)
 			local px, py, pz = world:position(player)
 			if px then
 				for _, h in ipairs(homes) do
-					if dist(h, px, py, pz) <= BUILD_M then self.busy[key_of(h)] = now + GRACE_S end
+					if dist(h, px, py, pz) <= BUILD_M then self.busy[self.p.key(h)] = now + GRACE_S end
 				end
 			end
 		end
@@ -567,7 +603,7 @@ function H:step(world)
 		end
 	end
 	for id, e in pairs(self.ids) do
-		pack_mod.calm(world, id)
+		if not e.ordered then pack_mod.calm(world, id) end  -- one on its scene's enemy order (the dummy) is left alone
 		if e.sc.held and (now < e.sc.leased or now - e.sc.leased >= RENEW_S) then
 			local ai = get(world, "DynamicEnemy01BehaviorState", id)
 			local lease = self:game_now(world, LEASE_S * NS)
@@ -588,14 +624,14 @@ function H:text(world, account)
 	for _, b in ipairs(self.env.beasts():list(account)) do
 		local e = self.at[b]
 		if e then
-			local x, y, z = e.key:match("^(%S+) (%S+) (%S+)$")
+			local x, y, z = e.key:match("^([^%s,]+)[%s,]([^%s,]+)[%s,]([^%s,]+)$")
 			x, y, z = tonumber(x), tonumber(y), tonumber(z)
 			local bx, by, bz = world:position(e.id)
 			local far = bx and string.format(", %.1f m from its middle", dist({ x = x, y = y, z = z }, bx, by, bz)) or ""
-			lines[#lines + 1] = string.format("%s: in the Large Stable at %d, %d, %d, %s%s", b.name,
-				math.floor(x + 0.5), math.floor(y + 0.5), math.floor(z + 0.5),
-				e.scene == "rest" and (self.night and "sleeping" or "resting") or "strolling",
-				far)
+			local words = self.p.words and self.p.words(e)
+				or (e.scene == "rest" and (self.night and "sleeping" or "resting") or "strolling")
+			lines[#lines + 1] = string.format("%s: in the %s at %d, %d, %d, %s%s", b.name, self.p.name,
+				math.floor(x + 0.5), math.floor(y + 0.5), math.floor(z + 0.5), words, far)
 		end
 	end
 	if #lines == 0 then
@@ -603,6 +639,39 @@ function H:text(world, account)
 			.. "within %d m of you (the beasts pack's Large Stable, crafted at the Workbench).", HOME_M)
 	end
 	return table.concat(lines, "\n")
+end
+
+
+-- ---- for a place's own scenes (place.scene) ----
+M.between = between
+
+-- Entry `e`'s beast guards place `h` (the game's roaming near it).
+function H:guard_place(world, e, h)
+	guard(world, e.id, h)
+end
+
+-- Entry `e`'s beast is held in the game's Sleep state (lies down, or stands still): true when held; false while the
+-- game's time is not known yet or the state cannot hold it.
+function H:hold(world, e, now)
+	local lease, check = self:game_now(world, LEASE_S * NS), self:game_now(world, CHECK_AHEAD_NS)
+	if not (lease and check) then return false end
+	return idle_mod.hold(world, e.id, e.sc, now, lease, check) == true
+end
+
+-- Entry `e`'s beast gets up (held or not).
+function H:wake(world, e)
+	idle_mod.wake(world, e.id, e.sc)
+end
+
+-- Entry `e`'s beast turns where it stands to face `yaw` (degrees; 0 = +z, 90 = +x), or is put at (x, y, z) with a ground
+-- search when given.
+function H:turn(world, e, yaw, x, y, z)
+	if not emf.teleport then return false end
+	local px, py, pz = world:position(e.id)
+	if not px then return false end
+	local opts = { yaw = yaw }
+	if x then opts.ground = true end
+	return emf.teleport(world, e.id, x or px, y or py, z or pz, opts) == true
 end
 
 return M
