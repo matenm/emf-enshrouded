@@ -1,4 +1,5 @@
--- Unit tests for tools/models/packs/beastmaster_stable.lua (the beasts pack's craftable Stable and Large Stable), run by
+-- Unit tests for tools/models/packs/beastmaster_stable.lua (the beasts pack's craftable Stable, Large Stable and Training
+-- Grounds), run by
 -- test_beast_stable.py with a Lua 5.4 interpreter: lua beast_stable_spec.lua <path of beastmaster_stable.lua>.
 -- A stand-in for EMF's content helper records what the script asks of it; a stand-in for EML's game API holds the
 -- large animal bed's render model.
@@ -17,6 +18,12 @@ local LARGE_DESC = "b9fa7b45-d5ed-47e1-98ab-51e2a7463a18"
 local LARGE_RECIPE = "9a2fcde6-2dfc-48f6-92ca-0ad394df23da"
 local LARGE_MODEL = "5879f304-0050-4ecb-96f4-5cc0e66155d9"
 local LARGE_SCALE = 1.6
+local TRAINING_ITEM = "494d6061-2553-4636-9ba8-e254276d8076"
+local TRAINING_TEMPLATE = "e8992a73-e950-42a7-89f6-06113a049f2c"
+local TRAINING_NAME = "75f595bf-e9a3-4fd8-954e-f50f0b3a4be6"
+local TRAINING_DESC = "133507c9-5a9a-470d-b7f4-f99a49955e1a"
+local TRAINING_RECIPE = "760447df-f144-4286-a5c3-b298848c9462"
+local TRAINING_MODEL = "bb3549a0-5088-4c3b-8057-3a7e48a59ad6"
 local WOOD_LOGS = "3f4093ae-75ed-4e5d-bd0b-784ba83b88f5"
 local PLANT_FIBRE = "ff00a9f6-fd7e-4933-9c6b-33c36223cd2b"
 local ANIMAL_FUR = "66ce7d4c-ce66-4ad4-800a-ab37f7e604a2"
@@ -48,7 +55,8 @@ table.insert = function(t, a, b)
 end
 
 -- One run of the script: `server` (no render data), `no_bed_model` (a client whose data lacks the bed's model),
--- `no_prop_model` / `no_large_model` (the pack's prop model of the Stable / the Large Stable was not made), `fail_item`
+-- `no_prop_model` / `no_large_model` / `no_training_model` (the pack's prop model of the Stable / the Large Stable / the
+-- Training Grounds was not made), `fail_item`
 -- (adding the placeable with this item GUID fails).
 local function run(opts)
 	opts = opts or {}
@@ -72,6 +80,8 @@ local function run(opts)
 	local bed_model = { guid = BED_MODEL, data = { debugName = "animalprops_farm_animal_sleep_large_01", renderData = { hash = "h" } } }
 	local prop_model = { guid = STABLE_MODEL, data = { debugName = "beastmaster_stable", renderData = { hash = "p" } } }
 	local large_model = { guid = LARGE_MODEL, data = { debugName = "beastmaster_large_stable", renderData = { hash = "l" } } }
+	local training_model = { guid = TRAINING_MODEL, data = { debugName = "beastmaster_training_grounds",
+		renderData = { hash = "t" } } }
 	_G.loader = { features = { patch = true }, is_server = opts.server or false }
 	_G.game = { assets = {
 		get_resource = function(guid, type)
@@ -79,6 +89,7 @@ local function run(opts)
 			if guid == BED_MODEL and not opts.no_bed_model then return bed_model end
 			if guid == STABLE_MODEL and not opts.no_prop_model then return prop_model end
 			if guid == LARGE_MODEL and not opts.no_large_model then return large_model end
+			if guid == TRAINING_MODEL and not opts.no_training_model then return training_model end
 			return nil
 		end,
 		get_resources_by_type = function(type)
@@ -122,7 +133,7 @@ end
 test("the Stable is a copy of the large animal bed's object, without the parts farm animals and villagers use", function()
 	local c = run()
 	assert(c.ok, c.err)
-	eq(#c.placeables, 2, "placeables: the Stable and the Large Stable")
+	eq(#c.placeables, 3, "placeables: the Stable, the Large Stable and the Training Grounds")
 	local p = placeable(c, STABLE_ITEM)
 	eq(p.clone_of, BED_ITEM, "clone_of")
 	eq(p.guid, STABLE_ITEM, "item")
@@ -158,7 +169,7 @@ test("without the pack's model (its prop failed) the Stable takes a copy of the 
 	eq(m.guid, STABLE_MODEL, "guid")
 	eq(m.flags, 0, "flags")
 	eq(m.data.renderData.hash, "h", "the bed's mesh data")
-	eq(#c.placeables, 2, "placeables")
+	eq(#c.placeables, 3, "placeables")
 end)
 
 -- The bed's collider as the game has it: one box in a ColliderResourceComponent
@@ -210,34 +221,35 @@ test("on a dedicated server (no render data) no model is made and the template s
 	local c = run({ server = true })
 	assert(c.ok, c.err)
 	eq(#c.created, 0, "resources created")
-	eq(#c.placeables, 2, "placeables")
+	eq(#c.placeables, 3, "placeables")
 	local tpl = { components = { { type = "keen::ecs::ModelResource", value = { model = BED_MODEL } } } }
 	placeable(c, STABLE_ITEM).edit_template(tpl)
 	eq(tpl.components[1].value.model, STABLE_MODEL, "model")
 	local big = { components = { { type = "keen::ecs::ModelResource", value = { model = BED_MODEL } } } }
 	placeable(c, LARGE_ITEM).edit_template(big)
 	eq(big.components[1].value.model, LARGE_MODEL, "the Large Stable's model")
-	eq(#c.recipes, 2, "recipes")
+	eq(#c.recipes, 3, "recipes")
 end)
 
 test("a client with neither the pack's models nor the bed's adds nothing (the game changed): the error says what is missing", function()
-	local c = run({ no_bed_model = true, no_prop_model = true, no_large_model = true })
+	local c = run({ no_bed_model = true, no_prop_model = true, no_large_model = true, no_training_model = true })
 	assert(not c.ok, "an error")
 	assert(tostring(c.err):find(BED_MODEL, 1, true), "names the model: " .. tostring(c.err))
 	eq(#c.placeables, 0, "placeables")
 	eq(#c.recipes, 0, "recipes")
 end)
 
-test("a client without the Stable's model and the bed's still adds the Large Stable (its own model), then errs", function()
+test("a client without the Stable's model and the bed's still adds the Large Stable and the Training Grounds, then errs", function()
 	local c = run({ no_bed_model = true, no_prop_model = true })
 	assert(not c.ok, "an error")
-	eq(#c.placeables, 1, "placeables")
+	eq(#c.placeables, 2, "placeables")
 	assert(placeable(c, LARGE_ITEM), "the Large Stable")
+	assert(placeable(c, TRAINING_ITEM), "the Training Grounds")
 end)
 
 test("its recipe: at the Workbench like the crude chair, 6 wood logs, 8 plant fibre, 2 animal fur; names written once", function()
 	local c = run()
-	eq(#c.recipes, 2, "recipes")
+	eq(#c.recipes, 3, "recipes")
 	local r = recipe(c, STABLE_RECIPE)
 	eq(r.like, "Prop_Decoration_Comfort1_T0_Chair", "like")
 	eq(r.output[1], STABLE_ITEM, "output")
@@ -252,12 +264,12 @@ test("its recipe: at the Workbench like the crude chair, 6 wood logs, 8 plant fi
 	eq(c.finish, 1, "finish")
 end)
 
-test("without the crude chair's recipe (a game update) both stables are crafted in the own crafting menu, named", function()
+test("without the crude chair's recipe (a game update) all three are crafted in the own crafting menu, named", function()
 	local c = run({ no_chair = true })
 	assert(c.ok, c.err)
-	eq(#c.placeables, 2, "placeables")
-	eq(#c.recipes, 2, "recipes")
-	for _, guid in ipairs({ STABLE_RECIPE, LARGE_RECIPE }) do
+	eq(#c.placeables, 3, "placeables")
+	eq(#c.recipes, 3, "recipes")
+	for _, guid in ipairs({ STABLE_RECIPE, LARGE_RECIPE, TRAINING_RECIPE }) do
 		local r = recipe(c, guid)
 		eq(r.like, nil, "like: the helper's default (the own crafting menu, next to the campfire)")
 		eq(#r.inputs, 3, "inputs")
@@ -269,7 +281,7 @@ end)
 
 test("monsters can neither target nor break a stable: the bed's Destructible, OnDestroy and ServerTarget go, as on furniture", function()
 	local c = run()
-	for _, guid in ipairs({ STABLE_ITEM, LARGE_ITEM }) do
+	for _, guid in ipairs({ STABLE_ITEM, LARGE_ITEM, TRAINING_ITEM }) do
 		local p = placeable(c, guid)
 		for _, part in ipairs({ "keen::ecs::Destructible", "keen::ecs::OnDestroy", "keen::ecs::ServerTarget" }) do
 			assert(has(p.strip, part), guid .. ": " .. part .. " stripped")
@@ -357,6 +369,66 @@ test("an item that cannot be added still writes the names given so far, then sto
 	assert(tostring(c.err):find(BED_ITEM, 1, true), "names the item: " .. tostring(c.err))
 	eq(#c.recipes, 0, "recipes")
 	eq(c.finish, 1, "finish")
+end)
+
+test("the Training Grounds: a third copy of the large animal bed's object, with its own GUIDs, name and description", function()
+	local c = run()
+	assert(c.ok, c.err)
+	local p = placeable(c, TRAINING_ITEM)
+	assert(p, "the Training Grounds is added")
+	eq(p.clone_of, BED_ITEM, "clone_of")
+	eq(p.template_guid, TRAINING_TEMPLATE, "template")
+	eq(p.name_guid, TRAINING_NAME, "name GUID")
+	eq(p.description_guid, TRAINING_DESC, "description GUID")
+	eq(p.name, "Training Grounds", "name")
+	assert(p.description:find("train", 1, true), "the description says beasts train there: " .. p.description)
+	eq(p.debug_name, "Prop_Beastmaster_Training_Grounds", "debug name")
+	local tpl = bed_template()
+	p.edit_template(tpl)
+	eq(tpl.components[1].value.model, TRAINING_MODEL, "model")
+	eq(#c.created, 0, "resources created")
+end)
+
+test("the Training Grounds' collider: a round platform (three boxes, 0.32 m high) and the dummy, one solid", function()
+	local c = run()
+	local tpl = bed_template()
+	placeable(c, TRAINING_ITEM).edit_template(tpl)
+	local col = tpl.components[2].value.colliders[1]
+	eq(#col.dataArray, 4, "boxes")
+	for i = 1, 3 do
+		local v = col.dataArray[i].value
+		assert(math.abs(v.offset.y + v.shape.halfSize.y - 0.32) < 0.01, "platform box " .. i .. " top at 0.32 m")
+		assert(math.max(v.shape.halfSize.x, v.shape.halfSize.z) <= 2.5, "platform box " .. i .. " inside the 5 m prop")
+	end
+	local dummy = col.dataArray[4].value
+	assert(dummy.offset.y - dummy.shape.halfSize.y >= 0.3, "the dummy stands on the platform")
+	assert(dummy.offset.y + dummy.shape.halfSize.y >= 2.2, "the dummy is 2 m tall")
+	assert(dummy.shape.halfSize.x <= 0.5 and dummy.shape.halfSize.z <= 0.5, "the dummy is thin")
+	local list = col.joltObjects[1].shapeIndexList
+	eq(#list, 4, "shape indices")
+	for i = 1, 4 do eq(list[i], i - 1, "shape index " .. i) end
+end)
+
+test("the Training Grounds' recipe: at the Workbench like the crude chair, 10 wood logs, 12 plant fibre, 3 animal fur", function()
+	local c = run()
+	local r = recipe(c, TRAINING_RECIPE)
+	assert(r, "its recipe")
+	eq(r.like, "Prop_Decoration_Comfort1_T0_Chair", "like")
+	eq(r.output[1], TRAINING_ITEM, "output")
+	eq(r.inputs[1][1], WOOD_LOGS, "wood")
+	eq(r.inputs[1][2], 10, "wood count")
+	eq(r.inputs[2][1], PLANT_FIBRE, "fibre")
+	eq(r.inputs[2][2], 12, "fibre count")
+	eq(r.inputs[3][1], ANIMAL_FUR, "fur")
+	eq(r.inputs[3][2], 3, "fur count")
+end)
+
+test("without the pack's Training Grounds model it takes a copy of the bed's record under its GUID", function()
+	local c = run({ no_training_model = true })
+	assert(c.ok, c.err)
+	eq(#c.created, 1, "resources created")
+	eq(c.created[1].guid, TRAINING_MODEL, "guid")
+	eq(c.created[1].data.renderData.hash, "h", "the bed's mesh data")
 end)
 
 io.write(string.format("%d tests, %d failed\n", ran, failures))
