@@ -981,6 +981,87 @@
      "value": {
       "uniformScale": 1.2
      }
+    },
+    {
+     "type": "InventorySetup",
+     "value": {
+      "linksEntities": [
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       }
+      ],
+      "linksCategories": [
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid"
+      ],
+      "inventoryFlags": [],
+      "genericSlotCount": 16,
+      "availableSlotCount": 16,
+      "isInitialized": false
+     }
+    },
+    {
+     "type": "InventorySetupInit",
+     "value": {}
     }
    ]
   }
