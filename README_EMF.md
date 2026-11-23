@@ -597,6 +597,16 @@ being handed over is never lost: a piece that was being given back is given back
 in the 2 minutes after "Take all gear back" can return it twice), and a piece the game had not confirmed taking stays
 yours.
 
+**Every player their own (1.8).** In a game you host your guests can have a companion too, and on a dedicated server
+every player: each one follows and fights for its own player, takes that player's orders, wears gear from that player's
+backpack and is kept for them with the world. Your own (the host's) works exactly as before, in the same file. A
+guest's or a server player's companion is in `emf\config\companion\<world slot>-<account>.txt`; when they leave the
+world it goes with them and comes back when they join again (its order and gear kept). Their notes come as a line only
+they see ("[Companion] following you"). Until a joined player's own game sends their keys (a later version), their
+companion is ordered from the console: `companion.as <player entity> summon|dismiss|follow|stay|attack|gear`
+(`beastmaster.as`'s player numbers, or `chat.players`), or comes by itself with `auto_summon=1`. `max_companions`
+(default 8) caps how many are out at once in the world.
+
 **New in 1.7:** the order wheel key is F6 by default (it was G, which the game uses in build mode and to sort the
 backpack); a key you chose yourself stays. F6 no longer dismisses at once: pick Dismiss on the wheel, or set
 `key_dismiss`.
@@ -609,11 +619,12 @@ backpack); a key you chose yourself stays. F6 no longer dismisses at once: pick 
 | `marker_guid=` | what "Stay here" puts down for it to guard (default `0ce28db1-522f-4455-b358-3888fb5e089b`, a small barrel). It must be a template the game can spawn standing still |
 | `faction=11` | the faction number written on the companion right after it spawns (and again if the game changes it). 11 = `PlayerAlly`, the faction of the game's own summons: full damage. 7 = `Player` follows too but every hit does 0. -1 keeps the template's faction: **with the default enemy body that leaves a hostile Vukah next to you**, and other non-ally numbers can too. Anything that is not a number from -1 to 15 falls back to 11 (logged). Level and gear need 11 |
 | `guid=` | the body (default `d5d05217-52dc-467a-9192-26b4f661d8d9`, `Enemy_Vukah_Melee`). Plain enemy-AI actors without `PlayerInput` work; the old default `FakePlayer_Vukah_Melee` (`9543cfb0-...`) follows but does no damage. Tested ones: `docs/engine_parts/re_companions.md` |
-| `auto_summon=1` | summons one by itself once a world you host is running |
+| `auto_summon=1` | every player in a world this game or server hosts gets one by itself (1.8: guests and server players too) |
+| `max_companions=8` | how many companions are out at once in the world, every player's together; 0 = no limit (1.8) |
 | `respawn_seconds=N` | after the companion dies, a new one comes N seconds later; 0 (default): press the order wheel key. One the game removed (left far behind) did not die: it always comes back (above) |
 | `follow_distance=<m>` | changes the template's guard distances (start following at d + 2 m, stop at d m). Template data: with an enemy body it changes **every wild Vukah of that template** too, until the game restarts. Not set by default |
 
-Console: `companion.gear` (what it wears, its level, and pieces still on their way back to you), `companion.aim` (your camera ray and the creatures near it, with
+Console: `companion.gear` (what yours wears, its level, and pieces still on their way back to you), `companion.as <player entity> <word>` (a player's order: summon, dismiss, follow, stay, attack, gear), `companion.aim` (your camera ray and the creatures near it, with
 how far each is off the ray: why Attack picks what it picks). On the host the faction reaches your own screen too (the
 client world already shows the ally faction); other players of an online session were not tested.
 

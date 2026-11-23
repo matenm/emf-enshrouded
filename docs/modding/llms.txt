@@ -549,7 +549,8 @@ help, mods, settings, set, hooks, pattern, map.where, map.act, markers, markers.
 - saves.list: the save backups, newest first, and where they are
 
 From the mods in the EMF zip (only while that mod runs):
-- companion.gear: what the companion wears and the level it gets [companion]
+- companion.gear: what your companion wears and the level it gets [companion]
+- companion.as <player entity> summon|dismiss|follow|stay|attack|gear: a player's companion order from the console [companion]
 - companion.aim: the camera ray and the creatures near it (why Attack picks what it picks) [companion]
 - quick_stack: put what you carry into the nearby chests that hold it [quick_stack]
 - qs: put what you carry into the nearby chests that hold it [quick_stack]
