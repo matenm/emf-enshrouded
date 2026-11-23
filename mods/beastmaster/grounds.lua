@@ -70,7 +70,7 @@ end
 local function target(home, world, h)
 	local st = home.place_state
 	st.targets = st.targets or {}
-	local key = training_mod.key(h)
+	local key = home.p.key(h)
 	local t = st.targets[key]
 	if t then
 		local x, y, z = world:position(t.id)
@@ -146,7 +146,7 @@ local function scene(home, world, e, h, now, x, z)
 	if e.ordered then
 		if now >= e.until_s then
 			end_order(e)
-			e.attacked = true
+			home:guard_place(world, e, h)  -- the order took its guard of the grounds
 			start(home, world, e, h, now, x, z, pick(true, night(world)))
 		elseif now >= e.order_at then
 			local t = target(home, world, h)
@@ -155,6 +155,7 @@ local function scene(home, world, e, h, now, x, z)
 				e.ordered, e.order_at = id, now + ORDER_EVERY_S
 			else
 				end_order(e)
+				home:guard_place(world, e, h)
 				start(home, world, e, h, now, x, z, "sniff")
 			end
 		end
@@ -190,8 +191,8 @@ end
 local WORDS = { attack = "attacking the dummy", rest = "resting", sniff = "sniffing about", stroll = "sniffing about" }
 
 -- The place for home_mod.new: `grounds()` the Training Grounds found now (stable.lua S:grounds()), `room()` the beasts
--- each holds (training.lua T:room()).
-function M.place(grounds, room)
+-- each holds (training.lua T:room()), `key(h)` a Training Grounds' key (training.lua T:key_of: the known one's).
+function M.place(grounds, room, key)
 	return {
 		name = "Training Grounds",
 		log = "training",
@@ -204,7 +205,7 @@ function M.place(grounds, room)
 		on = function() return true end,
 		belongs = function(b) return b.training ~= nil and not b.out end,
 		fits = function(b, key) return b.training == key end,
-		key = training_mod.key,
+		key = key or training_mod.key,
 		scene = scene,
 		after_check = after_check,
 		yaw = function(h, e)

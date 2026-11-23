@@ -38,8 +38,8 @@
 -- stable.lua S:homes()), present() (account -> player entity, nil before the first check), log(text), on_spawn(world,
 -- id, sp, health_mul) (optional: the health watch), tell(world, player, text) and gain(world, account, beast) (a
 -- loyalty point; both optional: a pet then only settles the beast).
--- `place` (optional; M.LARGE_STABLE by default) makes it serve another kind of place the same way (training.lua's
--- Training Grounds): name, log, room(env), spots (frame metres {x, z}), floor(lx, lz), spawn_y, roam_m, places(env)
+-- `place` (optional; M.LARGE_STABLE by default) makes it serve another kind of place the same way (grounds.lua's
+-- Training Grounds). env.others(id) (optional): an entity another place module shows (its sweep leaves it alone): name, log, room(env), spots (frame metres {x, z}), floor(lx, lz), spawn_y, roam_m, places(env)
 -- (the places now), on(env) (shown at all), belongs(b) (a beast that may be shown at such a place), fits(b, key) (at
 -- that place), key(h), scene(home, world, e, h, now, x, z) (optional: the place's own scenes instead of the stroll and
 -- the rest), yaw(h, e) (optional: where a beast faces when put back), words(e) (optional: what it does, for text).
@@ -310,6 +310,10 @@ function H:pet(world, player, entity)
 	e.faced = true
 	e.sc.turned = true
 	local was_rest = e.scene == "rest"
+	if e.ordered then  -- on its scene's enemy order (the dummy): the pet ends it
+		if emf.enemy_order_cancel then emf.enemy_order_cancel(e.ordered) end
+		e.ordered = nil
+	end
 	if not walks and idle_mod.hold(world, e.id, e.sc, now, self:game_now(world, LEASE_S * NS), self:game_now(world, CHECK_AHEAD_NS)) then
 		e.until_s = was_rest and math.max(e.until_s, now + PET_S) or now + PET_S
 		e.scene = "rest"
@@ -394,7 +398,8 @@ end
 function H:sweep(world, homes)
 	local n = 0
 	for _, id in ipairs(world:entities()) do
-		if not self.ids[id] and ours(world, id) and not get(world, "PlayerState", id) then
+		if not self.ids[id] and not (self.env.others and self.env.others(id)) and ours(world, id)
+			and not get(world, "PlayerState", id) then
 			local x, y, z = world:position(id)
 			local near = false
 			for _, h in ipairs(homes) do

@@ -126,6 +126,7 @@ home = home_mod.new({
 	on_spawn = spawned,
 	tell = tell,
 	gain = function(world, account, b) pack:gain(world, { account = account, beast = b }) end,
+	others = function(id) return trainees ~= nil and trainees:has(id) end,
 })
 
 -- the beasts in training at a Training Grounds (1.21, the beasts pack's)
@@ -152,7 +153,9 @@ trainees = home_mod.new({
 	on_spawn = spawned,
 	tell = tell,
 	gain = function(world, account, b) pack:gain(world, { account = account, beast = b }) end,
-}, grounds_mod.place(function() return stables:grounds() end, function() return training:room() end))
+	others = function(id) return home:has(id) end,
+}, grounds_mod.place(function() return stables:grounds() end, function() return training:room() end,
+	function(h) return training:key_of(h) end))
 
 -- rare wild bears, aurochs and snakes (with their content packs)
 local wild = wild_mod.new({ setting = setting, now = now, on_spawn = spawned })
@@ -470,16 +473,20 @@ function actions.train(world, player, account, key)
 	end
 	local x, y, z = world:position(player)
 	if not x then return "Your place is not known yet." end
-	local free, nearest = training:nearest(x, y, z)
+	local free, nearest = training:nearest(x, y, z, training_mod.SEND_M)
+	if not nearest then
+		return string.format("No Training Grounds within %d m of you: send it from one (or from a stable near one).",
+			training_mod.SEND_M)
+	end
 	if not free then
-		return string.format("The Training Grounds is full (%d of %d): bring a beast back first, or build another.",
-			training:count(nearest), training:room())
+		return string.format("The Training Grounds at %s is full (%d of %d): bring a beast back first, or build another.",
+			training:where(nearest), training:count(nearest), training:room())
 	end
 	local ok, why = training:send(b, free)
 	if not ok then return b.name .. " cannot train now (" .. tostring(why) .. ")." end
 	home:leave(world, b)
-	return b.name .. " goes to the Training Grounds: it trains there and earns loyalty by the game's clock while you are "
-		.. "in the world."
+	return string.format("%s goes to the Training Grounds at %s: it trains there and earns loyalty by the game's clock "
+		.. "while you are in the world.", b.name, training:where(free))
 end
 
 -- A beast in training comes back to the stable (1.21).

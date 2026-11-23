@@ -7371,7 +7371,7 @@ TEST_CASE("training: a beast that is out is not sent; calling a beast in trainin
     CHECK(says(b.reply("beastmaster.train Fang"), "Fang is out: send it home first"));
 }
 
-TEST_CASE("training: 3 loyalty points a game day by the game's clock while its owner is in the world; a clock jump counts 12 h at most") {
+TEST_CASE("training: 3 loyalty points a game day by the game's clock while its owner is in the world; a night slept through counts, a jump over 12 h not") {
     BeastRig b;
     three_beasts(b);
     training_grounds(b, 960, 10, 0);
@@ -7382,23 +7382,28 @@ TEST_CASE("training: 3 loyalty points a game day by the game's clock while its o
     set_daytime(b.r.fake, 14.0);  // 8 game hours: one point
     b.seconds(2);
     CHECK(says(b.saved(), "y 0x00000000000000aa 1 Fang"));
-    set_daytime(b.r.fake, 13.0);  // round the clock (23 h): counts as 12, one and a half points
+    set_daytime(b.r.fake, 13.0);  // round the clock (23 h): a clock set, nothing counts
     b.seconds(2);
-    CHECK(says(b.saved(), "y 0x00000000000000aa 2 Fang"));
-    CHECK(says(b.reply("beastmaster.train"), "Fang trains at the Training Grounds at 10, 10, 0 (loyalty 1, 50 % of a point)"));
+    CHECK(says(b.reply("beastmaster.train"), "Fang trains at the Training Grounds at 10, 10, 0 (loyalty 1, 0 % of a point)"));
+    set_daytime(b.r.fake, 22.0);  // 9 game hours, then a night slept through (22 to 6: 8 h): one and a half points more
+    b.seconds(2);
+    set_daytime(b.r.fake, 6.0);
+    b.seconds(2);
+    CHECK(says(b.saved(), "y 0x00000000000000aa 3 Fang"));
+    CHECK(says(b.reply("beastmaster.train"), "(loyalty 1, 12 % of a point)"));  // 17 h: 2.125 points
     // its owner leaves the world: nothing counts
     b.r.fake.components.erase({ecs::PlayerState::kHash, 1});
     b.seconds(2);
-    set_daytime(b.r.fake, 21.0);
+    set_daytime(b.r.fake, 14.0);
     b.seconds(2);
-    CHECK(says(b.saved(), "y 0x00000000000000aa 2 Fang"));
+    CHECK(says(b.saved(), "y 0x00000000000000aa 3 Fang"));
     // 0 a day: training only looks
     component<ecs::PlayerState>(b.r.fake, 1);
     b.r.fake.settings["beastmaster.training_points"] = "0";
     b.seconds(2);
-    set_daytime(b.r.fake, 5.0);
+    set_daytime(b.r.fake, 22.0);
     b.seconds(2);
-    CHECK(says(b.saved(), "y 0x00000000000000aa 2 Fang"));
+    CHECK(says(b.saved(), "y 0x00000000000000aa 3 Fang"));
 }
 
 TEST_CASE("training: a save's g and q lines load back: a beast trains on at a Training Grounds nobody is near") {
@@ -7570,4 +7575,59 @@ TEST_CASE("training: the Beasts window sends the selected beast to training and 
     click(b, "untrain");
     CHECK(shows(shown(b), "Tusk is back in the stable"));
     CHECK(text_at(shown(b), "train") == "Send to training");
+}
+
+// Review (2026-11-23): a Training Grounds' place comes rounded differently from a joined player's report than from the
+// host's world; it is the same Training Grounds within 1 m.
+TEST_CASE("training: a Training Grounds found a few centimetres from a known one is that one: its beasts show and keep training") {
+    BeastRig b;
+    write(b.data, "b 0x00000000000000aa wolf 0 0 Fang\na 0x00000000000000aa Fang\ng 0x00000000000000aa 0.0000 10.0,10.0,0.0 Fang\n"
+                  "q 10.0 10.0 0.0 -\ns 1\n");
+    b.r.fake.session = 2;
+    fire_load(1);
+    b.seconds(1);
+    flame_altar(b, 900, 0, 0);
+    stable_prop(b, 960, 10.06, 10, 0, kTrainingModel);  // "10.1,10.0,0.0" by its own place
+    homes_ready(b, 2);
+    b.seconds(70);  // found, and long past the 30 s a missing one is given
+    CHECK(says(b.reply("beastmaster.train"), "Fang trains at the Training Grounds at 10, 10, 0"));
+    REQUIRE_FALSE(b.r.fake.spawns.empty());  // shown on it
+    CHECK(std::hypot(b.r.fake.spawns[0].x - 10, b.r.fake.spawns[0].z) < 1.6);
+    CHECK_FALSE(says(b.saved(), "q 10.1"));  // no second Training Grounds
+}
+
+TEST_CASE("training: a beast goes only to a Training Grounds within 50 m of its owner, and the reply names it") {
+    BeastRig b;
+    write(b.data, "b 0x00000000000000aa wolf 0 0 Fang\nb 0x00000000000000aa boar 0 0 Tusk\n"
+                  "b 0x00000000000000aa hound 0 0 Rex\na 0x00000000000000aa Fang\ns 1\n"
+                  "q 300.0 10.0 0.0 -\n");  // a Training Grounds in another base, known from before
+    b.r.fake.session = 2;
+    fire_load(1);
+    b.seconds(1);
+    training_grounds(b, 960, 10, 0);
+    b.seconds(32);
+    CHECK(says(b.reply("beastmaster.train Fang"), "Fang goes to the Training Grounds at 10, 10, 0"));
+    CHECK(says(b.reply("beastmaster.train Tusk"), "Tusk goes to the Training Grounds at 10, 10, 0"));
+    CHECK(says(b.reply("beastmaster.train Rex"), "full (2 of 2)"));  // not sent to one far away
+    place(b.r.fake, 1, 0, 10, -100);
+    CHECK(says(b.reply("beastmaster.untrain Fang"), "back in the stable"));
+    CHECK(says(b.reply("beastmaster.train Fang"), "No Training Grounds within 50 m of you"));
+}
+
+TEST_CASE("training: a clock set back (or forward more than 12 h) counts nothing; a renamed beast trains on") {
+    BeastRig b;
+    three_beasts(b);
+    training_grounds(b, 960, 10, 0);
+    b.seconds(32);
+    set_daytime(b.r.fake, 12.0);
+    REQUIRE(says(b.reply("beastmaster.train Fang"), "goes to the Training Grounds"));
+    b.seconds(2);
+    set_daytime(b.r.fake, 11.0);  // set back an hour: not 23 game hours of training
+    b.seconds(2);
+    CHECK(says(b.reply("beastmaster.train"), "(loyalty 1, 0 % of a point)"));
+    REQUIRE(says(b.reply("beastmaster.rename Fang Grey Fang"), "is now called Grey Fang"));
+    CHECK(says(b.saved(), "g 0x00000000000000aa 0.0000 10.0,10.0,0.0 Grey Fang"));
+    set_daytime(b.r.fake, 19.0);  // 8 game hours: a point
+    b.seconds(2);
+    CHECK(says(b.saved(), "y 0x00000000000000aa 1 Grey Fang"));
 }

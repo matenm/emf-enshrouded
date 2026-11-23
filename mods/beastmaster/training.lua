@@ -2,13 +2,15 @@
 -- earn loyalty points by the game's clock (emf.time_of_day): the setting training_points a game day (24 game hours),
 -- counted once a second for the beasts of the players in the world, wherever they are (exploring counts; the beasts of
 -- players who are not in the world do not train), whole points through env.gain (the loyalty note, talents and size
--- follow). A jump of the clock (a night slept through, a world load) counts as at most MAX_JUMP_H hours. A beast at
--- loyalty 10 earns nothing more.
---   A beast trains at one Training Grounds (its key: "x,y,z" to 0.1 m), which holds training_room beasts, all players
---   together: sending one more is refused. The Training Grounds the world had are kept with it ("q" lines: place and
---   turn) until a player within SEE_M of one has not seen it for GONE_S; its beasts then go back to the stable, with a
---   note to their owners in the world. A beast whose Training Grounds is not known (nothing found yet) earns nothing.
---   A beast stops training when it is called (leave), brought back (back), sent away, or released (it leaves the
+-- follow). A jump of the clock by more than MAX_JUMP_H hours (a clock set back, or set far ahead by a command) counts
+-- nothing; a night slept through counts its hours. A beast at loyalty 10 earns nothing more.
+--   A beast trains at one Training Grounds (its key: "x,y,z" to 0.1 m, from where it was first known: one found again
+--   within SAME_M of a known one is that one, as places come rounded differently from a joined player's report), which
+--   holds training_room beasts, all players together: sending one more is refused. A beast is sent only to a Training
+--   Grounds within SEND_M of its owner. The Training Grounds the world had are kept with it ("q" lines: place and turn)
+--   until a player within SEE_M of one has not seen it for GONE_S; its beasts then go back to the stable, with a note to
+--   their owners in the world. A beast whose Training Grounds is not known (nothing found yet) earns nothing.
+--   A beast stops training when it is called (main.lua's leave_home), brought back (back), or released (it leaves the
 --   roster).
 -- Kept with the world: the roster's g lines (roster.lua: the beast, its fraction of a point, its Training Grounds) and
 -- this module's q lines.
@@ -21,7 +23,9 @@ local M = {}
 local T = {}
 T.__index = T
 
-M.MAX_JUMP_H = 12  -- game hours: a bigger jump of the clock in one check counts as this many
+M.MAX_JUMP_H = 12  -- game hours: a bigger jump of the clock in one check counts nothing (it was set, not passed)
+M.SEND_M = 50      -- m: a beast is sent only to a Training Grounds this near its owner
+local SAME_M = 1   -- m: a Training Grounds found this near a known one is that one
 local SEE_M = 30   -- m: a player this near a known Training Grounds would see it
 local GONE_S = 30  -- s: not seen that long by a player near it: it was taken down
 local SAVE_S = 60  -- s: the fractions earned are saved at most this often (a point saves at once)
@@ -92,6 +96,14 @@ function T:known_at(key)
 	return self.known[key]
 end
 
+-- The key of Training Grounds `g` ({x, y, z}): a known one's within SAME_M, else its own.
+function T:key_of(g)
+	for k, kg in pairs(self.known) do
+		if (kg.x - g.x) ^ 2 + (kg.y - g.y) ^ 2 + (kg.z - g.z) ^ 2 <= SAME_M * SAME_M then return k end
+	end
+	return M.key(g)
+end
+
 -- How many beasts (all players) train at the Training Grounds `key`.
 function T:count(key)
 	local n = 0
@@ -109,15 +121,25 @@ function T:room()
 	return math.max(1, math.min(4, math.floor(r)))
 end
 
--- The known Training Grounds nearest (x, y, z) with room, or nil; the nearest of all when none has room (second value).
-function T:nearest(x, y, z)
+-- The known Training Grounds within `within` metres of (x, y, z) nearest it with room, or nil; and the nearest of them
+-- with room or not (nil when none is that near).
+function T:nearest(x, y, z, within)
 	local best, best_d, any, any_d
 	for k, g in pairs(self.known) do
 		local d = (g.x - x) ^ 2 + (g.y - y) ^ 2 + (g.z - z) ^ 2
+		if d > within * within then goto continue end
 		if not any_d or d < any_d then any, any_d = k, d end
 		if self:count(k) < self:room() and (not best_d or d < best_d) then best, best_d = k, d end
+		::continue::
 	end
 	return best, any
+end
+
+-- "x, y, z" of the Training Grounds `key`, rounded, for the replies.
+function T:where(key)
+	local x, y, z = place_of(key)
+	if not x then return key end
+	return string.format("%d, %d, %d", math.floor(x + 0.5), math.floor(y + 0.5), math.floor(z + 0.5))
 end
 
 -- Sends beast `b` to the Training Grounds `key`: true, or false and why.
@@ -148,7 +170,8 @@ function T:hours(world)
 	if not last then return 0 end
 	local d = h - last
 	if d < 0 then d = d + 24 end
-	return math.min(d, M.MAX_JUMP_H)
+	if d > M.MAX_JUMP_H then return 0 end  -- set back, or set far ahead: no time passed for the beasts
+	return d
 end
 
 -- The Training Grounds found now join the known ones; a known one a player near it has not seen for GONE_S is gone:
@@ -156,11 +179,15 @@ end
 function T:refresh(world, now)
 	local found, changed = {}, false
 	for _, g in ipairs(self.env.grounds() or {}) do
-		local k = M.key(g)
+		local k = self:key_of(g)
 		found[k] = true
-		local old = self.known[k]
-		if not old then changed = true end
-		self.known[k] = { x = g.x, y = g.y, z = g.z, q = g.q }
+		if not self.known[k] then
+			changed = true
+			self.known[k] = { x = g.x, y = g.y, z = g.z, q = g.q }
+		elseif g.q and not self.known[k].q then
+			self.known[k].q = g.q
+			changed = true
+		end
 	end
 	local present = self.env.present() or {}
 	for k, g in pairs(self.known) do
