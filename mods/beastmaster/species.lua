@@ -79,6 +79,11 @@ M.list = {
 		bonus = { runes = { 6, 10 }, rune2 = 0.50, gear = 0.25, gear_rarity = "legendary" } },
 }
 
+-- The wilds pack's fighting animals (species_wilds.lua): beasts like the ones above, known by replace.lua's list of the
+-- animals it put into the world rather than by graph and size (they run the game's graphs).
+local wilds = require("species_wilds")
+for _, s in ipairs(wilds.beasts) do M.list[#M.list + 1] = s end
+
 local by_id = {}
 for _, s in ipairs(M.list) do by_id[s.id] = s end
 
@@ -175,13 +180,19 @@ function M.variant(sp, roll)
 end
 
 -- The kind of a creature running `graph` (GUID text) in `faction` (a number) at `scale` (its ScaleComponent, nil when
--- it has none: 1), or nil.
+-- it has none: 1), or nil. The wilds pack's beasts are never found this way (replace.lua knows its own).
 function M.of(graph, faction, scale)
 	if not graph then return nil end
 	graph = tostring(graph):lower()
 	scale = scale or 1
+	-- a wilds animal (a game graph at its own size, not 1) that replace.lua's list does not know: none of them
+	if math.abs(scale - 1) > 0.01 then
+		for _, s in ipairs(wilds.beasts) do
+			if s.graph == graph and math.abs(scale - s.scale) < 0.005 then return nil end
+		end
+	end
 	for _, s in ipairs(M.list) do
-		if (s.graph == graph or s.also == graph) and (not s.factions or s.factions[faction])
+		if not s.wilds and (s.graph == graph or s.also == graph) and (not s.factions or s.factions[faction])
 			and (not s.min_scale or scale >= s.min_scale) and (not s.max_scale or scale < s.max_scale) then
 			return s
 		end

@@ -151,6 +151,23 @@ TEST_CASE("beastmaster: species are known by animation graph and faction") {
     CHECK(b.reply("beastmaster.give dragon").find("no species dragon") != std::string::npos);
 }
 
+TEST_CASE("wilds: the wilds pack's fighting animals are beasts; a creature on a game graph at one's size is no game kind") {
+    BeastRig b;
+    // a fox runs the game wolf's graph at 0.65, the coloured wolves at 1.1, the panther the sabretooth's at 0.8: which
+    // of them it is only replace.lua's list knows, so by graph and size they are nothing, never a wolf or a sabretooth
+    CHECK(b.reply(std::string("beastmaster.species ") + kWolfGraph + " 6 0.65") == "unknown");
+    CHECK(b.reply(std::string("beastmaster.species ") + kWolfGraph + " 6 1.1") == "unknown");
+    CHECK(b.reply("beastmaster.species 9c1b120e-4901-495c-9cc0-5de134fbe140 6 0.8") == "unknown");
+    CHECK(b.reply(std::string("beastmaster.species ") + kWolfGraph + " 6") == "wolf");        // the game's: no scale
+    CHECK(b.reply(std::string("beastmaster.species ") + kWolfGraph + " 6 1.4") == "bear");    // the bear pack's
+    CHECK(b.reply("beastmaster.species 9c1b120e-4901-495c-9cc0-5de134fbe140 6") == "sabretooth");
+    CHECK(b.reply("beastmaster.give fox").find("added") != std::string::npos);
+    CHECK(b.reply("beastmaster.give snow_leopard").find("added") != std::string::npos);
+    const std::string list = b.reply("beastmaster.list");
+    CHECK(list.find("1. Fox - fox, loyalty 1, at home") != std::string::npos);
+    CHECK(list.find("2. Snow leopard - snow_leopard, loyalty 1, at home") != std::string::npos);
+}
+
 TEST_CASE("beastmaster: a wolf at 20 % health in front of you is tamed after a 3 s channel") {
     BeastRig b;
     b.look(1, 0, 10.5, 0, 0);
@@ -2723,6 +2740,16 @@ TEST_CASE("wild beasts: a wild snake is now and then a rare one: albino 0.25 %, 
     CHECK(logged(old.r.fake, "wild crimson snakes") == 1);
 }
 
+TEST_CASE("wild beasts: the wilds pack's animals never come as rare wild beasts (they come in place of the game's)") {
+    RollRig b({{"wild_bear_minutes", "1"}});
+    for (const char* t : {kBearTemplate, kAurochsTemplate, kSnakeTemplate, kCrimsonTemplate, kGoldenTemplate,
+                          kAlbinoTemplate})
+        b.r.fake.missing_templates.insert(guid_bytes(t));
+    b.spawnable(4);
+    b.seconds(61);
+    CHECK(b.r.fake.spawns.empty());  // the fox, the bears, the panthers... are not among them
+}
+
 TEST_CASE("wild beasts: a wild albino snake keeps 5x the game's base health") {
     RollRig b({{"wild_bear_minutes", "1"}});
     b.r.fake.missing_templates.insert(guid_bytes(kBearTemplate));
@@ -3862,7 +3889,7 @@ TEST_CASE("beast tab: without its picture (not drawn, or a core before v26) the 
     }
 }
 
-TEST_CASE("beastmaster: mod.json asks EMF for a portrait of every built-in kind (key beastmaster.<id>, its template)") {
+TEST_CASE("beastmaster: mod.json asks EMF for a portrait of every kind, the wilds pack's too (beastmaster.<id>, its template)") {
     const std::string dir = std::string(EMF_SOURCE_DIR) + "/mods/beastmaster/";
     const std::string species = slurp(std::filesystem::path(dir + "species.lua").wstring());
     std::map<std::string, std::string> kinds;  // id -> template, from species.lua's list
@@ -3870,6 +3897,16 @@ TEST_CASE("beastmaster: mod.json asks EMF for a portrait of every built-in kind 
     for (auto it = std::sregex_iterator(species.begin(), species.end(), entry); it != std::sregex_iterator(); ++it)
         kinds[(*it)[1]] = (*it)[2];
     REQUIRE(kinds.size() == 10u);  // wolf, boar, sabretooth, hound, bear, aurochs and four snakes
+    // and the wilds pack's fighting animals (species_wilds.lua: an entry spans lines)
+    const std::string wilds_file = slurp(std::filesystem::path(dir + "species_wilds.lua").wstring());
+    const size_t from = wilds_file.find("M.beasts = {"), to = wilds_file.find("M.kinds = {");
+    REQUIRE(from != std::string::npos);
+    REQUIRE(to != std::string::npos);
+    const std::string wilds = wilds_file.substr(from, to - from);
+    const std::regex wild_entry(R"re(\{ id = "([a-z_]+)",[^}]*?template = "([0-9a-f-]{36})")re");
+    for (auto it = std::sregex_iterator(wilds.begin(), wilds.end(), wild_entry); it != std::sregex_iterator(); ++it)
+        kinds[(*it)[1]] = (*it)[2];
+    REQUIRE(kinds.size() == 30u);
     std::vector<std::string> problems;
     const auto items = emf::loader::read_portrait_lists(
         {{"beastmaster", slurp(std::filesystem::path(dir + "mod.json").wstring())}}, &problems);

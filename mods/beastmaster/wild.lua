@@ -43,11 +43,11 @@ local function about(world, id, sp)
 	return sc.uniformScale >= (sp.min_scale or 0) and sc.uniformScale < (sp.max_scale or math.huge)
 end
 
--- The pack beasts this game may have, in a random order.
+-- The pack beasts this game may have, in a random order (the wilds pack's come in place of the game's: replace.lua).
 local function candidates(off)
 	local out = {}
 	for _, sp in ipairs(species.list) do
-		if sp.pack and not sp.rare_of and not off[sp.id] then out[#out + 1] = sp end
+		if sp.pack and not sp.rare_of and not sp.wilds and not off[sp.id] then out[#out + 1] = sp end
 	end
 	for i = #out, 2, -1 do
 		local j = math.random(i)
