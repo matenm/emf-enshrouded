@@ -368,7 +368,7 @@ void cmd_markers_test(EmfWorld*, int argc, const char* const* argv, void*) {
 void cmd_screen(EmfWorld*, int, const char* const*, void*) {
     const CoreState* s = core_state();
     command_reply_line(game_screen_line(game_screen().screen(GetTickCount64()), game_screen().offset(),
-                                        s && s->exe.server, key_state_hooked()));
+                                        s && s->exe.server, key_state_hooked(), game_screen().armed()));
 }
 
 }  // namespace

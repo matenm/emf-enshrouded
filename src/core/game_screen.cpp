@@ -86,7 +86,7 @@ void TypingKeyGate::released(int vk) {
             for (int k : g) clear(k);
 }
 
-std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, bool server, bool key_hooks) {
+std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, bool server, bool key_hooks, bool armed) {
     // keen::HudScreenType as the game reflects it
     static const char* const kNames[] = {
         "Invalid", "InGame", "SystemMenu", "SettingsMenu", "InGameMenu", "Map", "Journal", "Character", "PlayerCrafting",
@@ -105,6 +105,7 @@ std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, boo
     std::string line = "screen: " + std::to_string(*screen);
     if (*screen < std::size(kNames)) line += std::string(" ") + kNames[*screen];
     if (!key_hooks) return line + ": mods' keys are not paused (EMF's key hooks are not installed: the overlay is off)";
+    if (!armed) return line + ": mods' keys as usual (the chat key gate is not armed yet: no reading has said InGame)";
     return line + (screen_takes_text(*screen) ? ": mods' keys read as up (the game's text box has them)"
                                               : ": mods' keys as usual");
 }

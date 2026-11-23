@@ -31,6 +31,8 @@ public:
     // A text screen read within the last 500 ms, once a reading said InGame (a build whose byte means something
     // else never pauses every key).
     bool typing(uint64_t now_ms) const;
+    // A reading said InGame once (the gate pauses keys only after that).
+    bool armed() const { return armed_.load(std::memory_order_relaxed); }
 
 private:
     std::atomic<uint32_t> offset_{0};
@@ -59,7 +61,7 @@ private:
 uint32_t hud_screen_offset_at(const uint8_t* match);
 
 // The console's `screen` line: the screen with the game's name for it, and whether mods' keys read as up.
-std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, bool server, bool key_hooks);
+std::string game_screen_line(std::optional<uint8_t> screen, uint32_t offset, bool server, bool key_hooks, bool armed);
 
 GameScreen& game_screen();
 // One gate per API: GetAsyncKeyState (async) and GetKeyState (the thread's own view) can disagree on a held key.

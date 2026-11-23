@@ -120,21 +120,36 @@ TEST_CASE("hud_screen_offset_at: the offset from the signature's bytes, only whe
 }
 
 TEST_CASE("game_screen_line: the screen by the game's own name, and whether mods' keys read as up") {
-    CHECK(game_screen_line(kScreenTextChat, 0x1cd8, false, true) ==
+    CHECK(game_screen_line(kScreenTextChat, 0x1cd8, false, true, true) ==
           "screen: 43 TextChat: mods' keys read as up (the game's text box has them)");
-    CHECK(game_screen_line(kScreenRename, 0x1cd8, false, true) ==
+    CHECK(game_screen_line(kScreenRename, 0x1cd8, false, true, true) ==
           "screen: 47 Rename: mods' keys read as up (the game's text box has them)");
-    CHECK(game_screen_line(kScreenInGame, 0x1cd8, false, true) == "screen: 1 InGame: mods' keys as usual");
-    CHECK(game_screen_line(9, 0x1cd8, false, true) == "screen: 9 Backpack: mods' keys as usual");
-    CHECK(game_screen_line(53, 0x1cd8, false, true) == "screen: 53 YcPlayground: mods' keys as usual");
-    CHECK(game_screen_line(200, 0x1cd8, false, true) == "screen: 200: mods' keys as usual");
-    CHECK(game_screen_line(std::nullopt, 0x1cd8, false, true) == "screen: not known (no game world on this client right now)");
-    CHECK(game_screen_line(std::nullopt, 0, false, true) ==
+    CHECK(game_screen_line(kScreenInGame, 0x1cd8, false, true, true) == "screen: 1 InGame: mods' keys as usual");
+    CHECK(game_screen_line(9, 0x1cd8, false, true, true) == "screen: 9 Backpack: mods' keys as usual");
+    CHECK(game_screen_line(53, 0x1cd8, false, true, true) == "screen: 53 YcPlayground: mods' keys as usual");
+    CHECK(game_screen_line(200, 0x1cd8, false, true, true) == "screen: 200: mods' keys as usual");
+    CHECK(game_screen_line(std::nullopt, 0x1cd8, false, true, true) == "screen: not known (no game world on this client right now)");
+    CHECK(game_screen_line(std::nullopt, 0, false, true, true) ==
           "screen: not known: the chat key gate is off (the HudScreenRead signature is not usable on this game build)");
-    CHECK(game_screen_line(std::nullopt, 0, true, true) == "screen: the dedicated server has no game screen");
+    CHECK(game_screen_line(std::nullopt, 0, true, true, true) == "screen: the dedicated server has no game screen");
     // the key hooks are not in (the overlay is off): the screen is read, but nothing is paused
-    CHECK(game_screen_line(kScreenTextChat, 0x1cd8, false, false) ==
+    CHECK(game_screen_line(kScreenTextChat, 0x1cd8, false, false, true) ==
           "screen: 43 TextChat: mods' keys are not paused (EMF's key hooks are not installed: the overlay is off)");
+    // the gate is not armed yet (no reading has said InGame: a build whose byte means something else never pauses keys)
+    CHECK(game_screen_line(kScreenTextChat, 0x1cd8, false, true, false) ==
+          "screen: 43 TextChat: mods' keys as usual (the chat key gate is not armed yet: no reading has said InGame)");
+}
+
+TEST_CASE("game screen: armed once a reading said InGame, not by a text screen alone") {
+    GameScreen g;
+    g.set_offset(0x1cd8);
+    CHECK_FALSE(g.armed());
+    g.seen(kScreenTextChat, 1000);
+    CHECK_FALSE(g.armed());
+    g.seen(kScreenInGame, 1100);
+    CHECK(g.armed());
+    g.seen(kScreenTextChat, 1200);
+    CHECK(g.armed());
 }
 
 // The hook read the clock before the reading: a reading a moment newer than the caller's clock said "not known".
