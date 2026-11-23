@@ -520,6 +520,43 @@ TEST_CASE("read_overlay_config: suggestions as you type are on with 8 rows; sugg
     DeleteFileW(ini.c_str());
 }
 
+TEST_CASE("read_overlay_config: times on the console's lines are off; the scrollback keeps 2000 lines, 500-20000") {
+    wchar_t dir[MAX_PATH];
+    GetTempPathW(MAX_PATH, dir);
+    const std::wstring ini = std::wstring(dir) + L"emf_test_scroll_" + std::to_wstring(GetCurrentProcessId()) + L".ini";
+    DeleteFileW(ini.c_str());
+    OverlayConfig c = read_overlay_config(ini);
+    CHECK_FALSE(c.timestamps);
+    CHECK(c.scrollback == 2000);
+    WritePrivateProfileStringW(L"overlay", L"timestamps", L"1", ini.c_str());
+    WritePrivateProfileStringW(L"overlay", L"scrollback", L"5000", ini.c_str());
+    c = read_overlay_config(ini);
+    CHECK(c.timestamps);
+    CHECK(c.scrollback == 5000);
+    WritePrivateProfileStringW(L"overlay", L"scrollback", L"100", ini.c_str());
+    CHECK(read_overlay_config(ini).scrollback == 500);
+    WritePrivateProfileStringW(L"overlay", L"scrollback", L"99999", ini.c_str());
+    CHECK(read_overlay_config(ini).scrollback == 20000);
+    WritePrivateProfileStringW(L"overlay", L"scrollback", L"lots", ini.c_str());
+    CHECK(read_overlay_config(ini).scrollback == 2000);
+    DeleteFileW(ini.c_str());
+}
+
+TEST_CASE("toast_lines: after clear a note shows only what came since, and no count of lines that are gone") {
+    ConsoleModel m(100);
+    for (int i = 0; i < 20; ++i) m.add_line("old " + std::to_string(i));
+    const ToastState t{0, 5000};
+    m.clear();
+    m.add_line("new 1");
+    m.add_line("new 2");
+    const auto lines = toast_lines(m, t, 100);
+    REQUIRE(lines.size() == 2);
+    CHECK(lines[0].second == "new 1");
+    CHECK(lines[1].second == "new 2");
+    m.clear();
+    CHECK(toast_lines(m, t, 100).empty());
+}
+
 TEST_CASE("read_overlay_config: a '; comment' after a value on the same line is not part of it (as in README_EMF.md)") {
     wchar_t dir[MAX_PATH];
     GetTempPathW(MAX_PATH, dir);

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -17,15 +18,35 @@ enum class LineKind : uint8_t { Command, Normal, Error, Success };
 // "a -> b", "is now" = success; everything else normal.
 LineKind classify_reply(std::string_view line);
 
+// A scrollback line with the local time of day it came (seconds since midnight).
+struct ConsoleLine {
+    LineKind kind = LineKind::Normal;
+    std::string text;
+    uint32_t seconds = 0;
+};
+
+// The console's own command: "clear" or "cls" (any case, spaces around), which empties the scrollback.
+bool is_console_clear(std::string_view line);
+
 class ConsoleModel {
 public:
     explicit ConsoleModel(size_t max_lines = 2000) : max_lines_(max_lines ? max_lines : 1) {}
 
-    // Scrollback. add_line may be called from any thread.
-    void add_line(std::string text);
+    // Scrollback. add_line, clear and the reads may be called from any thread.
+    void add_line(std::string text);                     // at the clock's time of day
+    void add_line(std::string text, uint32_t seconds);  // at `seconds` since midnight
     size_t size() const;
     std::vector<std::pair<LineKind, std::string>> snapshot(size_t first, size_t count) const;
-    uint64_t version() const;  // +1 per added line
+    std::vector<ConsoleLine> lines(size_t first, size_t count) const;  // with their times
+    uint64_t version() const;  // +1 per added line, and +1 per clear
+    void clear();              // every line goes
+    uint64_t cleared_version() const;  // the version right after the last clear (0: never cleared)
+    // Lines [first, first + count) as text, each on its own line (CRLF between them), with "hh:mm:ss " in front when
+    // `times` (what the console shows: its kinds are colours, not text).
+    std::string text(size_t first, size_t count, bool times) const;
+    // The indices of the lines that hold `needle` (any case), oldest first; none for an empty needle.
+    std::vector<size_t> find_all(std::string_view needle) const;
+    static std::string stamp_text(uint32_t seconds);  // "21:04:17"
 
     // History (render thread). Up = history_prev, Down = history_next (past the newest: "").
     void push_history(const std::string& line);
@@ -38,8 +59,9 @@ private:
     static constexpr size_t kMaxHistory = 100;
     size_t max_lines_;
     mutable SRWLOCK lock_ = SRWLOCK_INIT;
-    std::deque<std::pair<LineKind, std::string>> lines_;
+    std::deque<ConsoleLine> lines_;
     uint64_t version_ = 0;
+    uint64_t cleared_version_ = 0;
     std::vector<std::string> history_;
     size_t history_pos_ = 0;  // == history_.size(): not browsing
 };

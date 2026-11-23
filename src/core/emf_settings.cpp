@@ -130,6 +130,10 @@ std::vector<SettingDef> emf_setting_defs(const std::vector<std::string>& font_fi
     rows.when_key = "overlay.suggest";
     rows.when_value = "1";
     d.push_back(rows);
+    d.push_back(base("overlay.timestamps", SettingType::Bool, "A time on each line", "0", kPageConsole, true,
+                     "21:04:17 in front of each console line (not in the notes on screen)."));
+    d.push_back(number("overlay.scrollback", SettingType::Int, "Lines the console keeps", "2000", 500, 20000, 500, true,
+                       kPageConsole, false, "From the next start."));
     // [hud_editor]: the HUD editor (src/core/hud_editor); the active layout has no page: the layout bar changes it
     d.push_back(base("hud_editor.enabled", SettingType::Bool, "HUD editor", "1", kPageHud, true,
                      "Off: EMF leaves the game's HUD alone."));

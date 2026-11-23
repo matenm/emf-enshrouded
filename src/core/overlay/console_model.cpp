@@ -63,12 +63,72 @@ LineKind classify_reply(std::string_view line) {
     return LineKind::Normal;
 }
 
+bool is_console_clear(std::string_view line) {
+    while (!line.empty() && line.front() == ' ') line.remove_prefix(1);
+    while (!line.empty() && line.back() == ' ') line.remove_suffix(1);
+    const std::string l = lower(line);
+    return l == "clear" || l == "cls";
+}
+
 void ConsoleModel::add_line(std::string text) {
+    SYSTEMTIME t{};
+    GetLocalTime(&t);
+    add_line(std::move(text), static_cast<uint32_t>(t.wHour) * 3600u + t.wMinute * 60u + t.wSecond);
+}
+
+void ConsoleModel::add_line(std::string text, uint32_t seconds) {
     const LineKind kind = classify_reply(text);
     const SrwExclusive lock(lock_);
-    lines_.emplace_back(kind, std::move(text));
+    lines_.push_back(ConsoleLine{kind, std::move(text), seconds % 86400u});
     while (lines_.size() > max_lines_) lines_.pop_front();
     ++version_;
+}
+
+void ConsoleModel::clear() {
+    const SrwExclusive lock(lock_);
+    lines_.clear();
+    ++version_;
+    cleared_version_ = version_;
+}
+
+uint64_t ConsoleModel::cleared_version() const {
+    const SrwShared lock(lock_);
+    return cleared_version_;
+}
+
+std::string ConsoleModel::stamp_text(uint32_t seconds) {
+    seconds %= 86400u;
+    char b[16];
+    snprintf(b, sizeof(b), "%02u:%02u:%02u", seconds / 3600u, seconds / 60u % 60u, seconds % 60u);
+    return b;
+}
+
+std::vector<ConsoleLine> ConsoleModel::lines(size_t first, size_t count) const {
+    std::vector<ConsoleLine> out;
+    const SrwShared lock(lock_);
+    for (size_t i = first; i < lines_.size() && i < first + count; ++i) out.push_back(lines_[i]);
+    return out;
+}
+
+std::string ConsoleModel::text(size_t first, size_t count, bool times) const {
+    std::string out;
+    const SrwShared lock(lock_);
+    for (size_t i = first; i < lines_.size() && i < first + count; ++i) {
+        if (i > first) out += "\r\n";
+        if (times) out += stamp_text(lines_[i].seconds) + " ";
+        out += lines_[i].text;
+    }
+    return out;
+}
+
+std::vector<size_t> ConsoleModel::find_all(std::string_view needle) const {
+    std::vector<size_t> out;
+    if (needle.empty()) return out;
+    const std::string n = lower(needle);
+    const SrwShared lock(lock_);
+    for (size_t i = 0; i < lines_.size(); ++i)
+        if (contains(lower(lines_[i].text), n)) out.push_back(i);
+    return out;
 }
 
 size_t ConsoleModel::size() const {
@@ -79,7 +139,7 @@ size_t ConsoleModel::size() const {
 std::vector<std::pair<LineKind, std::string>> ConsoleModel::snapshot(size_t first, size_t count) const {
     std::vector<std::pair<LineKind, std::string>> out;
     const SrwShared lock(lock_);  // a bad_alloc while copying must not leave the lock held (add_line would block)
-    for (size_t i = first; i < lines_.size() && i < first + count; ++i) out.push_back(lines_[i]);
+    for (size_t i = first; i < lines_.size() && i < first + count; ++i) out.emplace_back(lines_[i].kind, lines_[i].text);
     return out;
 }
 

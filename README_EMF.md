@@ -169,9 +169,15 @@ under it (green when it worked, red when it did not).
   before.
 - **Up / Down** move in the list while it shows; otherwise they go through the commands you typed before (kept in
   `<game>\emf\console_history.txt`). A command brought back from there shows no list until you type.
-- **Page Up / Page Down** and the mouse wheel scroll back; the console keeps the last 2000 lines.
-- **Esc** hides the suggestions first, then closes the console; the same key closes it at any time. Enter runs the line
-  as you typed it (take a suggestion with Tab or Right first).
+- **Page Up / Page Down** and the mouse wheel scroll back; the console keeps the last 2000 lines (`scrollback`).
+- **Ctrl+F** (or **Find**) opens a find line beside the input: the lines that hold its text (any case) get a band and the
+  newest one is shown; **Enter** goes to the next older one, **Shift+Enter** to the next newer one ("3 of 12").
+- **Copy** (or **Ctrl+Shift+C**) puts the scrollback on the clipboard, one console line per line (only the matching lines
+  while the find line finds some), with the times when they show.
+- **`clear`** (or `cls`) empties the scrollback; it is the console's own, so it also works on the main menu.
+- A time on each line (`21:04:17`) is a setting (`timestamps`, off by default; not in the notes on screen).
+- **Esc** closes the find line or hides the suggestions first, then closes the console; the same key closes it at any
+  time. Enter runs the line as you typed it (take a suggestion with Tab or Right first).
 
 While it is open the game gets no keyboard or mouse input (only key releases, so nothing stays held) and mods' hotkeys
 are paused. On the main menu, `help`, `mods`, `settings`, `set`, `profile`, `hud.*`, `saves.backup`, `saves.list`, `hooks` and `pattern` answer at once; the other
@@ -213,6 +219,8 @@ key=0x29       ; the key's scan code (0x29 = the key under Esc)
 chat=1         ; 0 turns chat commands off (below)
 suggest=1      ; 0: no suggestions as you type (Tab still completes)
 suggest_rows=8 ; at most this many suggestions (3 to 12)
+timestamps=0   ; 1: each console line shows the time it came (21:04:17)
+scrollback=2000  ; lines the console keeps, 500 to 20000 (from the next start)
 debug_keys=0   ; 1: the first 20 key presses in the console go to emf_core.log (for a report when typing fails)
 font=consolas  ; the console's font: consolas, cascadia, serif or file:<name>.ttf
 tabs_font=serif  ; the tab bar and the Mods tab: serif, consolas, cascadia or file:<name>.ttf

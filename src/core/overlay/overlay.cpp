@@ -253,6 +253,8 @@ void follow_settings() {
     if (s.has(kEmfSettingsId, "overlay.mouse_speed"))
         g_mouse_speed = static_cast<float>(s.get_float(kEmfSettingsId, "overlay.mouse_speed", g_mouse_speed));
     if (s.has(kEmfSettingsId, "overlay.suggest")) g_ui.suggest = s.get(kEmfSettingsId, "overlay.suggest") == "1";
+    if (s.has(kEmfSettingsId, "overlay.timestamps"))
+        g_ui.timestamps = s.get(kEmfSettingsId, "overlay.timestamps") == "1";
     if (s.has(kEmfSettingsId, "overlay.suggest_rows"))
         g_ui.suggester.set_rows(static_cast<size_t>(s.get_int(kEmfSettingsId, "overlay.suggest_rows", 8)));
 }
@@ -395,6 +397,10 @@ void refresh_sources() {
     for (auto& [name, text] : g_deps.center->list()) {
         commands.push_back(std::move(name));
         help.push_back(std::move(text));
+    }
+    for (const char* own : {"clear", "cls"}) {  // the console's own (draw_console's submit takes them)
+        commands.emplace_back(own);
+        help.emplace_back(": empty the console's scrollback");
     }
     if (commands != g_sources.commands || help != g_sources.command_help) {
         g_sources.commands = std::move(commands);
@@ -659,7 +665,10 @@ void build(ImVec2 display) {
     g_ui.status = g_status;
     ReleaseSRWLockShared(&g_status_lock);
     draw_console(*g_model, g_ui, g_sources, display, [](const std::string& line) {
-        submit_line(*g_deps.center, host_state(*g_deps.tracker, GetTickCount64()), line, g_deps.reply);
+        if (is_console_clear(line))  // the console's own: also on the main menu, never to the chat or commands.txt
+            g_model->clear();
+        else
+            submit_line(*g_deps.center, host_state(*g_deps.tracker, GetTickCount64()), line, g_deps.reply);
         g_model->save_history(g_history_path);
     }, mods_tab, settings_tab);
     // Esc hides the suggestions first, and cancels a key bind or console key that waits for a key
@@ -735,6 +744,13 @@ OverlayConfig read_overlay_config(const std::wstring& ini_path) {
         if (end && !*end && v >= 1 && v <= 0x7F) c.toggle_scan = static_cast<uint16_t>(v);
     }
     c.suggest = GetPrivateProfileIntW(L"overlay", L"suggest", 1, ini_path.c_str()) != 0;
+    c.timestamps = GetPrivateProfileIntW(L"overlay", L"timestamps", 0, ini_path.c_str()) != 0;
+    const std::wstring scroll = overlay_value(L"scrollback", ini_path);
+    if (!scroll.empty()) {
+        wchar_t* end = nullptr;
+        const unsigned long v = std::wcstoul(scroll.c_str(), &end, 10);
+        if (end && !*end) c.scrollback = std::clamp<size_t>(v, kMinScrollback, kMaxScrollback);
+    }
     c.debug_keys = GetPrivateProfileIntW(L"overlay", L"debug_keys", 0, ini_path.c_str()) != 0;
     const std::wstring rows = overlay_value(L"suggest_rows", ini_path);
     if (!rows.empty()) {
@@ -761,6 +777,11 @@ OverlayConfig overlay_config_with_store(OverlayConfig c, const SettingsStore& s)
     c.chat_commands = s.get(kEmfSettingsId, "overlay.chat") == "1";
     c.suggest = s.get(kEmfSettingsId, "overlay.suggest") == "1";
     c.suggest_rows = static_cast<size_t>(s.get_int(kEmfSettingsId, "overlay.suggest_rows", 8));
+    if (s.has(kEmfSettingsId, "overlay.timestamps")) c.timestamps = s.get(kEmfSettingsId, "overlay.timestamps") == "1";
+    if (s.has(kEmfSettingsId, "overlay.scrollback"))
+        c.scrollback = std::clamp<size_t>(
+            static_cast<size_t>(s.get_int(kEmfSettingsId, "overlay.scrollback", static_cast<int64_t>(c.scrollback))),
+            kMinScrollback, kMaxScrollback);
     const std::string key = s.get(kEmfSettingsId, "overlay.key");  // "0x29", checked by the store
     const unsigned long scan = std::strtoul(key.c_str(), nullptr, 16);
     if (scan >= 1 && scan <= 0x7F) c.toggle_scan = static_cast<uint16_t>(scan);
@@ -825,7 +846,8 @@ bool start_overlay(const OverlayConfig& config, OverlayDeps deps) {
     g_mouse_speed = config.mouse_speed;
     g_ui.suggest = config.suggest;
     g_ui.suggester.set_rows(config.suggest_rows);
-    g_model = std::make_unique<ConsoleModel>();
+    g_model = std::make_unique<ConsoleModel>(config.scrollback);
+    g_ui.timestamps = config.timestamps;
     g_router = std::make_unique<InputRouter>(config.toggle_scan);
     g_router->set_game_text(&game_typing_now);  // the console key types into the game's chat while it is open
     g_history_path = g_deps.emf_dir + L"\\console_history.txt";

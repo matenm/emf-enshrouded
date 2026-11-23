@@ -36,10 +36,10 @@ TEST_CASE("emf settings: every key of the spec, on its page, live or next start"
                       "overlay.tabs_font", "overlay.text_size", "overlay.height", "overlay.opacity",
                       "overlay.background", "overlay.accent", "overlay.colour_command", "overlay.colour_reply",
                       "overlay.colour_error", "overlay.colour_success", "overlay.suggest", "overlay.suggest_rows",
-                      "hud_editor.enabled", "hud_editor.show_outlines", "hud_editor.allow_with_shroudhud",
+                      "overlay.timestamps", "overlay.scrollback", "hud_editor.enabled", "hud_editor.show_outlines", "hud_editor.allow_with_shroudhud",
                       "hud_editor.key_page", "hud_editor.key_reset", "hud_editor.active_layout",
                       "console.window", "backup.on_start", "backup.keep", "backup.min_minutes"});
-    const std::vector<std::string> next_start = {"overlay.key",    "overlay.chat", "console.window",
+    const std::vector<std::string> next_start = {"overlay.key",    "overlay.chat", "overlay.scrollback", "console.window",
                                                  "backup.on_start", "backup.keep", "backup.min_minutes"};
     for (const auto& d : defs) {
         CAPTURE(d.key);

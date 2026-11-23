@@ -324,18 +324,53 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
     if (ImGui::IsKeyPressed(ImGuiKey_PageUp)) ImGui::SetScrollY(ImGui::GetScrollY() - page);
     if (ImGui::IsKeyPressed(ImGuiKey_PageDown)) ImGui::SetScrollY(ImGui::GetScrollY() + page);
     const size_t count = model.size();
+    const uint64_t version = model.version();
+    if (ui.find_open && (version != ui.find_seen_version || ui.find_text != ui.find_seen_text)) {
+        const bool new_text = ui.find_text != ui.find_seen_text;
+        ui.find_matches = model.find_all(ui.find_text);  // old lines drop off the front: indices move, so again
+        ui.find_seen_version = version;
+        ui.find_seen_text = ui.find_text;
+        if (new_text || ui.find_current >= ui.find_matches.size()) {  // typing jumps to the newest match
+            ui.find_current = ui.find_matches.empty() ? 0 : ui.find_matches.size() - 1;
+            ui.find_jump = !ui.find_matches.empty();
+        }
+    }
+    if (ui.find_jump && ui.find_current < ui.find_matches.size()) {
+        ui.find_jump = false;
+        ui.follow = false;
+        ImGui::SetScrollY((std::max)(0.0f, static_cast<float>(ui.find_matches[ui.find_current]) * line_h -
+                                               ImGui::GetWindowHeight() * 0.5f));
+    }
+    const bool marking = ui.find_open && !ui.find_matches.empty();
     ImGuiListClipper clipper;
     clipper.Begin(static_cast<int>(count), line_h);
     while (clipper.Step()) {
-        const auto lines = model.snapshot(static_cast<size_t>(clipper.DisplayStart),
-                                          static_cast<size_t>(clipper.DisplayEnd - clipper.DisplayStart));
-        for (const auto& [kind, text] : lines) {
-            ImGui::PushStyleColor(ImGuiCol_Text, line_colour(ui, kind));
-            ImGui::TextUnformatted(text.c_str(), text.c_str() + text.size());
+        const auto lines = model.lines(static_cast<size_t>(clipper.DisplayStart),
+                                       static_cast<size_t>(clipper.DisplayEnd - clipper.DisplayStart));
+        size_t index = static_cast<size_t>(clipper.DisplayStart);
+        for (const auto& line : lines) {
+            if (marking && std::binary_search(ui.find_matches.begin(), ui.find_matches.end(), index)) {
+                const bool current = ui.find_matches[ui.find_current] == index;  // a dim band, the current one brighter
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                ImGui::GetWindowDrawList()->AddRectFilled(
+                    at, ImVec2(at.x + ImGui::GetContentRegionAvail().x, at.y + line_h),
+                    ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, current ? 0.16f : 0.07f)));
+            }
+            if (ui.timestamps) {
+                const std::string stamp = ConsoleModel::stamp_text(line.seconds);
+                ImVec4 dim = ui.colour_reply;
+                dim.w *= 0.55f;
+                ImGui::PushStyleColor(ImGuiCol_Text, dim);
+                ImGui::TextUnformatted(stamp.c_str(), stamp.c_str() + stamp.size());
+                ImGui::PopStyleColor();
+                ImGui::SameLine();
+            }
+            ImGui::PushStyleColor(ImGuiCol_Text, line_colour(ui, line.kind));
+            ImGui::TextUnformatted(line.text.c_str(), line.text.c_str() + line.text.size());
             ImGui::PopStyleColor();
+            ++index;
         }
     }
-    const uint64_t version = model.version();
     if (ImGui::GetScrollY() < ImGui::GetScrollMaxY() - line_h) {
         if (io.MouseWheel > 0.0f || ImGui::IsKeyPressed(ImGuiKey_PageUp)) ui.follow = false;
     } else {
@@ -348,17 +383,33 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
     ImGui::EndChild();
 
     // Input line.
-    if (ui.escape) {  // Esc while the suggestions showed: they hide (the next Esc closes the console)
-        ui.escape = false;
-        ui.suggester.escape();
+    if (ui.escape) {  // Esc while the find line or the suggestions showed: it closes / they hide (the next Esc closes
+        ui.escape = false;  // the console)
+        if (ui.find_open) {
+            ui.find_open = false;
+            ui.focus_input = true;
+        } else {
+            ui.suggester.escape();
+        }
     }
+    // Ctrl+F opens the find line (or goes back to it); Ctrl+Shift+C copies, as the Copy button
+    if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+        ui.find_open = true;
+        ui.find_focus = true;
+    }
+    const bool copy_key = io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_C, false);
     char buf[kInputCap];
     const size_t n = (std::min)(ui.input.size(), kInputCap - 1);
     std::memcpy(buf, ui.input.data(), n);
     buf[n] = '\0';
-    ImGui::PushItemWidth(-1.0f);
+    const ImGuiStyle& footer_style = ImGui::GetStyle();
+    const float button_w = ImGui::CalcTextSize("Find").x + ImGui::CalcTextSize("Copy").x +
+                           footer_style.FramePadding.x * 4.0f + footer_style.ItemSpacing.x * 2.0f;
+    const float find_w = ui.find_open ? (std::max)(160.0f, ImGui::GetContentRegionAvail().x * 0.25f) : 0.0f;
+    const float count_w = ui.find_open ? ImGui::CalcTextSize("0000 of 0000").x + footer_style.ItemSpacing.x * 2.0f : 0.0f;
+    ImGui::PushItemWidth(-(button_w + find_w + count_w));
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(1.0f, 1.0f, 1.0f, 0.07f));
-    if (ui.focus_input) {
+    if (ui.focus_input && !ui.find_focus) {
         ImGui::SetKeyboardFocusHere();
         ui.focus_input = false;
     }
@@ -371,17 +422,73 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
     ui.accept_right = ui.suggest && ImGui::IsKeyPressed(ImGuiKey_RightArrow, false) && !io.KeyCtrl && !io.KeyShift &&
                       !io.KeyAlt && ui.caret == ui.input.size();
     const bool entered = ImGui::InputText("##input", buf, kInputCap, in_flags, input_callback, &ctx);
+    const ImVec2 input_lo = ImGui::GetItemRectMin(), input_hi = ImGui::GetItemRectMax();
+    const bool input_active = ImGui::IsItemActive();
+    const ImGuiID input_id = ImGui::GetItemID();
     ui.accept_right = false;
     ImGui::PopStyleColor();
     ImGui::PopItemWidth();
     ui.input = buf;
-    if (ui.suggest && !entered && ImGui::IsItemActive()) {  // grey ghost text completes the top match after the caret
+    // The find line: Enter goes to the next older match, Shift+Enter to the next newer one.
+    if (ui.find_open) {
+        ImGui::SameLine();
+        char fbuf[256];
+        const size_t fn = (std::min)(ui.find_text.size(), sizeof(fbuf) - 1);
+        std::memcpy(fbuf, ui.find_text.data(), fn);
+        fbuf[fn] = '\0';
+        ImGui::PushItemWidth(find_w);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(1.0f, 1.0f, 1.0f, 0.12f));
+        if (ui.find_focus) {
+            ImGui::SetKeyboardFocusHere();
+            ui.find_focus = false;
+        }
+        if (ImGui::InputTextWithHint("##find", "find", fbuf, sizeof(fbuf), ImGuiInputTextFlags_EnterReturnsTrue) &&
+            !ui.find_matches.empty()) {
+            const size_t n_matches = ui.find_matches.size();
+            ui.find_current = io.KeyShift ? (ui.find_current + 1) % n_matches : (ui.find_current + n_matches - 1) % n_matches;
+            ui.find_jump = true;
+            ui.find_focus = true;  // Enter leaves the line: back to it for the next one
+        }
+        ImGui::PopStyleColor();
+        ImGui::PopItemWidth();
+        ui.find_text = fbuf;
+        ImGui::SameLine();
+        const std::string counter = ui.find_text.empty() ? std::string()
+                                    : ui.find_matches.empty()
+                                        ? std::string("no match")
+                                        : std::to_string(ui.find_current + 1) + " of " + std::to_string(ui.find_matches.size());
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextDisabled("%s", counter.c_str());
+        ImGui::SameLine(0.0f, 0.0f);
+        ImGui::Dummy(ImVec2((std::max)(0.0f, count_w - ImGui::CalcTextSize(counter.c_str()).x - footer_style.ItemSpacing.x), 0));
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Find")) {
+        ui.find_open = !ui.find_open;
+        ui.find_focus = ui.find_open;
+        if (!ui.find_open) ui.focus_input = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Copy") || copy_key) {  // the scrollback (the matching lines while the find line finds some)
+        std::string text;
+        if (ui.find_open && !ui.find_matches.empty()) {
+            for (size_t i : ui.find_matches) {
+                if (!text.empty()) text += "\r\n";
+                text += model.text(i, 1, ui.timestamps);
+            }
+        } else {
+            text = model.text(0, model.size(), ui.timestamps);
+        }
+        ImGui::SetClipboardText(text.c_str());
+        ui.focus_input = !ui.find_open;
+    }
+    if (ui.suggest && !entered && input_active) {  // grey ghost text completes the top match after the caret
         const std::string ghost = ui.suggester.ghost();
         // not while the line is scrolled sideways (also after it got short again): the text is not where it would go
-        const ImGuiInputTextState* st = ImGui::GetInputTextState(ImGui::GetItemID());
+        const ImGuiInputTextState* st = ImGui::GetInputTextState(input_id);
         if (!ghost.empty() && st && st->Scroll.x == 0.0f) {
             const ImGuiStyle& style = ImGui::GetStyle();
-            const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+            const ImVec2 lo = input_lo, hi = input_hi;
             const float x = lo.x + style.FramePadding.x + ImGui::CalcTextSize(ui.input.c_str()).x;
             if (x + ImGui::CalcTextSize(ghost.c_str()).x <= hi.x - style.FramePadding.x) {  // only while nothing scrolls
                 ImGui::GetWindowDrawList()->AddText(ImVec2(x, lo.y + style.FramePadding.y), ImGui::GetColorU32(kGhost),
@@ -406,7 +513,7 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
     }
     if (!entered && !ImGui::IsAnyItemActive())
         ui.focus_input = true;  // keep typing going to the input line while the console is open (also after a click)
-    const ImVec2 under = ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + 2.0f);
+    const ImVec2 under = ImVec2(input_lo.x, input_hi.y + 2.0f);
     ImGui::End();
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor();
@@ -418,6 +525,7 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
         ui.wants_escape = ui.suggester.showing();
         if (ui.wants_escape) ui.completions.clear();  // one list at a time: rows that show end a Tab cycle
     }
+    if (ui.find_open) ui.wants_escape = true;  // the next Esc closes the find line
     // The Tab cycle's list under the panel (under the suggestions' hint line).
     if (ui.completions.size() > 1) {
         ImGui::SetNextWindowPos(ImVec2(under.x, below > under.y ? below + 2.0f : under.y));
@@ -438,8 +546,9 @@ void draw_console(ConsoleModel& model, ConsoleUiState& ui, const CompletionSourc
 ConsoleLines toast_lines(const ConsoleModel& model, const ToastState& toast, uint64_t now_ms, size_t max) {
     if (now_ms >= toast.until_ms) return {};
     const uint64_t version = model.version();
-    if (version <= toast.from_version) return {};
-    const uint64_t fresh = version - toast.from_version;
+    const uint64_t from = (std::max)(toast.from_version, model.cleared_version());  // lines from before a clear are gone
+    if (version <= from) return {};
+    const uint64_t fresh = version - from;
     const size_t size = model.size();
     if (fresh <= max && fresh <= size) return model.snapshot(size - static_cast<size_t>(fresh), static_cast<size_t>(fresh));
     if (max < 2) return model.snapshot(size - (std::min)(size, max), (std::min)(size, max));

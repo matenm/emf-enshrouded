@@ -38,6 +38,16 @@ struct ConsoleUiState {
     bool wants_escape = false;  // after a frame: the list shows, so the next Esc is its (InputRouter::set_esc_to_console)
     bool accept_right = false;  // this frame: Right was pressed with the caret at the end of the line
     std::string ghost_shown;    // after a frame: the grey ghost text drawn after the input ("" = none)
+    bool timestamps = false;    // each line's time in front of it ([overlay] timestamps)
+    // The find line (Ctrl+F or Find): the lines holding its text get a band, Enter goes to the next older one.
+    bool find_open = false;
+    bool find_focus = false;            // focus the find line on the next frame
+    std::string find_text;
+    std::vector<size_t> find_matches;   // line indices, oldest first
+    size_t find_current = 0;            // into find_matches
+    bool find_jump = false;             // scroll to the current match on the next frame
+    uint64_t find_seen_version = 0;     // the scrollback's version find_matches belong to
+    std::string find_seen_text;         // and the text
     // The look ([overlay] height, opacity, background, tabs_font).
     float height = 0.50f;   // the console's height, a fraction of the screen
     float opacity = 0.80f;  // its background's

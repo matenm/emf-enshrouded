@@ -119,3 +119,78 @@ TEST_CASE("console completion: settings and set complete mod ids, then a mod's s
     CHECK(complete("set clock ", src) == std::vector<std::string>{"set clock enabled", "set clock h24", "set clock place"});
     CHECK(complete("set nobody p", src).empty());
 }
+
+// ---- a time on each line, clear, copy, find (GitHub #61, #11, #60) ----
+
+TEST_CASE("console: each line keeps the time it came, shown as hh:mm:ss") {
+    ConsoleModel m(10);
+    m.add_line("> pos", 21 * 3600 + 4 * 60 + 17);
+    m.add_line("player 1 at (1, 2, 3) m", 21 * 3600 + 4 * 60 + 18);
+    const auto lines = m.lines(0, 5);
+    REQUIRE(lines.size() == 2);
+    CHECK(lines[0].kind == LineKind::Command);
+    CHECK(lines[0].text == "> pos");
+    CHECK(ConsoleModel::stamp_text(lines[0].seconds) == "21:04:17");
+    CHECK(ConsoleModel::stamp_text(lines[1].seconds) == "21:04:18");
+    CHECK(ConsoleModel::stamp_text(0) == "00:00:00");
+    CHECK(ConsoleModel::stamp_text(86399) == "23:59:59");
+    m.add_line("now");  // the clock's time of day
+    CHECK(m.lines(2, 1).at(0).seconds < 86400u);
+    CHECK(m.snapshot(0, 1).at(0).second == "> pos");  // snapshot as before
+}
+
+TEST_CASE("console: clear empties the scrollback; the version still grows and says where the clear was") {
+    ConsoleModel m(10);
+    m.add_line("a");
+    m.add_line("b");
+    const uint64_t v = m.version();
+    m.clear();
+    CHECK(m.size() == 0);
+    CHECK(m.version() > v);
+    CHECK(m.cleared_version() == m.version());
+    m.add_line("c");
+    CHECK(m.size() == 1);
+    CHECK(m.snapshot(0, 1).at(0).second == "c");
+    CHECK(is_console_clear("clear"));
+    CHECK(is_console_clear("  CLS "));
+    CHECK(is_console_clear("Clear"));
+    CHECK_FALSE(is_console_clear("clear now"));
+    CHECK_FALSE(is_console_clear("cleared"));
+    CHECK_FALSE(is_console_clear("/clear"));
+}
+
+TEST_CASE("console: the scrollback as text for the clipboard: one line each, CRLF, the times when they show") {
+    ConsoleModel m(2000);
+    CHECK(m.text(0, 10, false).empty());
+    m.add_line("> items wood", 3600);
+    m.add_line("Material_T1_Wood_Logs", 3601);
+    CHECK(m.text(0, 10, false) == "> items wood\r\nMaterial_T1_Wood_Logs");
+    CHECK(m.text(0, 10, true) == "01:00:00 > items wood\r\n01:00:01 Material_T1_Wood_Logs");
+    CHECK(m.text(1, 1, false) == "Material_T1_Wood_Logs");
+    for (int i = 0; i < 2500; ++i) m.add_line("line " + std::to_string(i));
+    const std::string all = m.text(0, m.size(), false);
+    size_t breaks = 0;
+    for (size_t at = all.find("\r\n"); at != std::string::npos; at = all.find("\r\n", at + 2)) ++breaks;
+    CHECK(breaks == 1999);  // 2000 lines, the cap
+    CHECK(all.rfind("line 2499") == all.size() - 9);
+}
+
+TEST_CASE("console: find lists the lines that hold the text, any case, oldest first") {
+    ConsoleModel m(100);
+    m.add_line("> items wood");
+    m.add_line("Material_T1_Wood_Logs");
+    m.add_line("Material_T1_Stone");
+    m.add_line("WOODEN thing");
+    CHECK(m.find_all("wood") == std::vector<size_t>{0, 1, 3});
+    CHECK(m.find_all("STONE") == std::vector<size_t>{2});
+    CHECK(m.find_all("nothing").empty());
+    CHECK(m.find_all("").empty());
+}
+
+TEST_CASE("console: the scrollback holds as many lines as it was made with") {
+    ConsoleModel m(500);
+    for (int i = 0; i < 600; ++i) m.add_line(std::to_string(i));
+    CHECK(m.size() == 500);
+    CHECK(m.snapshot(0, 1).at(0).second == "100");
+}
+

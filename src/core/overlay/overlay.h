@@ -28,6 +28,8 @@ class MarkerStore;
 class CanvasStore;
 class FogStore;
 
+constexpr size_t kMinScrollback = 500, kMaxScrollback = 20000;  // [overlay] scrollback's range
+
 struct OverlayConfig {
     bool enabled = true;
     uint16_t toggle_scan = 0x29;  // the key under Esc
@@ -35,6 +37,8 @@ struct OverlayConfig {
     float mouse_speed = 1.0f;     // the console's cursor: pixels per mouse count
     bool suggest = true;          // suggestions as you type in the console (off: Tab completes as before)
     size_t suggest_rows = 8;      // at most this many suggestions (3-12)
+    bool timestamps = false;      // the console shows each line's time ("21:04:17")
+    size_t scrollback = 2000;     // lines the console keeps (500-20000; from the next start)
     LookSettings look;            // [hud] and the look keys of [overlay] (look_settings.h)
     std::vector<std::string> look_problems;  // values in them that could not be used, one line each (for the log)
     bool debug_keys = false;  // [overlay] debug_keys=1: the first console keys go to the log (KeyDebugLog), for reports
@@ -42,7 +46,8 @@ struct OverlayConfig {
 
 // [overlay] enabled=0|1 (default 1), key=<scan code, decimal or 0x hex, 1-0x7F> (default 0x29), chat=0|1 (default 1),
 // mouse_speed=<0.1-10> (default 1), suggest=0|1 (default 1), suggest_rows=<3-12> (default 8; more or fewer are kept
-// within 3-12), debug_keys=0|1 (default 0), and the look (read_look_settings). A "; comment" after a value on the same line is not part of it.
+// within 3-12), timestamps=0|1 (default 0), scrollback=<500-20000> (default 2000; kept within), debug_keys=0|1 (default
+// 0), and the look (read_look_settings). A "; comment" after a value on the same line is not part of it.
 OverlayConfig read_overlay_config(const std::wstring& ini_path);
 
 // The config with what the store holds for EMF's own settings (the Settings tab's values, one parser): the look, the
