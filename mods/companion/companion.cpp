@@ -25,6 +25,7 @@
 // back when that world is loaded again (reload or restart) or the player joins again.
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdarg>
@@ -68,6 +69,8 @@ bool g_dedicated = false;          // inside enshrouded_server.exe: nobody is th
 std::atomic<uint16_t> g_slot{0};   // world slot of the loaded save (0 = none yet this session)
 std::atomic<uint32_t> g_loaded_session{0};  // the server session whose save has loaded (on_load)
 uint32_t g_owners_session = 0;     // the session the owners belong to (server tick only)
+uint64_t g_session_start_ms = 0;   // when the server tick first saw that session
+std::set<uint64_t> g_was_out;      // accounts whose companion was out when the last session ended (server tick only)
 companion::Owners g_owners;        // one set per player (owners.h)
 uint8_t g_marker_guid[16] = {};    // what "Stay here" spawns for the companion to guard
 constexpr const char* kDefaultMarker = "0ce28db1-522f-4455-b358-3888fb5e089b";  // Prop_Deco_Steppeprops_Barrel_01
@@ -641,8 +644,12 @@ void return_piece(emf::World w, Owner& o, const companion::Piece& p) {
     const uint32_t item = p.item, token = p.token;
     const std::string name = item_name(w, item);
     const uint64_t account = o.account;
+    const uint32_t session = emf::server_session();
     const bool queued = emf::put_items_ex(w, o.player, item, 1, p.level, p.rarity,
-                                          [token, name, account](emf::World w2, uint32_t added) {
+                                          [token, name, account, session](emf::World w2, uint32_t added) {
+                                              // an answer for the session before (EMF answers 0 when the next starts)
+                                              // must not touch this session's tokens
+                                              if (session != emf::server_session()) return;
                                               Owner* me = g_owners.find(account);
                                               if (!me) return;
                                               note_put_outcome(w2, *me,
@@ -685,8 +692,10 @@ void give_piece(emf::World w, Owner& o, const GearCandidate& c) {
     const uint64_t from = (static_cast<uint64_t>(c.slot_index) << 32) | c.inventory;
     const uint32_t pide = c.pide;
     const uint64_t account = o.account;
-    const bool queued = emf::take_items(w, o.player, c.item, 1, from, [slot, name, pide, account](emf::World w2,
-                                                                                                uint32_t taken) {
+    const uint32_t session = emf::server_session();
+    const bool queued = emf::take_items(w, o.player, c.item, 1, from, [slot, name, pide, account, session](
+                                                                           emf::World w2, uint32_t taken) {
+        if (session != emf::server_session()) return;  // an answer for the session before
         Owner* me = g_owners.find(account);
         if (!me) return;
         const auto back = me->gear.on_take_result(slot, taken > 0, GetTickCount64());
@@ -782,17 +791,23 @@ void read_keys(emf::World w, Owner& o, uint64_t now) {
 // loaded), a new entity for one who came back, and a companion dismissed for one who left (it comes back with them).
 void update_players(emf::World w, uint64_t now, uint32_t session) {
     const uint32_t host = g_dedicated ? 0 : emf::local_player();
-    if (!g_dedicated && !host) return;  // the host's own player is not known yet: whose file is the old one waits
     const bool world_loaded = g_loaded_session == session;
+    const std::vector<uint32_t> players = emf::players(w);
+    // On a game, whose file is the old one waits until the host's own player is among the world's players and the save
+    // has loaded (or a minute passed without a load notice): right after a reload local_player() may still name the
+    // old entity.
+    if (!g_dedicated && (!host || std::find(players.begin(), players.end(), host) == players.end() ||
+                         (!world_loaded && now - g_session_start_ms < companion::SummonPolicy::kLoadFallbackMs)))
+        return;
     std::set<uint64_t> present;
-    for (uint32_t p : emf::players(w)) {
+    for (uint32_t p : players) {
         const uint64_t account = emf::player_account(w, p);
         if (!account) continue;
         present.insert(account);
         Owner* o = g_owners.find(account);
         if (!o) {
             o = &g_owners.get(account, p == host, g_policy_defaults, g_catch_defaults);
-            o->begin(session, now);
+            o->begin(session, now, g_was_out.count(account) > 0);
             o->player = p;
             EMF_LOG(kMod, "player %u (%s) is in the world", p,
                     o->host ? "the host" : format("account %016llx", static_cast<unsigned long long>(account)).c_str());
@@ -804,10 +819,11 @@ void update_players(emf::World w, uint64_t now, uint32_t session) {
                 o->player = p;
             }
         }
+        o->seen();
         if (world_loaded && !o->loaded) load_state(*o, now);
     }
     g_owners.each([&](Owner& o) {
-        if (!o.player || present.count(o.account)) return;
+        if (!o.player || present.count(o.account) || !o.missing()) return;  // two checks in a row without them
         const uint32_t was = o.player;
         for (const uint32_t marker : o.on_left()) emf::api()->destroy(w.raw(), marker);
         EMF_LOG(kMod, "player %u (account %016llx) left: %s", was, static_cast<unsigned long long>(o.account),
@@ -870,9 +886,10 @@ void on_tick(emf::World w) {
     if (!w.is_server()) return;
     const uint64_t now = GetTickCount64();
     const uint32_t session = emf::server_session();
-    if (session != g_owners_session) {  // a new session (another world, a reload): nobody's set carries over
-        g_owners_session = session;
-        g_owners.clear();
+    if (session != g_owners_session) {  // a new session (another world, a reload): nobody's set carries over, but a
+        g_owners_session = session;      // companion that was out is wanted again (as after a reload)
+        g_session_start_ms = now;
+        g_was_out = g_owners.clear();
         g_last_check_ms = 0;
     }
     g_owners.each([&](Owner& o) {

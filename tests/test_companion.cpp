@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <fstream>
 #include <map>
+#include <set>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -1232,6 +1233,8 @@ TEST_CASE("owners: the server's limit counts every player's companion out or com
     Owner& b = all.get(0xBB, false, {}, companion::CatchUp{});
     a.begin(1, 0);
     b.begin(1, 0);
+    a.player = 1;  // both in the world
+    b.player = 2;
     CHECK(all.out_count() == 0);
     CHECK(all.may_summon(1, false));
     a.companion.on_spawned(50, 1, 0, 0x1000);
@@ -1244,6 +1247,42 @@ TEST_CASE("owners: the server's limit counts every player's companion out or com
     CHECK(all.out_count() == 2);
     CHECK(all.may_summon(2, true));
     CHECK(!all.may_summon(2, false));
+    b.on_left();  // b left: their companion (coming) holds no place while they are away
+    CHECK(all.out_count() == 1);
+    a.on_left();  // a left with theirs out: none of the world's places is held
+    CHECK(all.out_count() == 0);
+    CHECK(all.may_summon(1, false));
+}
+
+TEST_CASE("owners: a companion out when the session ends is wanted in the next, also without a load notice") {
+    Owners all;
+    Owner& a = all.get(0xAA, true, {}, companion::CatchUp{});
+    Owner& b = all.get(0xBB, false, {}, companion::CatchUp{});
+    a.begin(1, 0);
+    b.begin(1, 0);
+    a.companion.on_spawned(50, 1, 0, 0x1000);
+    a.policy.on_summoned(true);
+    const std::set<uint64_t> out = all.clear();
+    CHECK(out == std::set<uint64_t>{0xAA});
+    CHECK(all.size() == 0);
+    Owner& a2 = all.get(0xAA, true, {}, companion::CatchUp{});
+    a2.begin(2, 1000, out.count(0xAA) > 0);
+    CHECK(a2.policy.coming());
+    CHECK(!a2.policy.due(1000 + 1000));
+    CHECK(a2.policy.due(1000 + companion::SummonPolicy::kLoadFallbackMs));  // the save never said it loaded: it comes
+    Owner& b2 = all.get(0xBB, false, {}, companion::CatchUp{});
+    b2.begin(2, 1000, out.count(0xBB) > 0);
+    CHECK(!b2.policy.coming());
+}
+
+TEST_CASE("owners: a player's companion is dismissed only when they are missing from two checks in a row") {
+    Owner b(0xBB, false, {}, companion::CatchUp{});
+    b.begin(1, 0);
+    b.player = 2;
+    CHECK(!b.missing());  // one check without them: maybe a moment without their position
+    b.seen();
+    CHECK(!b.missing());
+    CHECK(b.missing());  // the second in a row
 }
 
 TEST_CASE("owners: a player's file brings back their gear and order, and their companion when it was out") {
@@ -1298,6 +1337,23 @@ TEST_CASE("owners: a player who leaves has their companion dismissed and back wh
     CHECK(!c.saved().out);
     c.on_back(4, 10000);
     CHECK(!c.policy.coming());
+}
+
+TEST_CASE("owners: coming back to the world often (a shaky connection) never counts as losing the companion") {
+    Owner b(0xBB, false, {}, companion::CatchUp{});
+    b.begin(1, 0);
+    for (int i = 0; i < 6; ++i) {
+        CAPTURE(i);
+        b.player = 2;
+        b.companion.on_spawned(60, 2, 0, 0x1000);
+        b.policy.on_summoned(i == 0);  // called by hand once; after that it comes back by itself
+        b.on_left();
+        uint32_t guard = 0, guarded = 0;
+        b.companion.take_stop(&guard, &guarded);
+        b.companion.take_destroy();
+        b.on_back(3, 1000 + static_cast<uint64_t>(i) * 10000);  // six times within a minute
+        CHECK(b.policy.lost_pending());
+    }
 }
 
 TEST_CASE("owners: companion.as reads the player entity and the word after the command's own name") {

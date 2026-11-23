@@ -12,6 +12,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,7 @@ struct Owner {
     std::atomic<bool> died{false};  // the program saw its companion die; taken by the server tick
     bool away_out = false;          // it was out when they left: it comes back when they return (and the file says out)
     bool loaded = false;            // their file was read this session
+    int missed = 0;                 // checks in a row that did not find them in the world
     std::string saved_text;         // what their file holds now
     bool return_after_load = false;  // pieces left "returning" by a crash go back once they are in the world
     std::atomic<uint32_t> taken_pide{0};
@@ -51,8 +53,11 @@ struct Owner {
     uint64_t last_level_ms = 0;
     uint64_t last_report_ms = 0;
 
-    // First seen this session (an owner lives for one session): auto_summon wants one from now on.
-    void begin(uint32_t session, uint64_t now_ms) {
+    // First seen this session (an owner lives for one session): auto_summon wants one from now on, and so does
+    // `was_out` (their companion was out when the last session ended: it comes back as after a reload, also when no load
+    // notice comes and their file is never read).
+    void begin(uint32_t session, uint64_t now_ms, bool was_out = false) {
+        if (was_out) policy.on_summoned();
         policy.on_session(session, now_ms);
         orders.on_session(session);
     }
@@ -73,6 +78,10 @@ struct Owner {
         s.gear = gear.serialize();
         return s;
     }
+    // Once a second, they are in the world.
+    void seen() { missed = 0; }
+    // Once a second, they are not: true from the second check in a row (one check may miss them for a moment).
+    bool missing() { return ++missed >= 2; }
     // They left the world: a companion out is dismissed and comes back when they return, its order kept. The markers
     // to destroy now.
     std::vector<uint32_t> on_left() {
@@ -88,7 +97,7 @@ struct Owner {
         player = entity;
         if (!away_out) return;
         away_out = false;
-        policy.on_summoned();
+        policy.on_summoned(true);  // coming back with them is no loss: the count of losses starts over
         policy.on_lost(now_ms);
     }
 };
@@ -137,10 +146,15 @@ public:
         auto it = owners_.find(account);
         return it == owners_.end() ? nullptr : it->second.get();
     }
-    // A new session (another world, a reload): nobody's set carries over.
-    void clear() {
+    // A new session (another world, a reload): nobody's set carries over. The accounts whose companion was out (or away
+    // with them), for begin()'s was_out.
+    std::set<uint64_t> clear() {
+        std::set<uint64_t> out;
+        for (const auto& [account, o] : owners_)
+            if (o->companion.phase() == Companion::Phase::Active || o->away_out) out.insert(account);
         std::lock_guard<std::mutex> l(m_);
         owners_.clear();
+        return out;
     }
     // Every owner: `fn(Owner&)`. The server tick calls it without the lock (it alone changes the map); the program
     // inside lock().
@@ -156,11 +170,12 @@ public:
             if (o->companion.entity() == entity) return o.get();
         return nullptr;
     }
-    // Companions out or coming back, of every player.
+    // Companions out or coming back, of every player in the world (one who left holds no place: theirs asks for one
+    // again when they return).
     size_t out_count() const {
         size_t n = 0;
         for (const auto& [account, o] : owners_)
-            n += o->companion.phase() == Companion::Phase::Active || o->policy.coming() || o->away_out;
+            n += o->player && (o->companion.phase() == Companion::Phase::Active || o->policy.coming());
         return n;
     }
     // Whether one more may be summoned with the server's limit `max` (0: no limit). `coming`: this one is counted
