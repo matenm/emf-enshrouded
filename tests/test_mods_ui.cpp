@@ -683,6 +683,18 @@ TEST_CASE("mods ui: the filter keeps the mods whose name, id, description or aut
     CHECK_FALSE(mod_matches(r, "clock"));
 }
 
+TEST_CASE("mods ui: the filter ignores case in every language, not only A-Z") {
+    ModRecord r;
+    r.id = "aero";
+    r.name = "Ærø Verktøy";
+    r.authors = "Ödön Šťastný";
+    CHECK(mod_matches(r, "ærø"));
+    CHECK(mod_matches(r, "VERKTØY"));
+    CHECK(mod_matches(r, "ödön"));
+    CHECK(mod_matches(r, "ŠŤASTNÝ"));
+    CHECK_FALSE(mod_matches(r, "æøå"));
+}
+
 TEST_CASE("mods ui: with a filter the list shows the matches; the chosen mod stays chosen while it is filtered out") {
     Headless h;
     std::vector<ModRecord> mods;

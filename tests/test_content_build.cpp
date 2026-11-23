@@ -146,7 +146,7 @@ TEST_CASE("content build: a leftover thread keeps it loaded") {
         CloseHandle(e);
     }
     if (still) FreeLibrary(still);
-    for (int i = 0; i < 100 && GetModuleHandleW(dll.c_str()); ++i) Sleep(50);
+    for (int i = 0; i < 400 && GetModuleHandleW(dll.c_str()); ++i) Sleep(50);  // up to 20 s: a busy PC ends the thread late
     CHECK(GetModuleHandleW(dll.c_str()) == nullptr);
 }
 

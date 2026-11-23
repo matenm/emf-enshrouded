@@ -259,10 +259,17 @@ bool mod_matches(const ModRecord& r, std::string_view filter) {
     while (!filter.empty() && filter.front() == ' ') filter.remove_prefix(1);
     while (!filter.empty() && filter.back() == ' ') filter.remove_suffix(1);
     if (filter.empty()) return true;
-    const auto low = [](std::string s) {
-        for (char& c : s)
-            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
-        return s;
+    // lower case in every language (Windows' own table: "Ærø" is "ærø"), UTF-8 in and out
+    const auto low = [](const std::string& s) {
+        const int n = s.empty() ? 0 : MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+        if (n <= 0) return s;
+        std::wstring w(static_cast<size_t>(n), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), w.data(), n);
+        CharLowerBuffW(w.data(), static_cast<DWORD>(w.size()));
+        const int m = WideCharToMultiByte(CP_UTF8, 0, w.data(), n, nullptr, 0, nullptr, nullptr);
+        std::string out(static_cast<size_t>(m > 0 ? m : 0), '\0');
+        if (m > 0) WideCharToMultiByte(CP_UTF8, 0, w.data(), n, out.data(), m, nullptr, nullptr);
+        return out;
     };
     const std::string all = low(r.name + " " + r.id + " " + r.description + " " + r.authors);
     return all.find(low(std::string(filter))) != std::string::npos;
