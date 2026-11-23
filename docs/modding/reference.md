@@ -1400,7 +1400,7 @@ the ground right next to a hole loses up to one cell (seen live; the game's own 
 Terrain breaking (v47) clears exactly its cells.
 
 At most 64 breaks wait, and at most 8 spheres run per server step (all mods together; the rest wait their turn), so a
-burst of breaks never changes more than the game's ring of changed boxes holds. One 3.5 m break cost less than 1 ms of
+burst of breaks is spread over several steps (the game's world update reads a ring of 64 changed boxes a step). One 3.5 m break cost less than 1 ms of
 a step (seen live). Refusals (in `req->why`): not a server world (a joined game cannot break blocks), not available on
 this game version (a signature missing after an update), off after a fault, bad numbers (radius, height, damage,
 materials, flags, a point that is no number), 64 waiting. C++: `emf::has_v44()`, `emf::break_blocks(w, req, cb, user)`,

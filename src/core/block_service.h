@@ -1,7 +1,7 @@
 #pragma once
 // Breaking blocks (API v44): mods' break requests, queued and run by EMF's internal server program emf_blocks at the
 // next step (block_glue.cpp gives it the game's calls; tests give fakes). At most kBlockMaxSpheres kernel calls a step,
-// so a burst of breaks never changes more than the game's ring of changed boxes holds (64) in one step.
+// so a burst of breaks is spread over several steps (the game's world update reads a ring of 64 changed boxes a step).
 #include <windows.h>
 
 #include <cstdint>
