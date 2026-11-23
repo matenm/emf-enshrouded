@@ -111,7 +111,7 @@ inline std::optional<std::string> chained_tool_by_text(const ToolLook& look) {
 inline std::optional<std::string> other_content_tool(const ToolLook& look, bool read_dbghelp, bool read_chain) {
     // Kiln loads the game's mods (EMF too, as one of its chain entries) and applies their content with its own EML layer
     // and ShroudForge: an EMF build would replace that data
-    if (look.exists && look.exists(L"kiln\\kiln.json")) return std::string("Kiln (its EML layer and ShroudForge)");
+    if (look.exists && look.exists(L"kiln\\kiln.json")) return std::string("Kiln (kiln\\kiln.json in the game folder)");
     if (look.exists && look.exists(L"dbghelp.dll")) {
         const std::string name = read_dbghelp && look.tool_name ? look.tool_name(L"dbghelp.dll") : std::string();
         return name.empty() ? std::string("dbghelp.dll (EML or ShroudForge)") : name;

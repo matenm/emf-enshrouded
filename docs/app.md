@@ -821,8 +821,8 @@ times, the mods' `mod.json`, `emf\content\client\emf_content_state.json` and `sh
   try the same files again).
 - **Let EMF load EML content**, offered (and allowed) only when it can work: the `dbghelp.dll` is EML's by the
   folder's own `emf\known_tools.txt` (as the loader reads it; never ShroudForge's, which starts the game its own way),
-  `emf_content.dll` is there, When to apply is not Off, and no EML or ShroudForge DLL in `dinput8-chain.ini` would
-  still apply the content. Before the player agrees, the card lists the EML mods EML loads now that EMF would leave
+  `emf_content.dll` is there, When to apply is not Off, Kiln is not in the game folder (`kiln\kiln.json`: Kiln applies
+  the content there), and no EML or ShroudForge DLL in `dinput8-chain.ini` would still apply the content. Before the player agrees, the card lists the EML mods EML loads now that EMF would leave
   out (above all those that need EML's runtime loader, and `.zip` mods): they stop working until EML's `dbghelp.dll`
   is given back. It is renamed to `eml-dbghelp.dll` (`eml-dbghelp-2.dll` when that is taken), recorded first in
   `emf\moved.txt` as `set-aside<TAB>eml-dbghelp.dll<TAB>dbghelp.dll`, and never listed in `dinput8-chain.ini`. **Give

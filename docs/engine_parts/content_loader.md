@@ -25,7 +25,8 @@ The checks, in this order; the first that says no decides, and the loader writes
    core.)
 3. Not the game: only `enshrouded.exe` and the dedicated server, `enshrouded_server.exe` (below), get EML content, no
    other program that loads the DLL.
-4. Another tool applies it: a `dbghelp.dll` in the game folder (EML's or ShroudForge's proxy), or EML's or
+4. Another tool applies it: Kiln (`kiln\kiln.json` in the game folder: Kiln's EML layer and ShroudForge apply it), a
+   `dbghelp.dll` in the game folder (EML's or ShroudForge's proxy), or EML's or
    ShroudForge's `dinput8.dll` in `dinput8-chain.ini` (by the names EMF's installer gives them, `eml.dll` and
    `shroudforge.dll`; under another name by its text). `mode=on` never overrides another tool.
 5. `emf\emf_content.dll` is not there.

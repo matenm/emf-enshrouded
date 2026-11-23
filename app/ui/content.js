@@ -17,7 +17,7 @@ const CONTENT_BADGE = {
   other_tool: ['eml', 'Other tool'], not_installed: ['quiet', 'Not installed'],
 };
 const CONTENT_MODES = [
-  ['auto', 'Automatic', 'EMF builds it when EML and ShroudForge are not there (the default).'],
+  ['auto', 'Automatic', 'EMF builds it when no other tool (EML, ShroudForge or Kiln) applies it (the default).'],
   ['on', 'On', 'The same, and the game’s console says why when EMF does not build it.'],
   ['off', 'Off', 'EMF never builds EML content.'],
 ];

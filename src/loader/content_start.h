@@ -70,7 +70,8 @@ struct FactsIo {
     std::function<BaseChoice()> base;
 };
 
-// Asks only what the decision needs: a start without emf_content.dll looks for the DLL and another tool's dbghelp.dll
+// Asks only what the decision needs: a start without emf_content.dll looks for the DLL, Kiln and another tool's
+// dbghelp.dll
 // and reads no DLL and no mod folder. Reading the chained DLLs' text comes after the mods, just before the base.
 // `game`: the exe is the game client or the dedicated server.
 inline ContentFacts collect_facts(const FactsIo& io, PlayOnce play, bool server, bool game = true) {

@@ -114,6 +114,8 @@ Kiln's own notes list what is not there yet.
   in EMF.exe or the in-game Mods list).
 - EMF leaves EML content to Kiln: with `kiln\kiln.json` in the game folder it never builds the EML mods itself, since
   Kiln applies them (its EML layer and ShroudForge) and two builds of the game data would undo each other's.
+- Never copy EMF's `dinput8.dll` over Kiln's: Kiln would no longer start, and EMF would still leave the EML content to
+  it. Follow Kiln's own instructions for running EMF next to it.
 
 ## For authors of DLL mods
 
