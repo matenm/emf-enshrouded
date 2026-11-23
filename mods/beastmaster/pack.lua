@@ -274,6 +274,7 @@ function P:spawn(world, owner, account, beast)
 	beast.entity = id
 	beast.out = true
 	self.ids[id] = { account = account, beast = beast }
+	if self.env.bag and species.is_carrier(beast.species) then self.env.bag:spawned(world, account, id, owner) end
 	return id
 end
 
@@ -520,6 +521,7 @@ end
 function P:dismiss(world, account, beast)
 	if not beast.out then return beast.name .. " is not out." end
 	self.idle:stop(world, account)  -- every beast of theirs gets up
+	if beast.entity and self.env.bag then self.env.bag:gone(world, beast.entity) end  -- a pack beast's bag is kept
 	if beast.entity and ours(world, beast.entity) then emf.destroy(world, beast.entity) end
 	if beast.entity then
 		self.ids[beast.entity] = nil
@@ -981,6 +983,7 @@ function P:step(world)
 						self.env.save()
 					end
 				elseif not owner or away then
+					if self.env.bag then self.env.bag:gone(world, b.entity) end  -- a pack beast's bag is kept
 					emf.destroy(world, b.entity)  -- the owner left, or it steps aside: back when that ends (still out)
 					self.ids[b.entity] = nil
 					b.entity = nil

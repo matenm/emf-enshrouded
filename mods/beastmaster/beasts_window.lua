@@ -376,7 +376,7 @@ function W:release(world, b)
 	local c = self.confirm
 	if c and c.name == b.name and now - c.at <= CONFIRM_S then
 		self.selected, self.confirm, self.tab = nil, nil, "stable"
-		self.note = self.env.release(world, self.account, b)
+		self.note = self.env.release(world, self.account, b, self.player)
 		return
 	end
 	self.confirm = { name = b.name, at = now }

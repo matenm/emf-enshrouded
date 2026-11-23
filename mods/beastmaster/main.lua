@@ -76,10 +76,11 @@ local function open_slots(world, player)
 end
 
 local training  -- the beasts in training at a Training Grounds (made below; save() writes its lines)
+local bag  -- the pack llama's bag (bag.lua, made below)
 local function save()
 	if not loaded then return end
 	local text = beasts:serialize()
-	for _, more in ipairs({ stables:serialize(), training and training:serialize() or "" }) do
+	for _, more in ipairs({ stables:serialize(), training and training:serialize() or "", bag and bag:serialize() or "" }) do
 		if more ~= "" then text = text ~= "" and (text .. "\n" .. more) or more end
 	end
 	emf.save_world_data(text)
@@ -99,7 +100,15 @@ local markers = markers_mod.new({ setting = setting, now = now })
 -- the beasts out in the world
 local home  -- the beasts at home in a Large Stable (made below)
 local trainees  -- the beasts in training shown at their Training Grounds (made below)
+-- the pack llama's bag (bag.lua): kept with the world, put back when it comes
+bag = require("bag").new({
+	now = now,
+	tell = tell,
+	name_of = function() return nil end,
+	save = function() save() end,
+})
 local pack = pack_mod.new({
+	bag = bag,
 	setting = setting,
 	now = now,
 	tell = tell,
@@ -174,6 +183,7 @@ emf.on_world_data(function(world, text)
 	beasts = roster.parse(text)
 	stables:load(text)
 	training:load(text)
+	bag:load(text)
 	window:reset()
 	if remote then remote:reset() end
 	release_asked = {}
@@ -279,8 +289,9 @@ function stable_do.store(world, account, b)
 	return b.name .. " goes to the stable."
 end
 
-function stable_do.release(world, account, b)
+function stable_do.release(world, account, b, player)
 	pack:release(world, account, b)
+	if species.is_carrier(b.species) then bag:release(world, account, player) end  -- what it carried goes to its owner
 	return b.name .. " is gone: you let it go."
 end
 
@@ -742,7 +753,7 @@ stable_command("release", "<name or number>: let a beast go for good (at a stabl
 		local asked = release_asked[account]
 		if asked and asked.name == b.name and t - asked.at <= CHAT_CONFIRM_S then
 			release_asked[account] = nil
-			return stable_do.release(world, account, b)
+			return stable_do.release(world, account, b, player)
 		end
 		release_asked[account] = { name = b.name, at = t }
 		return string.format("Type the same command again within %d s to let %s go for good.", CHAT_CONFIRM_S, b.name)
@@ -1015,6 +1026,7 @@ emf.on_tick(function(world)
 	stables:step(world)
 	taming:step(world)
 	pack:step(world)
+	bag:step(world)
 	markers:step(world, pack.present, pack.ids, stables.stables)
 	home:step(world)
 	trainees:step(world)

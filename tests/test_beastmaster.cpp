@@ -4862,6 +4862,85 @@ TEST_CASE("stable: E Open at a stable opens the Beasts window for the host and t
     CHECK(told(b, 1, "/beastmaster active"));
 }
 
+namespace {
+// The pack llama's bag as the game keeps it: its InventorySetup links one 8-slot inventory entity.
+void bag_of(BeastRig& b, uint32_t llama, uint32_t inv) {
+    auto& setup = component<ecs::InventorySetup>(b.r.fake, llama);
+    setup.linksEntities[0].id = inv;
+    setup.isInitialized = true;
+    component<ecs::Inventory>(b.r.fake, inv);
+}
+void in_bag(BeastRig& b, uint32_t inv, int slot, uint32_t item, uint32_t count, uint32_t pide = 0) {
+    auto& s = live_of<ecs::Inventory>(b, inv).slots[slot];  // the inventory bag_of made (component() would zero it)
+    s.id.value = item;
+    s.data.count = count;
+    s.data.pide.id = pide;
+}
+}  // namespace
+
+TEST_CASE("pack beast: the bag opens with the game's chest screen; its items are kept with the world and come back with the llama") {
+    BeastRig b({{"call_cooldown_s", "0"}, {"call_mana_pct", "0"}});
+    with_offers(b.r.api);
+    b.reply("beastmaster.give packllama");
+    b.spawnable(2);
+    REQUIRE(b.reply("beastmaster.pack").find("comes") != std::string::npos);  // entity 1234
+    REQUIRE(offers_on(b, 1234) >= 1u);
+    CHECK(last_offer(b, 1234)->o.verb == EMF_VERB_OPEN);
+    CHECK(last_offer(b, 1234)->o.sequence == EMF_SEQUENCE_CHEST);
+    // what its owner puts in: 7 of a material, and a sword at level 12, epic
+    bag_of(b, 1234, 5000);
+    in_bag(b, 5000, 0, 0x111, 7);
+    in_bag(b, 5000, 1, 0x222, 1, 5001);
+    auto& sword = component<ecs::ItemState>(b.r.fake, 5001);
+    sword.itemLevelUi = 12;
+    sword.itemRarityUi = static_cast<emf::gen::ItemRarity>(3);
+    b.seconds(2);
+    CHECK(b.saved().find("c 0x00000000000000aa 273 7 0 0") != std::string::npos);
+    CHECK(b.saved().find("c 0x00000000000000aa 546 1 12 3") != std::string::npos);
+    // another player's E: told whose bag it is
+    const Fake::Off* o = last_offer(b, 1234);
+    o->cb(kServer, 2, 1234, o->user);
+    CHECK(told(b, 2, "Only"));
+    CHECK(b.reply("beastmaster.pack") == "Pack llama goes home.");
+    CHECK(b.saved().find("c 0x00000000000000aa 273 7 0 0") != std::string::npos);  // kept while it is home
+    // called again: once the game set up its new inventory, every stack goes back in, the sword at its level
+    REQUIRE(b.reply("beastmaster.pack").find("comes") != std::string::npos);  // entity 1235
+    const size_t before = b.r.fake.puts.size();
+    bag_of(b, 1235, 5010);
+    b.seconds(1);
+    REQUIRE(b.r.fake.puts.size() == before + 2);
+    const EmfItemsRequest& p1 = b.r.fake.puts[before];
+    const EmfItemsRequest& p2 = b.r.fake.puts[before + 1];
+    CHECK(p1.entity == 1235u);
+    CHECK(p1.item == 0x111u);
+    CHECK(p1.count == 7u);
+    CHECK(p2.item == 0x222u);
+    CHECK(p2.level == 12u);
+    CHECK(p2.rarity == 3u);
+    // before the game answers, its empty new bag never replaces what was kept
+    b.seconds(2);
+    CHECK(b.saved().find("c 0x00000000000000aa 273 7 0 0") != std::string::npos);
+}
+
+TEST_CASE("pack beast: a pack llama let go for good gives what it carried to its owner") {
+    BeastRig b({{"call_cooldown_s", "0"}, {"call_mana_pct", "0"}});
+    with_offers(b.r.api);
+    write(b.data, "b 0x00000000000000aa packllama 0 0 Pack llama\nc 0x00000000000000aa 273 7 0 0\n"
+                  "c 0x00000000000000aa 546 1 12 3\n");
+    b.r.fake.session = 2;
+    fire_load(1);
+    b.seconds(1);
+    at_stable(b);
+    const size_t before = b.r.fake.puts.size();
+    b.reply("beastmaster.release Pack llama");
+    CHECK(b.reply("beastmaster.release Pack llama").find("is gone") != std::string::npos);
+    REQUIRE(b.r.fake.puts.size() == before + 2);
+    CHECK(b.r.fake.puts[before].entity == 1u);  // into its owner's inventory
+    CHECK(b.r.fake.puts[before].count == 7u);
+    CHECK(b.r.fake.puts[before + 1].level == 12u);
+    CHECK(b.saved().find("c 0x00000000000000aa") == std::string::npos);  // nothing kept for it any more
+}
+
 TEST_CASE("stable: the E key opens the Beasts window only at a stable without the prompt") {
     BeastRig b;
     with_offers(b.r.api);

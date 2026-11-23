@@ -173,6 +173,21 @@ brings it back).
   beasts back to the stable.
 - `/beastmaster train` with no name says where your beasts train and how far they are to the next point.
 
+## The pack llama (with the wilds pack and EMF's Lua 1.42)
+
+A llama that carries your things. It follows you like your beasts but never fights: it is never sent at a monster,
+the game's fights are taken off it at once, and monsters are never drawn to it. It has a slot of its own: it comes
+whatever your active slots, one per player, and it is not counted in your collection or your stable.
+
+- **Call it** with `/beastmaster pack` (again: it goes home), the wheel's **Call Pack llama**, or **Call** in the Beasts
+  window's **Pack beast** row.
+- **Its bag:** **E Open** at the llama shows the game's own chest screen, 16 slots. Only its owner opens it; anyone
+  else is told whose bag it is.
+- **Nothing is lost:** what is in the bag is kept with the world (second by second, and when it goes home, steps aside
+  or you leave) and goes back in when it comes again. Gear keeps its level and rarity; its wear is mended.
+- **Let go for good** (Release at a stable): what it carried goes into your inventory, the rest drops at your feet.
+- For now it is given by the host (`beastmaster.give packllama`); a harness to craft is coming.
+
 ## Talents
 
 Each loyalty above 1 gives a beast a **talent point** (9 at loyalty 10). Spend them at a stable: on the beast's tab of
