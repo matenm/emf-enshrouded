@@ -73,14 +73,22 @@ public:
         if (players_state_ == PlayersState::Unreadable && file_session_ == session && read_loads_ == loads && file_slot_)
             load_players();  // another program had it open: read it again
         if (loaded_session_ != session || (file_session_ == session && read_loads_ == loads) || !slot_) return false;
-        file_slot_ = slot_;
         std::string text;
-        if (!read_into(path(), text)) {  // there, but another program holds it: never handed over as "" (no file)
+        const std::wstring file = file_of(slot_);
+        if (!read_into(file, text)) {  // there, but another program holds it: never handed over as "" (no file)
+            // nothing of this world is read: the last world's text and slot are not this one's
+            file_slot_ = 0;
+            written_.clear();
+            if (unreadable_loads_ != loads) {  // said once per world load
+                unreadable_loads_ = loads;
+                unreadable_said_ = false;
+            }
             say_once(unreadable_said_, "could not read %ls (another program has it open?): the mod's world data waits until it can",
-                     path().c_str());
+                     file.c_str());
             return false;  // not read: not ready, so nothing is saved over it; the next poll tries again
         }
         unreadable_said_ = false;
+        file_slot_ = slot_;
         file_session_ = session;
         read_loads_ = loads;
         written_ = text;
@@ -94,16 +102,13 @@ public:
         return api_ && file_slot_ && file_slot_ == slot_ && file_session_ && file_session_ == api_->server_session() &&
                read_loads_ == loads_ && clock_() - last_poll_ms_ <= kLiveMs;
     }
-    // What the file holds: the text read by the last poll, or saved since.
+    // What the file holds: the text read by the last poll, or saved since ("" while a newly loaded world's file could
+    // not be read yet).
     const std::string& text() const { return written_; }
-    // The world slot whose file was read (save writes only there); 0 before the first read.
+    // The world slot whose file was read (save writes only there); 0 before the first read, and while a newly loaded
+    // world's file could not be read yet.
     uint16_t slot() const { return file_slot_; }
-    std::wstring path() const {
-        if (!file_slot_) return {};
-        wchar_t name[16];
-        swprintf(name, 16, L"\\%04x.txt", static_cast<unsigned>(file_slot_));
-        return dir_ + name;
-    }
+    std::wstring path() const { return file_slot_ ? file_of(file_slot_) : std::wstring(); }
 
     // Writes `text` when it differs from what the file holds. False when not ready() or on a write error (logged).
     bool save(const std::string& text) {
@@ -272,6 +277,13 @@ private:
         return true;
     }
 
+    // World slot `slot`'s file.
+    std::wstring file_of(uint16_t slot) const {
+        wchar_t name[16];
+        swprintf(name, 16, L"\\%04x.txt", static_cast<unsigned>(slot));
+        return dir_ + name;
+    }
+
     std::wstring default_dir() const {
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
@@ -307,6 +319,7 @@ private:
     std::string written_;
     std::wstring failed_path_;          // the world file whose write failure was logged
     bool unreadable_said_ = false;      // the log said the world file could not be read (until it could)
+    uint32_t unreadable_loads_ = 0;     // the world load that was said for (each load says it once)
     std::wstring failed_players_path_;  // the players file whose write failure was logged
     std::map<uint64_t, std::string> players_;  // the running world's player texts (read by poll)
     enum class PlayersState { Ok, Unreadable, Bad };  // Unreadable: poll reads it again; Bad: never overwritten

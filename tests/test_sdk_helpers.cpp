@@ -1169,3 +1169,45 @@ TEST_CASE("storage: a world file another program holds open is not handed over a
     DeleteFileW(main.c_str());
     RemoveDirectoryW(dir.c_str());
 }
+
+TEST_CASE("storage: after an unreadable read of another world, the last world's text, slot and path are gone; it is said once per world") {
+    reset();
+    static EmfApi api = fake_api();
+    REQUIRE(emf::init(&api));
+    const std::wstring dir = temp_dir(L"emf_world_locked2");
+    const std::wstring three = dir + L"\\0003.txt", five = dir + L"\\0005.txt";
+    CreateDirectoryW(dir.c_str(), nullptr);
+    spill(three, "world three");
+    spill(five, "world five");
+    emf::WorldFile file("mymod");
+    file.set_dir(dir);
+    REQUIRE(file.attach());
+    g_load_cb(3, g_load_user);
+    REQUIRE(file.poll([](const std::string&) {}));
+    REQUIRE(file.text() == "world three");
+    HANDLE h = CreateFileW(five.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);  // no sharing
+    REQUIRE(h != INVALID_HANDLE_VALUE);
+    g_session = 2;
+    g_load_cb(5, g_load_user);  // another world, its file held open
+    g_logged.clear();
+    CHECK_FALSE(file.poll([](const std::string&) {}));
+    CHECK(file.text().empty());  // not world three's
+    CHECK(file.slot() == 0);     // nothing of this world was read
+    CHECK(file.path().empty());
+    CHECK(g_logged.size() == 1);
+    g_session = 3;
+    g_load_cb(5, g_load_user);  // loaded again, still held: said again, for this load
+    CHECK_FALSE(file.poll([](const std::string&) {}));
+    CHECK(g_logged.size() == 2);
+    CHECK_FALSE(file.poll([](const std::string&) {}));
+    CHECK(g_logged.size() == 2);
+    CloseHandle(h);
+    std::string got;
+    CHECK(file.poll([&](const std::string& t) { got = t; }));
+    CHECK(got == "world five");
+    CHECK(file.slot() == 5);
+    CHECK(file.text() == "world five");
+    DeleteFileW(three.c_str());
+    DeleteFileW(five.c_str());
+    RemoveDirectoryW(dir.c_str());
+}
