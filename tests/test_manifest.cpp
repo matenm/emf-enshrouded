@@ -94,6 +94,15 @@ TEST_CASE("manifest: defaults and the dll / main / enabled fields") {
     CHECK(r.manifest->settings[0].default_value == "1");  // a choice default given by name becomes its index
 }
 
+TEST_CASE("manifest: a key setting can say it is shared on purpose") {
+    auto r = parse_manifest(R"({"id": "k", "version": "1", "settings": [
+        {"key": "read", "type": "keybind", "default": "E", "shared": true},
+        {"key": "other", "type": "keybind", "default": "F4"}]})");
+    REQUIRE_MESSAGE(r.manifest, r.error);
+    CHECK(r.manifest->settings[0].shared);
+    CHECK_FALSE(r.manifest->settings[1].shared);
+}
+
 TEST_CASE("manifest: errors name the field") {
     auto err = [](const char* text) {
         auto r = parse_manifest(text);

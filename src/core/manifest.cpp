@@ -953,6 +953,7 @@ std::string read_setting(const Value& s, SettingDef& d, int* when_kind) {
     if (const Value* v = field(s, "label"); v && v->is(VT::String)) d.label = v->s;
     if (const Value* v = field(s, "help"); v && v->is(VT::String)) d.help = v->s;
     if (const Value* v = field(s, "live"); v && v->is(VT::Bool)) d.live = v->b;
+    if (const Value* v = field(s, "shared"); v && v->is(VT::Bool)) d.shared = v->b;
     if (const Value* v = field(s, "min"); v && v->is(VT::Number)) {
         d.min = v->n;
         d.has_min = true;

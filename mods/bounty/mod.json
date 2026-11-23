@@ -17,7 +17,7 @@
     {"key": "base_radius", "type": "slider", "min": 10, "max": 100, "step": 5, "default": 40,
      "label": "Board must be within (m) of a flame altar", "live": true, "group": "Board",
      "help": "Keeps the villages' notice boards out."},
-    {"key": "read_key", "type": "keybind", "default": "E", "label": "Read the board (host)", "live": true, "group": "Board",
+    {"key": "read_key", "type": "keybind", "default": "E", "label": "Read the board (host)", "live": true, "shared": true, "group": "Board",
      "help": "Looking at a Bounty Board. The game gets the key too: a chest right beside the board opens as well."},
     {"key": "read_range", "type": "slider", "min": 2, "max": 8, "step": 1, "default": 4, "label": "Reading distance (m)",
      "live": true, "group": "Board"},

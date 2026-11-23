@@ -975,6 +975,7 @@ void cmd_keys(EmfWorld*, int, const char* const*, void* u) {
             k.label = d.label.empty() ? d.key : d.label;
             k.key = c.settings->get(id, d.key);
             k.scan = d.type == SettingType::ScanCode;
+            k.shared = d.shared;
             // running this session (a mod switched off, or one that failed, presses nothing)
             k.on = emf || (rec && (rec->status == ModStatus::Loaded || rec->status == ModStatus::Script));
             uses.push_back(std::move(k));
@@ -986,7 +987,9 @@ void cmd_keys(EmfWorld*, int, const char* const*, void* u) {
         return;
     }
     for (const auto& g : groups) {
-        std::string line = g.name + (g.clash() ? " (used twice: one press does both):" : ":");
+        std::string line = g.name + (g.clash()               ? " (used twice: one press does both):"
+                                     : g.shared_on_purpose() ? " (shared on purpose):"
+                                                             : ":");
         for (size_t i = 0; i < g.uses.size(); ++i) {
             const auto& k = g.uses[i];
             line += (i ? ", " : " ") + k.owner_name + " (" + k.label + (k.on ? "" : ", not running") + ")";

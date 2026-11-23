@@ -10,7 +10,7 @@
   "main": "main.lua",
   "depends": {"lua": ">=1.9"},
   "settings": [
-    {"key": "wheel_key", "type": "keybind", "default": "F2", "label": "Summoning wheel (hold)", "live": true, "group": "Controls"},
+    {"key": "wheel_key", "type": "keybind", "default": "F2", "label": "Summoning wheel (hold)", "live": true, "shared": true, "group": "Controls"},
     {"key": "shared_wheel", "type": "bool", "default": true, "label": "One wheel with Beastmaster's beasts (when both are installed)", "live": true, "group": "Controls"},
     {"key": "raise_mana_pct", "type": "slider", "min": 0, "max": 60, "step": 1, "default": 25, "label": "Mana to raise a skeleton (% of max)", "live": true, "group": "Skeletons"},
     {"key": "skeleton_cap", "type": "slider", "min": 1, "max": 8, "step": 1, "default": 3, "label": "Skeletons at once", "live": true, "group": "Skeletons"},

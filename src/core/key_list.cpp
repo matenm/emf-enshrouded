@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <map>
 
@@ -16,6 +17,42 @@ size_t KeyGroup::on_uses() const {
     for (const auto& u : uses) n += u.on;
     return n;
 }
+
+bool KeyGroup::clash() const {
+    bool not_shared = false;
+    for (const auto& u : uses) not_shared |= u.on && !u.shared;
+    return on_uses() >= 2 && not_shared;
+}
+
+namespace {
+// "F2" before "F10": runs of digits compare by value, the rest by letter in any case.
+bool name_before(const std::string& a, const std::string& b) {
+    size_t i = 0, j = 0;
+    while (i < a.size() && j < b.size()) {
+        const bool da = a[i] >= '0' && a[i] <= '9', db = b[j] >= '0' && b[j] <= '9';
+        if (da && db) {
+            size_t ei = i, ej = j;
+            while (ei < a.size() && a[ei] >= '0' && a[ei] <= '9') ++ei;
+            while (ej < b.size() && b[ej] >= '0' && b[ej] <= '9') ++ej;
+            const std::string na = a.substr(i, ei - i), nb = b.substr(j, ej - j);
+            const size_t za = na.find_first_not_of('0'), zb = nb.find_first_not_of('0');
+            const std::string va = za == std::string::npos ? "" : na.substr(za);
+            const std::string vb = zb == std::string::npos ? "" : nb.substr(zb);
+            if (va.size() != vb.size()) return va.size() < vb.size();
+            if (va != vb) return va < vb;
+            i = ei;
+            j = ej;
+            continue;
+        }
+        const char ca = static_cast<char>(std::tolower(static_cast<unsigned char>(a[i])));
+        const char cb = static_cast<char>(std::tolower(static_cast<unsigned char>(b[j])));
+        if (ca != cb) return ca < cb;
+        ++i;
+        ++j;
+    }
+    return a.size() - i < b.size() - j;
+}
+}  // namespace
 
 std::vector<KeyGroup> group_keys(const std::vector<KeyUse>& uses, const std::function<uint32_t(unsigned)>& scan_to_vk) {
     std::vector<KeyGroup> out;
@@ -45,7 +82,7 @@ std::vector<KeyGroup> group_keys(const std::vector<KeyUse>& uses, const std::fun
     }
     std::stable_sort(out.begin(), out.end(), [](const KeyGroup& a, const KeyGroup& b) {
         if (a.clash() != b.clash()) return a.clash();
-        return a.name < b.name;
+        return name_before(a.name, b.name);
     });
     return out;
 }

@@ -2009,3 +2009,21 @@ TEST_CASE("builtin commands: keys lists every key in use by key, the ones two sw
     CHECK(bsaid("F8 (used twice: one press does both): Companion (Second key), sample_mod (Craft key)"));
     CHECK(bsaid("F6: Big Stacks (Stack key, not running), Companion (Order wheel key)"));
 }
+
+TEST_CASE("builtin commands: keys does not call keys shared on purpose a clash") {
+    BFixture f;
+    FakeWorld w;
+    SettingDef read;
+    read.key = "read_key";
+    read.type = SettingType::Key;
+    read.default_value = "E";
+    read.label = "Read key";
+    read.shared = true;
+    REQUIRE(f.settings->declare("companion", read));
+    SettingDef window = read;
+    window.label = "Window key";
+    REQUIRE(f.settings->declare("sample_mod", window));
+    f.center.enqueue("keys");
+    f.run(w);
+    CHECK(bsaid("E (shared on purpose): Companion (Read key), sample_mod (Window key)"));
+}

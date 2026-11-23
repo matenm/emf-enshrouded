@@ -11,8 +11,9 @@ using emf::core::KeyGroup;
 using emf::core::KeyUse;
 
 namespace {
-KeyUse use(const char* owner, const char* name, const char* label, const char* key, bool on = true) {
+KeyUse use(const char* owner, const char* name, const char* label, const char* key, bool on = true, bool shared = false) {
     KeyUse u;
+    u.shared = shared;
     u.owner = owner;
     u.owner_name = name;
     u.label = label;
@@ -62,6 +63,31 @@ TEST_CASE("key list: EMF's console key is a scan code, named by where it is and 
     REQUIRE(g.size() == 1);
     CHECK(g[0].name == "the key under Esc (0x29)");
     CHECK(g[0].clash());
+}
+
+TEST_CASE("key list: keys shared on purpose (each acts on its own object) clash only with a key that is not") {
+    auto g = group_keys({use("beastmaster", "Beastmaster", "Beasts window", "E", true, true),
+                         use("bounty", "Bounty Board", "Read the board", "E", true, true)},
+                        us_layout);
+    REQUIRE(g.size() == 1);
+    CHECK_FALSE(g[0].clash());
+    g = group_keys({use("beastmaster", "Beastmaster", "Beasts window", "E", true, true),
+                    use("quick", "Quick Stack", "Stack key", "E")},
+                   us_layout);
+    REQUIRE(g.size() == 1);
+    CHECK(g[0].clash());  // Quick Stack acts everywhere: at the stable one press does both
+}
+
+TEST_CASE("key list: names sort as people read them (F2 before F10), in any case") {
+    KeyUse console = use("emf", "EMF", "Console key", "0x29");
+    console.scan = true;
+    const auto g = group_keys({use("a", "A", "x", "F10"), use("b", "B", "y", "F2"), console, use("d", "D", "w", "Z")},
+                              [](unsigned) { return 0u; });
+    REQUIRE(g.size() == 4);
+    CHECK(g[0].name == "F2");
+    CHECK(g[1].name == "F10");
+    CHECK(g[2].name == "the key under Esc (0x29)");
+    CHECK(g[3].name == "Z");
 }
 
 TEST_CASE("key list: the groups come sorted, the clashes first") {

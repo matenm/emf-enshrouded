@@ -76,7 +76,9 @@ the mods in it. EMF.exe's "Will not load" uses the same rules.
 
 **Settings.** Each entry of `settings` is an object. Every kind takes `key` (1-48 of `A-Z a-z 0-9 _ . -`; `enabled` is
 reserved for the mod's switch), `type`, `default`, `label` (default: the key), `help` (a line under it), `live`
-(`true`: your mod applies a change at once; else the Mods tab says "next start"), `group` (the heading it is shown
+(`true`: your mod applies a change at once; else the Mods tab says "next start"), `shared` (a key bind only, `true`:
+the key may be another mod's key on purpose because yours acts only on its own object, as a board's read key on E does;
+the console's `keys` and EMF.exe then do not call two such keys a clash), `group` (the heading it is shown
 under; settings without one come first, then each group in the order its first setting appears) and `enabledWhen`
 (below). The kinds:
 

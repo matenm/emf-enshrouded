@@ -42,8 +42,8 @@
     {"key": "beastmaster.red_lynx", "template": "f268e168-2086-4425-aa0f-03f1145a7413", "frames": 24, "size": 192}
   ],
   "settings": [
-    {"key": "wheel_key", "type": "keybind", "default": "F3", "label": "Beast wheel (hold)", "live": true, "group": "Controls"},
-    {"key": "stable_key", "type": "keybind", "default": "E", "label": "Beasts window (at a stable without the E prompt)", "live": true, "group": "Controls"},
+    {"key": "wheel_key", "type": "keybind", "default": "F3", "label": "Beast wheel (hold)", "live": true, "shared": true, "group": "Controls"},
+    {"key": "stable_key", "type": "keybind", "default": "E", "label": "Beasts window (at a stable without the E prompt)", "live": true, "shared": true, "group": "Controls"},
     {"key": "shared_wheel", "type": "bool", "default": true, "label": "One wheel with Necromancer's undead (when both are installed)", "live": true, "group": "Controls"},
     {"key": "call_mana_pct", "type": "slider", "min": 0, "max": 50, "step": 1, "default": 15, "label": "Mana to call a beast (% of max)", "live": true, "group": "Calling"},
     {"key": "call_cooldown_s", "type": "slider", "min": 0, "max": 60, "step": 1, "default": 10, "label": "Seconds between calls", "live": true, "group": "Calling"},

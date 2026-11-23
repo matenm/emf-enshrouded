@@ -360,8 +360,9 @@ stamina is not full).
   dedicated server has no HUD editor at all.
 
 ### Keys
-EMF's keys by default (`keys` in the console lists the keys in use now, with your changes, and marks a key two running
-mods share: then one press does both):
+EMF's keys by default (`keys` in the console lists every key as set now, with your changes, and marks a key two
+running mods share: then one press does both; keys shared on purpose, such as E at a stable and at a bounty board, are
+marked so; a key that applies at the next game start is listed with its new value):
 
 | Key | What it does |
 |---|---|

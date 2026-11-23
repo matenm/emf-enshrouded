@@ -85,6 +85,7 @@ struct SettingDef {
     std::string group;                   // the heading it is shown under ("" = none)
     std::string when_key, when_value;    // "enabledWhen": usable only while setting when_key has value when_value
     bool live = false;                   // the mod applies a change at once (else: at the next game start)
+    bool shared = false;                 // Key: shared with other mods' keys on purpose (it acts only on its own object)
     // Set by the manifest:
     bool strict = false;   // a newer kind (slider, select, keybind, color): a mistake refuses the mod
     std::string problem;   // a mistake in a display field of an old kind: SettingsStore::declare refuses this setting
