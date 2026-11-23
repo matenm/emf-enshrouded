@@ -87,11 +87,15 @@ M.list = {
 		graph = "d4c87337-8c53-41df-8488-8079046e1535", factions = { [WILDBEAST] = true },
 		rare_of = "snake", chance = 0.0025,
 		bonus = { runes = { 6, 10 }, rune2 = 0.50, gear = 0.25, gear_rarity = "legendary" } },
-	-- the pack beast (GitHub #48): a llama on the game's cat-deer companion (the wilds pack's wilds_packllama, with a
-	-- 16-slot inventory in its template); GUIDs fixed forever
+	-- the pack beasts (GitHub #48): a llama and a camel on the game's cat-deer companion (the wilds pack's
+	-- wilds_packllama and wilds_camel, each with a 16-slot inventory in its template); GUIDs fixed forever. `harness`:
+	-- the wilds pack's item (crafted at the Workbench) that makes one, `harness_word` what it is called in a line
 	{ id = "packllama", name = "Pack llama", plural = "pack llamas", carrier = true, template = "d9da8d97-981f-4e72-86ac-ec81ff70b6d2",
 		model = "ebb344e5-9619-471d-a7dd-ee75ddc7ec65", pack = "the wilds pack (emf_beastmaster_wilds)", scale = 1.5,
-		role_health = 1.0, role_damage = 1.0 },
+		role_health = 1.0, role_damage = 1.0, harness = "Item_Beastmaster_Llama_Harness", harness_word = "harness" },
+	{ id = "packcamel", name = "Pack camel", plural = "pack camels", carrier = true, template = "c692014d-0902-47b2-b885-dd2a8727b32d",
+		model = "0fbee1de-3576-4a82-bf43-feb9c007b4b1", pack = "the wilds pack (emf_beastmaster_wilds)", scale = 1.3,
+		role_health = 1.0, role_damage = 1.0, harness = "Item_Beastmaster_Camel_Saddle", harness_word = "saddle" },
 }
 
 -- The wilds pack's fighting animals (species_wilds.lua): beasts like the ones above, known by replace.lua's list of the

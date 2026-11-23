@@ -16,6 +16,7 @@
     {"key": "beastmaster.hound", "template": "87575915-bc75-4611-ab71-0cd4e79535b1", "frames": 24, "size": 192},
     {"key": "beastmaster.rat", "template": "927e63d6-a53e-4eda-af44-c7a229ac22a1", "frames": 24, "size": 192},
     {"key": "beastmaster.packllama", "template": "d9da8d97-981f-4e72-86ac-ec81ff70b6d2", "frames": 24, "size": 192},
+    {"key": "beastmaster.packcamel", "template": "c692014d-0902-47b2-b885-dd2a8727b32d", "frames": 24, "size": 192},
     {"key": "beastmaster.bear", "template": "b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f02", "frames": 24, "size": 192},
     {"key": "beastmaster.aurochs", "template": "d5f2b8e3-7c4a-4e9f-8b21-6a3c8d4e0f02", "frames": 24, "size": 192},
     {"key": "beastmaster.snake", "template": "d4c87337-8c53-41df-8488-8079046e1502", "frames": 24, "size": 192},
@@ -41,7 +42,16 @@
     {"key": "beastmaster.lynx", "template": "7e1aac14-7949-4c89-8463-a8a58b57e029", "frames": 24, "size": 192},
     {"key": "beastmaster.snow_lynx", "template": "b810787c-a8c5-4aab-8b4f-03ed113fbd66", "frames": 24, "size": 192},
     {"key": "beastmaster.dark_lynx", "template": "112dbfc5-a3a6-4238-ad04-3bf0a4a79a56", "frames": 24, "size": 192},
-    {"key": "beastmaster.red_lynx", "template": "f268e168-2086-4425-aa0f-03f1145a7413", "frames": 24, "size": 192}
+    {"key": "beastmaster.red_lynx", "template": "f268e168-2086-4425-aa0f-03f1145a7413", "frames": 24, "size": 192},
+    {"key": "beastmaster.hyena", "template": "46a0ad95-af5c-4331-895d-79c8aa55083a", "frames": 24, "size": 192},
+    {"key": "beastmaster.brown_hyena", "template": "afe92584-517d-48d6-a6f5-1cac320cc77e", "frames": 24, "size": 192},
+    {"key": "beastmaster.pale_hyena", "template": "c182acd1-07e9-48dd-b6ec-19e06cd85de8", "frames": 24, "size": 192},
+    {"key": "beastmaster.jackal", "template": "40375c39-dcff-4cab-96c5-1dd4e99bd693", "frames": 24, "size": 192},
+    {"key": "beastmaster.dark_jackal", "template": "d240e3ac-2105-42d7-b447-320b0b01c74a", "frames": 24, "size": 192},
+    {"key": "beastmaster.silver_jackal", "template": "ee8f4c63-e5d9-4c66-a305-03ceda2a04fd", "frames": 24, "size": 192},
+    {"key": "beastmaster.lion", "template": "50004771-332b-42c1-a130-76aee596e821", "frames": 24, "size": 192},
+    {"key": "beastmaster.white_lion", "template": "56c94c24-6ebb-4aa8-976c-76ecd340533e", "frames": 24, "size": 192},
+    {"key": "beastmaster.dark_lion", "template": "5039b748-2ed9-42c0-abed-a23e2ca49791", "frames": 24, "size": 192}
   ],
   "settings": [
     {"key": "wheel_key", "type": "keybind", "default": "F3", "label": "Beast wheel (hold)", "live": true, "shared": true, "group": "Controls"},

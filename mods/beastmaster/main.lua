@@ -483,6 +483,46 @@ function actions.call(world, player, account, key)
 end
 
 -- The pack beast (species carrier): called when it is home, sent home when it is with its owner.
+-- No pack beast yet: a harness (llama) or a saddle (camel) from the player's bag makes one, tried in species.lua's order.
+-- false when the game knows no such item (the wilds pack is not installed); its answer comes later, as a line.
+local WILDS = "the wilds pack (emf_beastmaster_wilds)"
+local function harness_try(world, player, account, i)
+	local carriers = {}
+	for _, sp in ipairs(species.list) do
+		if sp.carrier and sp.harness then carriers[#carriers + 1] = sp end
+	end
+	local sp = carriers[i]
+	if not sp then
+		tell(world, player, "You have no pack beast: craft a Llama Harness or a Camel Saddle at the Workbench (" ..
+			WILDS .. ").")
+		return true
+	end
+	-- emf.take raises an error for an item name the game does not know: the pack's items are not there
+	local called = pcall(emf.take, world, player, sp.harness, 1, function(w, taken)
+		if (taken or 0) < 1 then
+			if not harness_try(w, player, account, i + 1) then
+				tell(w, player, "You have no pack beast: craft a Llama Harness or a Camel Saddle at the Workbench (" ..
+					WILDS .. ").")
+			end
+			return
+		end
+		if carrier_count(account) > 0 then  -- one came meanwhile (a second press): the item goes back
+			pcall(emf.give, w, player, sp.harness, 1)
+			return
+		end
+		local b, why = beasts:add(account, sp.id, sp.name, collection_cap(w, nil, account, false) + 1)
+		if not b then
+			pcall(emf.give, w, player, sp.harness, 1)
+			tell(w, player, why or "No room for a pack beast.")
+			return
+		end
+		save()
+		tell(w, player, string.format("You put the %s on a %s: %s carries your things (/beastmaster pack calls it).",
+			sp.harness_word, sp.name:lower(), b.name))
+	end)
+	return called
+end
+
 function actions.pack(world, player, account)
 	if not account then return "Your account is not known yet." end
 	for _, b in ipairs(beasts:list(account)) do
@@ -491,7 +531,11 @@ function actions.pack(world, player, account)
 			return pack:call(world, player, account, b)
 		end
 	end
-	return "You have no pack beast yet."
+	if not harness_try(world, player, account, 1) then
+		return "Pack beasts come with " .. WILDS .. ": install it, then craft a Llama Harness or a Camel Saddle at the " ..
+			"Workbench."
+	end
+	return "You look in your bag for a harness or a saddle."
 end
 
 function actions.dismiss(world, player, account, key)
@@ -613,7 +657,8 @@ command("call", "<name or number>: call a beast of your collection to your side"
 	emf.reply(actions.call(world, player, account, table.concat(args, " ")))
 end)
 
-command("pack", ": call your pack llama, or send it home when it is with you", function(world, args)
+command("pack", ": call your pack beast (llama or camel), or send it home when it is with you; with none, a "
+	.. "Llama Harness or Camel Saddle from your bag makes one", function(world, args)
 	local player, account = who(world)
 	emf.reply(actions.pack(world, player, account))
 end)
@@ -1179,8 +1224,12 @@ local function give_command(world, args)
 	end
 	local _, account = who(world)
 	if not account then emf.reply("your account is not known yet") return end
-	if s.carrier and carrier_count(account) > 0 then  -- one pack beast per player
-		emf.reply("you have a " .. s.name:lower() .. " already")
+	if s.carrier and carrier_count(account) > 0 then  -- one pack beast per player, whichever kind
+		local has = ""
+		for _, x in ipairs(beasts:list(account)) do
+			if species.is_carrier(x.species) then has = x.name end
+		end
+		emf.reply("you have a pack beast already (" .. has .. ")")
 		return
 	end
 	local b, why = beasts:add(account, s.id, s.name,

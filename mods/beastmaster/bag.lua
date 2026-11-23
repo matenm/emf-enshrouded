@@ -1,10 +1,10 @@
--- The pack beast's bag (GitHub #48): E Open at the pack llama shows the game's chest screen of its own inventory (the
+-- The pack beast's bag (GitHub #48): E Open at the pack beast (a llama or a camel) shows the game's chest screen of its own inventory (the
 -- llama's template carries a 16-slot InventorySetup); what is in it is kept with the world as lines
 -- "c <account> <item> <count> <level> <rarity>" and put back when the llama is called again (the creature itself is not
 -- saved by the game). Gear (a stack with its own item entity) keeps its level and rarity; its wear is mended.
 --
 -- M.new(env) where env has: now(world), tell(world, player, text), save(), and (set once the pack exists)
--- owns(id, account): `id` is still that account's pack llama out in the world.
+-- owns(id, account): `id` is still that account's pack beast out in the world.
 local M = {}
 local B = {}
 B.__index = B
@@ -106,9 +106,9 @@ function B:offer(world, id, l, now)
 	if not ok then
 		if tostring(res):find("sequence", 1, true) then
 			self.no_chest = true  -- an older Lua: no chest sequence
-			emf.log("the pack llama's bag needs EMF's Lua 1.42 or newer (" .. tostring(res) .. ")")
+			emf.log("the pack beast's bag needs EMF's Lua 1.42 or newer (" .. tostring(res) .. ")")
 		else
-			emf.log("the pack llama's bag could not be offered: " .. tostring(res))
+			emf.log("the pack beast's bag could not be offered: " .. tostring(res))
 		end
 		l.offer_at = now + REFUSED_WAIT_S
 		return

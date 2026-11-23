@@ -17,6 +17,9 @@ local WOLF_GRAPH = "3180813f-a50d-47fc-be92-29a2383bd47d"
 local SABRE_GRAPH = "9c1b120e-4901-495c-9cc0-5de134fbe140"
 local GOAT_GRAPH = "1fc6e01e-f25b-4aeb-a5a0-2d3fb2c727f5"
 local YAK_GRAPH = "e810f838-698f-417d-aaee-1371395c68fc"  -- Animal_Wildlife_T5_Yak_AG2's; the farm yak's too (FarmAnimal)
+-- Animal_Wildlife_T2_Catdeer_AG2's; the farm cat-deer's (FarmAnimal) and the companion's (Player) too: never replaced
+local CATDEER_GRAPH = "73702659-8c8c-4fd9-a6fc-f715545c24c3"
+local CROCODILE_GRAPH = "a9bcf982-1eef-4fbb-be4a-4a1f20b84b28"  -- Enemy_Wildbeast_Crocodile_Amphibious's
 local WILDLIFE, WILDBEAST = 5, 6
 local PACK = "the wilds pack (emf_beastmaster_wilds)"
 
@@ -101,12 +104,50 @@ M.beasts = {
 		template = "f268e168-2086-4425-aa0f-03f1145a7413", graph = SABRE_GRAPH, factions = { [WILDBEAST] = true },
 		scale = 0.66, creature = "wilds_lynx_red", pack = PACK, wilds = true, bait = "Food_T2_Cat_Bait",
 		colour_of = "lynx" },
+	-- the second set (2026-11-24): the hyena and the jackal on the wolf's skeleton, the lion on the sabretooth's
+	{ id = "hyena", name = "Hyena", plural = "hyenas", role_health = 1.3, role_damage = 1.25,
+		template = "46a0ad95-af5c-4331-895d-79c8aa55083a", graph = WOLF_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.9, creature = "wilds_hyena", pack = PACK, wilds = true, bait = "Food_T1_raw_bad_meat_LeanMeat",
+		sleeps = true },
+	{ id = "brown_hyena", name = "Brown hyena", plural = "brown hyenas", role_health = 1.45, role_damage = 1.35,
+		template = "afe92584-517d-48d6-a6f5-1cac320cc77e", graph = WOLF_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.99, creature = "wilds_hyena_brown", pack = PACK, wilds = true,
+		bait = "Food_T1_raw_bad_meat_LeanMeat", sleeps = true, colour_of = "hyena" },
+	{ id = "pale_hyena", name = "Pale hyena", plural = "pale hyenas", role_health = 1.45, role_damage = 1.35,
+		template = "c182acd1-07e9-48dd-b6ec-19e06cd85de8", graph = WOLF_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.99, creature = "wilds_hyena_pale", pack = PACK, wilds = true,
+		bait = "Food_T1_raw_bad_meat_LeanMeat", sleeps = true, colour_of = "hyena" },
+	{ id = "jackal", name = "Jackal", plural = "jackals", role_health = 1.35, role_damage = 1.2,
+		template = "40375c39-dcff-4cab-96c5-1dd4e99bd693", graph = WOLF_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.6, creature = "wilds_jackal", pack = PACK, wilds = true, bait = "Food_T1_raw_bad_meat_LeanMeat",
+		sleeps = true },
+	{ id = "dark_jackal", name = "Dark jackal", plural = "dark jackals", role_health = 1.5, role_damage = 1.3,
+		template = "d240e3ac-2105-42d7-b447-320b0b01c74a", graph = WOLF_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.66, creature = "wilds_jackal_dark", pack = PACK, wilds = true,
+		bait = "Food_T1_raw_bad_meat_LeanMeat", sleeps = true, colour_of = "jackal" },
+	{ id = "silver_jackal", name = "Silver jackal", plural = "silver jackals", role_health = 1.5, role_damage = 1.3,
+		template = "ee8f4c63-e5d9-4c66-a305-03ceda2a04fd", graph = WOLF_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.66, creature = "wilds_jackal_silver", pack = PACK, wilds = true,
+		bait = "Food_T1_raw_bad_meat_LeanMeat", sleeps = true, colour_of = "jackal" },
+	{ id = "lion", name = "Lion", plural = "lions", role_health = 1.3, role_damage = 1.4,
+		template = "50004771-332b-42c1-a130-76aee596e821", graph = SABRE_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.85, creature = "wilds_lion", pack = PACK, wilds = true, bait = "Food_T2_Cat_Bait" },
+	{ id = "white_lion", name = "White lion", plural = "white lions", role_health = 1.45, role_damage = 1.55,
+		template = "56c94c24-6ebb-4aa8-976c-76ecd340533e", graph = SABRE_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.935, creature = "wilds_lion_white", pack = PACK, wilds = true, bait = "Food_T2_Cat_Bait",
+		colour_of = "lion" },
+	{ id = "dark_lion", name = "Dark lion", plural = "dark lions", role_health = 1.45, role_damage = 1.55,
+		template = "5039b748-2ed9-42c0-abed-a23e2ca49791", graph = SABRE_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.935, creature = "wilds_lion_dark", pack = PACK, wilds = true, bait = "Food_T2_Cat_Bait",
+		colour_of = "lion" },
 }
 
 M.kinds = {
 	{ id = "wolf", graph = WOLF_GRAPH, faction = WILDBEAST, model = "91e2d4cc-01c9-4203-a92e-b08769364522",
 		animals = {
 			{ name = "wilds_fox", template = "2e377d42-ff1e-4e6e-b77a-1596e9404afd", scale = 0.65, beast = "fox" },
+			{ name = "wilds_hyena", template = "46a0ad95-af5c-4331-895d-79c8aa55083a", scale = 0.9, beast = "hyena" },
+			{ name = "wilds_jackal", template = "40375c39-dcff-4cab-96c5-1dd4e99bd693", scale = 0.6, beast = "jackal" },
 		},
 		coats = {
 			{ name = "wilds_fox_arctic", template = "9c54a6f2-8075-4688-8668-533b44fddd8c", scale = 0.715,
@@ -121,6 +162,14 @@ M.kinds = {
 				beast = "black_wolf" },
 			{ name = "wilds_wolf_red", template = "54f4bc35-24fe-4a9f-8456-98e5d1f60587", scale = 1.1,
 				beast = "red_wolf" },
+			{ name = "wilds_hyena_brown", template = "afe92584-517d-48d6-a6f5-1cac320cc77e", scale = 0.99,
+				beast = "brown_hyena" },
+			{ name = "wilds_hyena_pale", template = "c182acd1-07e9-48dd-b6ec-19e06cd85de8", scale = 0.99,
+				beast = "pale_hyena" },
+			{ name = "wilds_jackal_dark", template = "d240e3ac-2105-42d7-b447-320b0b01c74a", scale = 0.66,
+				beast = "dark_jackal" },
+			{ name = "wilds_jackal_silver", template = "ee8f4c63-e5d9-4c66-a305-03ceda2a04fd", scale = 0.66,
+				beast = "silver_jackal" },
 		},
 	},
 	{ id = "sabretooth", graph = SABRE_GRAPH, faction = WILDBEAST, model = "5a45d5a3-c91f-4a96-bc75-ec80f2b18ae8",
@@ -130,6 +179,7 @@ M.kinds = {
 			{ name = "wilds_panther", template = "e7503d65-67fc-4bc6-a61e-9c3330a96c67", scale = 0.8,
 				beast = "wilds_panther" },
 			{ name = "wilds_lynx", template = "7e1aac14-7949-4c89-8463-a8a58b57e029", scale = 0.6, beast = "lynx" },
+			{ name = "wilds_lion", template = "50004771-332b-42c1-a130-76aee596e821", scale = 0.85, beast = "lion" },
 		},
 		coats = {
 			{ name = "wilds_bear_black", template = "797eac81-cf61-413b-8ae4-81297aac0ae6", scale = 1.1,
@@ -146,6 +196,10 @@ M.kinds = {
 				beast = "dark_lynx" },
 			{ name = "wilds_lynx_red", template = "f268e168-2086-4425-aa0f-03f1145a7413", scale = 0.66,
 				beast = "red_lynx" },
+			{ name = "wilds_lion_white", template = "56c94c24-6ebb-4aa8-976c-76ecd340533e", scale = 0.935,
+				beast = "white_lion" },
+			{ name = "wilds_lion_dark", template = "5039b748-2ed9-42c0-abed-a23e2ca49791", scale = 0.935,
+				beast = "dark_lion" },
 		},
 	},
 	{ id = "snow_sabretooth", graph = SABRE_GRAPH, faction = WILDBEAST, model = "3d555869-f7ef-4462-b341-06cad1b2d7e6",
@@ -168,23 +222,33 @@ M.kinds = {
 		animals = {
 			{ name = "wilds_goat", template = "2d1e9269-b64b-44b5-94c5-7543f5be2ae6", scale = 1.0 },
 			{ name = "wilds_deer", template = "50173bb8-9057-45f8-8269-d2049469f9fb", scale = 1.2 },
+			{ name = "wilds_ibex", template = "968a2b5d-5185-41bb-815a-8125bfd4eb20", scale = 1.2 },
 		},
 		coats = {
 			{ name = "wilds_goat_black", template = "9fd8da53-63c1-4a0a-ab8f-2c096089d876", scale = 1.1 },
 			{ name = "wilds_goat_piebald", template = "918db95d-e945-40b3-8382-bfc9d3a70f78", scale = 1.1 },
 			{ name = "wilds_deer_dark", template = "a5e4052a-f4f7-4872-9124-3c7e862fa925", scale = 1.32 },
 			{ name = "wilds_deer_fallow", template = "4e6c70fb-52ae-4e3f-a8d3-efe6214a982a", scale = 1.32 },
+			{ name = "wilds_ibex_white", template = "4bcb9596-3fc8-426c-86a6-1b35a0249687", scale = 1.32 },
+			{ name = "wilds_ibex_dark", template = "771575e7-e1fd-4692-980c-8afee8332e69", scale = 1.32 },
 		},
 	},
-	-- the Wild Ox, on the yak's skeleton and graph (the wildlife AI: never tamed); a farm yak is FarmAnimal, never one
+	-- the Wild Ox, the bison and the musk ox, on the yak's skeleton and graph (the wildlife AI: never tamed); a farm yak
+	-- is FarmAnimal, never one
 	{ id = "yak", graph = YAK_GRAPH, faction = WILDLIFE, model = "d0211f52-8b8f-4090-89b0-4b853d67d320",
 		animals = {
 			{ name = "wilds_ox", template = "12454bfc-06a3-402b-a332-d3cf40a5db16", scale = 1.0 },
+			{ name = "wilds_bison", template = "5bdc9808-e08d-419e-81c9-7b9f37507135", scale = 1.0 },
+			{ name = "wilds_muskox", template = "80998139-d86b-4945-bf7c-d3e9c2c3d9c3", scale = 0.85 },
 		},
 		coats = {
 			{ name = "wilds_ox_white", template = "9678a7cc-74f3-4864-b215-232b3df29321", scale = 1.1 },
 			{ name = "wilds_ox_black", template = "d6793ae5-58cc-4c29-9625-1a1927c8c055", scale = 1.1 },
 			{ name = "wilds_ox_red", template = "e0ecf31d-0ede-49d0-b5a6-6feb1c87b261", scale = 1.1 },
+			{ name = "wilds_bison_white", template = "2854fd7c-225f-4050-8136-7eb893a1fcd1", scale = 1.1 },
+			{ name = "wilds_bison_black", template = "66621bdc-0ea0-4b95-882c-cc9fa501ee10", scale = 1.1 },
+			{ name = "wilds_muskox_white", template = "d165becc-b1ef-4a56-ac13-4df2fafb7c85", scale = 0.935 },
+			{ name = "wilds_muskox_dark", template = "d66cdcd1-d982-4d59-a3e6-a83e86c9d5c1", scale = 0.935 },
 		},
 	},
 	{ id = "mountain_goat", graph = GOAT_GRAPH, faction = WILDLIFE, model = "7bab51e4-2877-4d63-990f-ce46a2178479",
@@ -202,6 +266,31 @@ M.kinds = {
 			{ name = "wilds_elk_dark", template = "c87dcfeb-7073-4cac-ad06-04509bb82346", scale = 1.65 },
 			{ name = "wilds_elk_grey", template = "e7fcf30a-5f3d-48d0-8a33-3d3114731aae", scale = 1.65 },
 			{ name = "wilds_deer_white", template = "2f439967-180c-4156-8ded-ccf31e055c00", scale = 1.32 },
+		},
+	},
+	-- the wild cat-deer (the wildlife AI): the antelope and the mule on its skeleton, never tamed
+	{ id = "catdeer", graph = CATDEER_GRAPH, faction = WILDLIFE, model = "882f5388-0547-4588-8d20-5e2383e99d6a",
+		animals = {
+			{ name = "wilds_antelope", template = "feaf66ab-ba50-4277-8fc2-530ff5f0cdca", scale = 1.2 },
+			{ name = "wilds_mule", template = "cd406bca-9dc0-4959-847f-986696d6a7df", scale = 1.3 },
+		},
+		coats = {
+			{ name = "wilds_antelope_sable", template = "c8feb2d4-9d17-4406-b7f0-1e2c7eae5fc4", scale = 1.32 },
+			{ name = "wilds_antelope_white", template = "db1ac0ed-92f4-45db-b031-d23bde6f79b4", scale = 1.32 },
+			{ name = "wilds_mule_grey", template = "e9b400b1-ddb8-4d47-a210-8ced9b92547f", scale = 1.43 },
+			{ name = "wilds_mule_black", template = "7c2ce935-828f-4f51-b129-0fe4f17404c9", scale = 1.43 },
+		},
+	},
+	-- the amphibious crocodile: the monitor lizard on its skeleton; it fights as the crocodile does, but is not a beast
+	-- Beastmaster tames (the crocodile's AI keeps to water)
+	{ id = "crocodile", graph = CROCODILE_GRAPH, faction = WILDBEAST, model = "a6b635d6-c44e-4f5d-a582-a6b59d1bb79b",
+		animals = {
+			{ name = "wilds_lizard", template = "a6f39587-810c-4902-8acb-ef03944cddb8", scale = 0.6 },
+		},
+		coats = {
+			{ name = "wilds_lizard_green", template = "0d281f55-f8f7-43df-b963-47fb8654edaa", scale = 0.66 },
+			{ name = "wilds_lizard_sand", template = "e01ad44c-6f8e-4f84-b3cd-81a7bf04d244", scale = 0.66 },
+			{ name = "wilds_lizard_black", template = "d0330944-2224-4e5e-8aae-6312412a5ceb", scale = 0.66 },
 		},
 	},
 }

@@ -1857,7 +1857,7 @@ TEST_CASE("stable: before a stable any beast can be called; after it only active
 
 TEST_CASE("pack beast: `pack` calls the pack llama or sends it home; with a stable it is on the wheel and not in the stable's count") {
     BeastRig b({{"call_cooldown_s", "0"}, {"call_mana_pct", "0"}});
-    CHECK(b.reply("beastmaster.pack").find("no pack beast") != std::string::npos);
+    CHECK(b.reply("beastmaster.pack").find("Pack beasts come with the wilds pack") != std::string::npos);  // no harness item
     write(b.data, "b 0x00000000000000aa wolf 0 0 Fang\nb 0x00000000000000aa boar 0 0 Tusk\n"
                   "b 0x00000000000000aa hound 0 0 Rex\nb 0x00000000000000aa packllama 0 0 Pack llama\n");
     b.r.fake.session = 2;
@@ -2957,7 +2957,9 @@ constexpr const char* kSabretoothGraph = "9c1b120e-4901-495c-9cc0-5de134fbe140";
 
 TEST_CASE("beastmaster: no panther: a small sabretooth is a sabretooth, give panther is refused") {
     BeastRig b;
-    CHECK(b.reply(std::string("beastmaster.species ") + kSabretoothGraph + " 6 0.85") == "sabretooth");
+    // Beastmaster 1.1's panther was 0.85, which is the wilds lion's size now: a sabretooth-graph creature at a size no
+    // wilds animal has is a sabretooth
+    CHECK(b.reply(std::string("beastmaster.species ") + kSabretoothGraph + " 6 0.75") == "sabretooth");
     CHECK(b.reply("beastmaster.give panther").find("no species panther") != std::string::npos);
     CHECK(b.reply("beastmaster.give panther").find("aurochs") != std::string::npos);  // the list names every species
 }
@@ -4012,7 +4014,7 @@ TEST_CASE("beastmaster: mod.json asks EMF for a portrait of every kind, the wild
     const std::regex entry(R"re(\{ id = "([a-z_]+)",[^\n]*template = "([0-9a-f-]{36})")re");
     for (auto it = std::sregex_iterator(species.begin(), species.end(), entry); it != std::sregex_iterator(); ++it)
         kinds[(*it)[1]] = (*it)[2];
-    REQUIRE(kinds.size() == 12u);  // wolf, boar, sabretooth, hound, rat, bear, aurochs, four snakes and the pack llama
+    REQUIRE(kinds.size() == 13u);  // wolf, boar, sabretooth, hound, rat, bear, aurochs, four snakes, the pack llama and camel
     // and the wilds pack's fighting animals (species_wilds.lua: an entry spans lines)
     const std::string wilds_file = slurp(std::filesystem::path(dir + "species_wilds.lua").wstring());
     const size_t from = wilds_file.find("M.beasts = {"), to = wilds_file.find("M.kinds = {");
@@ -4022,7 +4024,7 @@ TEST_CASE("beastmaster: mod.json asks EMF for a portrait of every kind, the wild
     const std::regex wild_entry(R"re(\{ id = "([a-z_]+)",[^}]*?template = "([0-9a-f-]{36})")re");
     for (auto it = std::sregex_iterator(wilds.begin(), wilds.end(), wild_entry); it != std::sregex_iterator(); ++it)
         kinds[(*it)[1]] = (*it)[2];
-    REQUIRE(kinds.size() == 32u);
+    REQUIRE(kinds.size() == 42u);  // and 29 of the wilds pack
     std::vector<std::string> problems;
     const auto items = emf::loader::read_portrait_lists(
         {{"beastmaster", slurp(std::filesystem::path(dir + "mod.json").wstring())}}, &problems);
@@ -8311,4 +8313,66 @@ TEST_CASE("wilds swap: on the host the client world's model tells a snow sabreto
     };
     CHECK(run(true) == kSnowBearTemplate);    // the snow sabretooth's colours: snow bear, snow leopard, snow lynx
     CHECK(run(false) == kBlackBearTemplate);  // no model known: the sabretooth's (black bear first)
+}
+
+// ---- the pack camel and the craftable harness and saddle (the wilds pack's items) ----
+
+TEST_CASE("pack beast: the pack camel is a pack beast too; one pack beast per player, whichever kind") {
+    BeastRig b;
+    CHECK(has(b.reply("beastmaster.give packcamel"), "added Pack camel (packcamel)"));
+    CHECK(has(b.reply("beastmaster.give packllama"), "you have a pack beast already (Pack camel)"));
+    CHECK(has(b.reply("beastmaster.give packcamel"), "you have a pack beast already (Pack camel)"));
+    CHECK(has(b.reply("beastmaster.pack"), "Pack camel"));  // called: its own slot
+}
+
+TEST_CASE("pack beast: with none, beastmaster.pack takes a Llama Harness from the bag and gives a pack llama") {
+    BeastRig b;
+    constexpr uint32_t kHarness = 9101, kSaddle = 9102;
+    b.r.fake.item_names[kHarness] = "Item_Beastmaster_Llama_Harness";
+    b.r.fake.item_names[kSaddle] = "Item_Beastmaster_Camel_Saddle";
+    b.reply("beastmaster.pack");
+    REQUIRE(b.r.fake.takes.size() == 1u);
+    EmfItemsRequest t = b.r.fake.takes.back();
+    CHECK(t.item == kHarness);
+    CHECK(t.count == 1u);
+    CHECK(t.entity == 1u);
+    t.cb(kServer, t.entity, t.item, t.count, 1, t.user);  // the harness was taken
+    b.seconds(1);
+    CHECK(has(b.reply("beastmaster.list"), "Pack llama"));
+    CHECK(b.noted("You put the harness on a pack llama"));
+}
+
+TEST_CASE("pack beast: no harness, then a Camel Saddle gives a pack camel; neither says how to get one") {
+    BeastRig b;
+    constexpr uint32_t kHarness = 9101, kSaddle = 9102;
+    b.r.fake.item_names[kHarness] = "Item_Beastmaster_Llama_Harness";
+    b.r.fake.item_names[kSaddle] = "Item_Beastmaster_Camel_Saddle";
+    b.reply("beastmaster.pack");
+    REQUIRE(b.r.fake.takes.size() == 1u);
+    EmfItemsRequest t = b.r.fake.takes.back();
+    t.cb(kServer, t.entity, t.item, t.count, 0, t.user);  // no harness in the bag: the saddle is asked for next
+    REQUIRE(b.r.fake.takes.size() == 2u);
+    t = b.r.fake.takes.back();
+    CHECK(t.item == kSaddle);
+    t.cb(kServer, t.entity, t.item, t.count, 1, t.user);
+    b.seconds(1);
+    CHECK(has(b.reply("beastmaster.list"), "Pack camel"));
+
+    BeastRig c;  // neither
+    c.r.fake.item_names[kHarness] = "Item_Beastmaster_Llama_Harness";
+    c.r.fake.item_names[kSaddle] = "Item_Beastmaster_Camel_Saddle";
+    c.reply("beastmaster.pack");
+    t = c.r.fake.takes.back();
+    t.cb(kServer, t.entity, t.item, t.count, 0, t.user);
+    t = c.r.fake.takes.back();
+    t.cb(kServer, t.entity, t.item, t.count, 0, t.user);
+    c.seconds(1);
+    CHECK(c.noted("You have no pack beast: craft a Llama Harness or a Camel Saddle at the Workbench"));
+    CHECK_FALSE(has(c.reply("beastmaster.list"), "Pack"));
+}
+
+TEST_CASE("pack beast: without the wilds pack's items (the game knows no harness) beastmaster.pack says the pack is needed") {
+    BeastRig b;  // no item names: emf.take refuses an item name the game does not know
+    CHECK(has(b.reply("beastmaster.pack"), "the wilds pack (emf_beastmaster_wilds)"));
+    CHECK(b.r.fake.takes.empty());
 }
