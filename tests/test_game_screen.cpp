@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "core/game_screen.h"
+#include "core/overlay/key_filter.h"
 
 using namespace emf::core;
 
@@ -211,4 +212,76 @@ TEST_CASE("game screen: keys pause only after a reading said InGame once") {
     CHECK(g.typing(1200));
     g.seen(kScreenSocial, 5000);  // armed for good after that
     CHECK(g.typing(5000));
+}
+
+// ---- a mod's key read through the typing gate and the input router (input_hook.cpp's two hooks) ----
+namespace {
+struct FakeRouter {
+    bool capture = false;
+    int hidden = 0;  // a key hidden from mods (0: none)
+    bool capturing() const { return capture; }
+    bool hiding() const { return hidden != 0; }
+    bool hidden_from_mods(int vk, bool) const { return vk == hidden; }
+};
+struct Keys {
+    std::vector<int> down;
+    int reads = 0;
+    int asked_mod = 0;
+    SHORT read(int vk) {
+        ++reads;
+        for (int k : down)
+            if (k == vk) return static_cast<SHORT>(0x8001);
+        return 0;
+    }
+};
+SHORT mod_read(Keys& k, int vk, bool typing, TypingKeyGate& gate, FakeRouter* r, bool mod = true) {
+    return filtered_key_state(vk, typing, gate, r, [&](int v) { return k.read(v); }, [&] {
+        ++k.asked_mod;
+        return mod;
+    });
+}
+}  // namespace
+
+TEST_CASE("key filter: nothing filters: the real state, read once, the caller never asked about") {
+    TypingKeyGate gate;
+    FakeRouter r;
+    Keys k{{'W'}};
+    CHECK(mod_read(k, 'W', false, gate, &r) == static_cast<SHORT>(0x8001));
+    CHECK(mod_read(k, 'W', false, gate, nullptr) == static_cast<SHORT>(0x8001));
+    CHECK(k.reads == 2);
+    CHECK(k.asked_mod == 0);
+}
+
+TEST_CASE("key filter: while the player types a mod reads a key as up, and after until it is let go; the game itself is not filtered") {
+    TypingKeyGate gate;
+    FakeRouter r;
+    Keys k{{'W'}};
+    CHECK(mod_read(k, 'W', true, gate, &r) == 0);
+    CHECK(mod_read(k, 'W', false, gate, &r) == 0);  // still held after the chat closed: no new press for mods
+    CHECK(mod_read(k, 'W', false, gate, &r, false) == static_cast<SHORT>(0x8001));  // not a mod's read
+    gate.released('W');
+    CHECK(mod_read(k, 'W', false, gate, &r) == static_cast<SHORT>(0x8001));
+    CHECK(mod_read(k, 'Q', true, gate, &r, false) == 0);  // Q is up anyway
+}
+
+TEST_CASE("key filter: while the router captures (the console or a mod window has the keys) a mod reads 0 without a real read") {
+    TypingKeyGate gate;
+    FakeRouter r;
+    r.capture = true;
+    Keys k{{'W'}};
+    CHECK(mod_read(k, 'W', false, gate, &r) == 0);
+    CHECK(k.reads == 0);  // the low bit (pressed since the last read) is not used up
+    CHECK(mod_read(k, 'W', false, gate, &r, false) == static_cast<SHORT>(0x8001));
+}
+
+TEST_CASE("key filter: a key the router hides from mods reads as up; the others as they are; one real read each") {
+    TypingKeyGate gate;
+    FakeRouter r;
+    r.hidden = VK_F3;
+    Keys k{{VK_F3, 'W'}};
+    CHECK(mod_read(k, VK_F3, false, gate, &r) == 0);
+    CHECK(mod_read(k, 'W', false, gate, &r) == static_cast<SHORT>(0x8001));
+    CHECK(k.reads == 2);
+    CHECK(mod_read(k, 'W', true, gate, &r) == 0);  // typing and hiding together: the gate first
+    CHECK(k.reads == 3);
 }
