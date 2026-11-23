@@ -1490,14 +1490,18 @@ extern "C" __declspec(dllexport) void emf_core_start(const wchar_t* game_dir) {
             return api->teleport && api->teleport(w, &t);
         };
         // v49 EMF_MOVE_CLEAR: find_wall's line (step() runs in a server world tick, where block reads are allowed)
-        d.wall_between = [](EmfWorld* w, const emf::core::MoveOrders::Point& a, const emf::core::MoveOrders::Point& b) {
+        d.wall_between = [](EmfWorld* w, const emf::core::MoveOrders::Point& a,
+                            const emf::core::MoveOrders::Point& b) -> std::optional<bool> {
             const float from[3] = {static_cast<float>(a[0]), static_cast<float>(a[1]), static_cast<float>(a[2])};
             const float to[3] = {static_cast<float>(b[0]), static_cast<float>(b[1]), static_cast<float>(b[2])};
             EmfBlockInfo info{};
             info.size = sizeof info;
             std::string why;
-            return emf::core::blocks_find_wall(w, from, to, &info, &why);
+            if (emf::core::blocks_find_wall(w, from, to, &info, &why)) return true;
+            if (!why.empty()) return std::nullopt;  // refused: it could not look
+            return false;                           // the line is clear
         };
+        d.walls_why = [] { return emf::core::blocks_unavailable_why(); };
         emf::core::ProgramSpec s;
         s.name = kMovesProgramName;
         s.world_kind = EMF_WORLD_SERVER;

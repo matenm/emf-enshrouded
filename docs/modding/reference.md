@@ -1579,8 +1579,11 @@ The version only (no new function; GitHub #44). C++: `emf::has_v49()`. Lua 1.43.
   the line from the creature (1 m above its feet) to the point (1 m above it). Without it a point is reached by distance
   alone (within `arrive`, or the creature's guard distance + 1 m once it guards the waypoint, about 4 m), so a raider
   just inside a wall from a point outside it has arrived; with it, it walks on or ends `STUCK`. Put the point at least
-  0.5 m off a wall (a point inside a wall's cell is never clear). Building blocks only, as `find_wall` (not the world's
-  ground or a ruin). An older core refuses the flag ("unknown flags"). Lua: `clear = true`; console: `move ... clear`.
+  0.5 m off a wall (a point inside a wall's cell is never clear), and 3 m or more past an opening: the creature stops
+  about 3 m short of its point (its guard distance), so for a point closer behind a gate it may stop outside and end
+  `STUCK`. Building blocks only, as `find_wall` (a ruin's walls count; the world's ground does not). A check that cannot
+  read the blocks this step counts as not clear; while EMF's block reads are off the flag is refused. An older core
+  refuses the flag ("unknown flags"). Lua: `clear = true`; console: `move ... clear`.
 - Console (no API change): `move ... arrive <metres>` sets `arrive`; `path ... nodes <1-20000>` takes the word before
   the count, as its usage line always said (a bare count still works).
 

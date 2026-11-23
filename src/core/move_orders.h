@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -66,8 +67,11 @@ public:
         std::function<bool(EmfWorld*, uint32_t entity)> dead;             // its health is known and 0 or less
         // moves a creature there with the game's teleport (one standing on another moving creature's spot); false: refused
         std::function<bool(EmfWorld*, uint32_t entity, double x, double y, double z)> nudge;
-        // v49 EMF_MOVE_CLEAR: a building block on the line from `from` to `to` (metres); null: no wall checks here
-        std::function<bool(EmfWorld*, const Point& from, const Point& to)> wall_between;
+        // v49 EMF_MOVE_CLEAR: a building block on the line from `from` to `to` (metres); nullopt: it could not look
+        // (null: no wall checks here)
+        std::function<std::optional<bool>(EmfWorld*, const Point& from, const Point& to)> wall_between;
+        // "" while the wall checks work, else why not (a move with EMF_MOVE_CLEAR is refused then)
+        std::function<std::string()> walls_why;
     };
     explicit MoveOrders(Deps d) : d_(std::move(d)) {}
 

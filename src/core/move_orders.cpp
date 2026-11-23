@@ -55,7 +55,13 @@ uint32_t MoveOrders::add(EmfWorld* world, uint32_t enemy, const std::vector<Poin
     };
     if (flags & ~static_cast<uint32_t>(EMF_MOVE_ALLIES | EMF_MOVE_PEACEFUL | EMF_MOVE_PEACEFUL_ALL | EMF_MOVE_CLEAR))
         return no("unknown flags (a newer mod?)");
-    if ((flags & EMF_MOVE_CLEAR) && !d_.wall_between) return no("EMF_MOVE_CLEAR: EMF cannot look for walls on this game build");
+    if (flags & EMF_MOVE_CLEAR) {
+        if (!d_.wall_between) return no("EMF_MOVE_CLEAR: EMF cannot look for walls on this game build");
+        if (const std::string w = d_.walls_why ? d_.walls_why() : std::string(); !w.empty()) {
+            if (why) *why = "EMF_MOVE_CLEAR: EMF cannot look for walls now: " + w;
+            return 0u;
+        }
+    }
     if (!(stuck_seconds == 0 || (stuck_seconds >= kMoveStuckMin && stuck_seconds <= kMoveStuckMax)))
         return no("stuck must be 2 to 120 seconds (0: 15)");
     if (points.empty() || points.size() > kMovePointsMax) return no("1 to 16 points");
@@ -219,9 +225,14 @@ int MoveOrders::tick(Move& m, uint64_t now) {
             if (std::isfinite(g) && g > 0 && g <= kMoveGuardMax) radius = std::max(radius, g + kMoveGuardSlack);
         }
         const bool near = std::sqrt(dx * dx + dz * dz) <= radius && std::abs(at[1] - p[1]) <= radius + kMoveUpDown;
-        // v49 EMF_MOVE_CLEAR: on the point's side of any wall (a line at chest height, 1 m up, clear of building blocks)
-        const bool clear = !(m.flags & EMF_MOVE_CLEAR) || !d_.wall_between ||
-                           !d_.wall_between(m.world, Point{at[0], at[1] + 1.0, at[2]}, Point{p[0], p[1] + 1.0, p[2]});
+        // v49 EMF_MOVE_CLEAR: on the point's side of any wall (a line 1 m up, clear of building blocks), asked only when
+        // near; a check that could not look is not clear (it walks on, or ends stuck)
+        bool clear = true;
+        if (near && (m.flags & EMF_MOVE_CLEAR) && d_.wall_between) {
+            const std::optional<bool> wall =
+                d_.wall_between(m.world, Point{at[0], at[1] + 1.0, at[2]}, Point{p[0], p[1] + 1.0, p[2]});
+            clear = wall.has_value() && !*wall;
+        }
         if (near && clear) {
             if (m.next + 1 >= m.points.size()) return EMF_MOVE_ARRIVED;
             if (waypoint_alive(m) && d_.destroy) d_.destroy(m.world, m.waypoint);  // on to the next point
