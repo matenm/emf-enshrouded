@@ -39,7 +39,7 @@ AppArgs parse_app_args(const std::vector<std::wstring>& args) {
         else if (s == L"--nexus-fixture" && more) a.nexus_fixture = args[++i];
         else if (s == L"--probe-wait" && more) {
             const long v = std::wcstol(args[++i].c_str(), nullptr, 10);
-            a.probe_wait = static_cast<unsigned>(v < 100 ? 100 : v > 10000 ? 10000 : v);
+            a.probe_wait = static_cast<unsigned>(v < 100 ? 100 : v > 30000 ? 30000 : v);
         } else if (nxm_token(s)) {
             a.link_seen = true;
             a.nxm = s;

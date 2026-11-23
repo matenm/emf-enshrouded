@@ -252,7 +252,7 @@ TEST_CASE("app args: --nxm and a bare nxm:// link, next to the other switches") 
     CHECK(a.eval == L"1+1");
     CHECK(a.devtools);
     CHECK(a.nexus_fixture == L"F");
-    CHECK(a.probe_wait == 10000);
+    CHECK(a.probe_wait == 30000);  // room for a page script with timers on a busy PC
     CHECK(a.nxm.empty());  // --nxm without a link
     CHECK_FALSE(a.release_nxm);
     CHECK(parse_app_args({L"--release-nxm"}).release_nxm);
