@@ -13,6 +13,7 @@ local slots = require("slots")
 local stable_mod = require("stable")
 local home_mod = require("home")
 local training_mod = require("training")
+local grounds_mod = require("grounds")
 local window_mod = require("beasts_window")
 local talents = require("talents")
 local wire = require("wire")
@@ -96,6 +97,7 @@ local markers = markers_mod.new({ setting = setting, now = now })
 
 -- the beasts out in the world
 local home  -- the beasts at home in a Large Stable (made below)
+local trainees  -- the beasts in training shown at their Training Grounds (made below)
 local pack = pack_mod.new({
 	setting = setting,
 	now = now,
@@ -108,9 +110,10 @@ local pack = pack_mod.new({
 	stabled = function() return beasts:stabled() end,
 	leave_home = function(world, b)
 		home:leave(world, b)
+		trainees:leave(world, b)
 		training:back(b)  -- called: its training ends
 	end,
-	at_home = function(id) return home:has(id) end,
+	at_home = function(id) return home:has(id) or trainees:has(id) end,
 })
 
 home = home_mod.new({
@@ -138,6 +141,19 @@ training = training_mod.new({
 	log = emf.log,
 })
 
+-- the beasts in training shown on their Training Grounds (1.21): the place module home.lua with the grounds' scenes
+trainees = home_mod.new({
+	now = now,
+	setting = setting,
+	beasts = function() return beasts end,
+	homes = function() return {} end,
+	present = function() return pack.present end,
+	log = emf.log,
+	on_spawn = spawned,
+	tell = tell,
+	gain = function(world, account, b) pack:gain(world, { account = account, beast = b }) end,
+}, grounds_mod.place(function() return stables:grounds() end, function() return training:room() end))
+
 -- rare wild bears, aurochs and snakes (with their content packs)
 local wild = wild_mod.new({ setting = setting, now = now, on_spawn = spawned })
 
@@ -154,6 +170,7 @@ emf.on_world_data(function(world, text)
 	pack:reset()
 	markers:reset()
 	home:reset()
+	trainees:reset()
 	health:reset()
 	wild:reset()
 	rare:reset()
@@ -467,6 +484,7 @@ function actions.untrain(world, player, account, key)
 	local b = beasts:find(account, key)
 	if not b then return "No such beast (beastmaster.list shows yours)." end
 	if not training:back(b) then return b.name .. " is not training." end
+	trainees:leave(world, b)
 	return b.name .. " is back in the stable."
 end
 
@@ -909,12 +927,14 @@ emf.on_setting_changed(function(key)
 	if key == "beast_health" or key == "beast_damage" then
 		pack:strength_changed()
 		home:strength_changed()
+		trainees:strength_changed()
 	end
 end)
 
 emf.on_event("HitEvent", function(world, e)
 	pack:on_hit(world, e.rootSourceId, e.targetId, e.healthChange)
 	home:on_hit(world, e.rootSourceId, e.targetId)
+	trainees:on_hit(world, e.rootSourceId, e.targetId)
 	rare:on_hit(world, e.rootSourceId, e.targetId)
 	if e.rootSourceId ~= 0 and e.rootSourceId ~= e.targetId and world:get("PlayerState", e.targetId) then
 		last_hit[e.targetId] = { id = e.rootSourceId, at = now(world) }
@@ -925,6 +945,7 @@ emf.on_event("EntityDiedEvent", function(world, e)
 	taming:on_died(e.deadEntityId)
 	pack:on_died(e.deadEntityId, world)
 	home:on_died(world, e.deadEntityId)
+	trainees:on_died(world, e.deadEntityId)
 	rare:on_died(world, e.deadEntityId)
 end)
 
@@ -947,6 +968,7 @@ emf.on_tick(function(world)
 	pack:step(world)
 	markers:step(world, pack.present, pack.ids, stables.stables)
 	home:step(world)
+	trainees:step(world)
 	training:step(world)
 	wild:step(world)
 	health:step(world)

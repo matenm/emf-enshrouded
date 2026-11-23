@@ -7433,17 +7433,115 @@ TEST_CASE("training: a Training Grounds a player near it no longer sees for 30 s
     CHECK(heard);
 }
 
-TEST_CASE("home: a beast in training does not show up in the Large Stable") {
+TEST_CASE("home: a beast in training does not show up in the Large Stable; it shows up at its Training Grounds") {
     BeastRig b;
     three_beasts(b);
     large_stable(b, 950, 10, 0);
     training_grounds(b, 960, -10, 0);
-    homes_ready(b, 3);
+    homes_ready(b, 4);
     b.seconds(32);
     REQUIRE(b.r.fake.spawns.size() == 3);
     REQUIRE(says(b.reply("beastmaster.train Rex"), "goes to the Training Grounds"));
     b.seconds(2);
     CHECK(destroyed(b, 1236));  // Rex left the Large Stable
     b.seconds(5);
-    CHECK(b.r.fake.spawns.size() == 3);  // and is not shown there again
+    REQUIRE(b.r.fake.spawns.size() >= 4);  // shown once more: on the Training Grounds (then maybe the dummy's target)
+    CHECK(spawned_as(b.r.fake.spawns[3], kHomeHound));
+    CHECK(std::hypot(b.r.fake.spawns[3].x + 10, b.r.fake.spawns[3].z) < 1.6);
+}
+
+namespace {
+constexpr const char* kDummyTarget = "217bfc46-d4c4-4732-b097-0e8564cb57bc";  // Base_Door_Collision
+// The orders on `enemy` so far.
+std::vector<EmfEnemyOrder> orders_of(BeastRig& b, uint32_t enemy) {
+    std::vector<EmfEnemyOrder> out;
+    for (const auto& o : b.r.fake.orders)
+        if (o.enemy == enemy) out.push_back(o);
+    return out;
+}
+// Player 1's Fang and Tusk in training at a Training Grounds at (10, 10, 0): shown as 1234 and 1235 (1236 is ready for
+// the dummy's target).
+void two_training(BeastRig& b) {
+    three_beasts(b);
+    training_grounds(b, 960, 10, 0);
+    homes_ready(b, 3);
+    b.seconds(32);
+    REQUIRE(says(b.reply("beastmaster.train Fang"), "goes to the Training Grounds"));
+    REQUIRE(says(b.reply("beastmaster.train Tusk"), "goes to the Training Grounds"));
+    b.seconds(2);
+}
+}  // namespace
+
+TEST_CASE("training: the beasts in training show up on their Training Grounds, on spots round the dummy, as player-side creatures") {
+    BeastRig b;
+    two_training(b);
+    REQUIRE(b.r.fake.spawns.size() == 2);
+    for (uint32_t i = 0; i < 2; ++i) {
+        const auto& s = b.r.fake.spawns[i];
+        const double r = std::hypot(s.x - 10, s.z - 0);
+        CHECK(r > 1.0);
+        CHECK(r < 1.6);
+        CHECK(s.y > 10.3);
+        CHECK(b.faction(1234 + i) == kPlayerAlly);
+    }
+    CHECK(says(b.reply("beastmaster.home"), "None of your beasts is in a Large Stable"));
+}
+
+TEST_CASE("training: the first scene is an attack: an enemy order (allies) on the dummy's invisible target, renewed every 3 s") {
+    RollRig b;
+    b.roll(0.99);  // the longest times: the first scene 12 s after showing up, a 15 s attack
+    two_training(b);
+    b.seconds(13);  // the first scene's start
+    REQUIRE(b.r.fake.spawns.size() == 3);
+    CHECK(spawned_as(b.r.fake.spawns[2], kDummyTarget));
+    CHECK(std::hypot(b.r.fake.spawns[2].x - 10, b.r.fake.spawns[2].z) < 0.01);  // at the dummy
+    for (uint32_t id : {1234u, 1235u}) {
+        CAPTURE(id);
+        const auto o = orders_of(b, id);
+        REQUIRE_FALSE(o.empty());
+        CHECK(o.back().target == 1236);
+        CHECK((o.back().flags & EMF_ORDER_ALLIES) != 0);
+        CHECK(o.back().seconds == doctest::Approx(4.0));
+    }
+    const size_t before = orders_of(b, 1234).size();
+    b.seconds(4);
+    CHECK(orders_of(b, 1234).size() > before);  // renewed while the attack lasts
+    CHECK(b.r.fake.spawns.size() == 3);         // one target for the Training Grounds
+}
+
+TEST_CASE("training: an attack is followed by another scene, then attacks again; the dummy's target goes when no beast of it is shown") {
+    RollRig b;
+    b.roll(0.0);  // the shortest times, and the first scene in the list: 5 s, an 8 s attack, a 10 s rest, an attack
+    two_training(b);
+    b.seconds(5);
+    REQUIRE_FALSE(orders_of(b, 1234).empty());  // the attack began
+    b.seconds(10);                              // it ended (8 s): a rest
+    const size_t n = orders_of(b, 1234).size();
+    b.seconds(4);
+    CHECK(orders_of(b, 1234).size() == n);  // no orders while it rests
+    b.seconds(6);
+    CHECK(orders_of(b, 1234).size() > n);   // attacking again
+    REQUIRE(says(b.reply("beastmaster.untrain Fang"), "back in the stable"));
+    REQUIRE(says(b.reply("beastmaster.untrain Tusk"), "back in the stable"));
+    b.seconds(2);
+    CHECK(destroyed(b, 1234));
+    CHECK(destroyed(b, 1235));
+    CHECK(destroyed(b, 1236));  // the target too
+}
+
+TEST_CASE("training: a beast is shown only at its own Training Grounds, and only while its owner is within 50 m of it") {
+    BeastRig b;
+    three_beasts(b);
+    training_grounds(b, 960, 10, 0);
+    stable_prop(b, 961, -10, 10, 0, kTrainingModel);
+    homes_ready(b, 3);
+    b.seconds(32);
+    REQUIRE(says(b.reply("beastmaster.train Fang"), "goes to the Training Grounds"));  // the nearest: both 10 m away
+    b.seconds(2);
+    REQUIRE(b.r.fake.spawns.size() == 1);
+    const double gx = b.r.fake.spawns[0].x > 0 ? 10 : -10;
+    CHECK(says(b.reply("beastmaster.train"), gx > 0 ? "at 10, 10, 0" : "at -10, 10, 0"));
+    place(b.r.fake, 1, 0, 10, -100);  // the owner goes 100 m away: it leaves the platform (and trains on)
+    b.seconds(2);
+    CHECK(destroyed(b, 1234));
 }

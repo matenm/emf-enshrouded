@@ -100,6 +100,7 @@ function H:reset()
 	self.day = 0         -- game days begun while the world runs (a dawn passed)
 	self.last_hour = nil -- the game's clock at the last check
 	self.night = false
+	self.place_state = {}  -- what the place's own scenes keep (place.scene, place.after_check)
 end
 
 local function key_of(h)
@@ -225,11 +226,12 @@ end
 
 -- Turns entry `e`'s beast where it stands to face out of stable `h`'s open side: true when the game took it. One the
 -- game took but did not carry out (its answer: failed) counts as not faced: the upkeep asks again, FACE_TRIES in all.
-local function face(world, e, h)
+local function face(world, e, h, p)
 	local x, y, z = world:position(e.id)
 	if not (x and emf.teleport) then return false end
 	e.tries = (e.tries or 0) + 1
-	return emf.teleport(world, e.id, x, y, z, { yaw = yaw_out(h) }, function(moved)
+	local yaw = p and p.yaw and p.yaw(h, e) or yaw_out(h)
+	return emf.teleport(world, e.id, x, y, z, { yaw = yaw }, function(moved)
 		if not moved then e.faced = false end
 	end) == true
 end
@@ -492,7 +494,7 @@ function H:upkeep(world, e, h, now)
 		e.far = nil
 		return
 	end
-	if not e.faced and (e.tries or 0) < FACE_TRIES then e.faced = face(world, e, h) end
+	if not e.faced and (e.tries or 0) < FACE_TRIES then e.faced = face(world, e, h, self.p) end
 	if emf.offer and now >= (e.offer_at or 0) then
 		e.offer_at = now + OFFER_EVERY_S
 		local held = e.offered and (not emf.offered or emf.offered(world, e.id))
@@ -591,6 +593,7 @@ function H:check(world, now)
 	for _, e in pairs(self.at) do
 		if e.spawned < now then self:upkeep(world, e, by_key[e.key], now) end
 	end
+	if self.p.after_check then self.p.after_check(self, world, now) end
 end
 
 -- Every step of the server world: the beasts at home are calmed and their leases renewed; once a second, the check.
