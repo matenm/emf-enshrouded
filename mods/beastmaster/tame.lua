@@ -53,7 +53,7 @@ function M.species_of(world, id)
 	local g = world:template("AnimationGraphResourceComponent2", id)
 	if not g then return nil end
 	local sc = world:get("ScaleComponent", id)
-	return species.of(g.animationGraph, f.faction, sc and sc.uniformScale or nil)
+	return species.of(g.animationGraph, f.faction, sc and sc.uniformScale or nil, sc ~= nil)
 end
 
 -- The item a beast is fed: its setting (bait_<id>), or for a beast from species_extra.lua, its entry's bait; nil when

@@ -398,6 +398,7 @@ taming = tame_mod.new({
 	now = now,
 	tell = tell,
 	on_tamed = function(world, player, id, sp)
+		replace:tamed(world, id)  -- a wild colour version's damage bonus comes off before the pack gives it its role
 		local account = world:account(player)
 		local b = account and beasts:add(account, sp.id, sp.name, collection_cap(world, player, account, true))
 		if not b then

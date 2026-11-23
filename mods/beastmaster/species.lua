@@ -180,13 +180,15 @@ function M.variant(sp, roll)
 end
 
 -- The kind of a creature running `graph` (GUID text) in `faction` (a number) at `scale` (its ScaleComponent, nil when
--- it has none: 1), or nil. The wilds pack's beasts are never found this way (replace.lua knows its own).
-function M.of(graph, faction, scale)
+-- it has none: 1; `has_scale`: it has one), or nil. The wilds pack's beasts are never found this way (replace.lua knows
+-- its own).
+function M.of(graph, faction, scale, has_scale)
 	if not graph then return nil end
 	graph = tostring(graph):lower()
 	scale = scale or 1
-	-- a wilds animal (a game graph at its own size, not 1) that replace.lua's list does not know: none of them
-	if math.abs(scale - 1) > 0.01 then
+	-- a wilds animal (a game graph at its own size; with `has_scale`, its ScaleComponent, at 1 too: the game's wolves,
+	-- sabretooths and goats have none) that replace.lua's list does not know: none of them
+	if has_scale or math.abs(scale - 1) > 0.01 then
 		for _, s in ipairs(wilds.beasts) do
 			if s.graph == graph and math.abs(scale - s.scale) < 0.005 then return nil end
 		end

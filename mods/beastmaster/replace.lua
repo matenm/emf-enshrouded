@@ -2,13 +2,17 @@
 -- then one of the pack's animals instead (wild_replace_pct of them) or a stronger colour version (wild_coat_pct,
 -- stronger by wild_coat_strength in health and damage). The kinds and their pools are in species_wilds.lua.
 --   When: the server world is walked every WALK_S in slices; a wild creature of a kind there that the walk had not
---   seen is rolled once. What the first walk after a world load finds stays the game's (it was there when the player
---   came), and so does one within NEAR_M of a player (no swap in view), within BASE_M of a flame altar, hurt, or of a
---   size other than 1 (our packs' creatures all have a ScaleComponent).
+--   seen is rolled once, after the walk that found it (its players complete). What the first walk with a player in the
+--   world finds stays the game's (it was there when the player came), and so does one within NEAR_M of a player (no
+--   swap in view), within BASE_M of a flame altar, hurt, or with a ScaleComponent (the game's wolves, sabretooths and
+--   goats have none; our packs' creatures and other mods' bigger ones have). At its roll the creature on the id is
+--   checked again (the game gives ids out again).
 --   Which kind: graph and faction on the server world; on a game someone hosts, the host's client world shares the
 --   server's entity ids and has the render model, which tells the snow sabretooth and the mountain goat apart (asked
 --   for ASK_S; no answer: the first kind of that graph and faction).
---   A hit: ours is spawned on its spot facing its way, then the game's taken out; ours gets its level. A spawn the game
+--   A hit: ours is spawned on its spot facing its way, then the game's taken out; ours gets its level. A colour
+--   version's damage bonus goes on top of the game's DamageMod value each time the game writes it (its rescale to a
+--   level), while it is wild; R:tamed takes it off (a tamed one is stronger by its role numbers). A spawn the game
 --   refuses (no pack) turns the swaps off until the next world load, with one log line, and takes nothing out.
 --   The animals it put into the world are listed (by id, while they exist at their template's size): taming asks
 --   R:species_of first, since the server cannot tell a fox from a wolf by anything else.
@@ -26,7 +30,6 @@ M.SLICE = 500        -- entities looked at per server step during a walk
 M.NEAR_M = 25        -- m: a creature this close to a player stays the game's
 M.BASE_M = 40        -- m around a flame altar (horizontally) where nothing is swapped
 M.ASK_S = 1          -- s the host's client world has to name a creature's model
-local DAMAGE_WAIT_S = 10  -- s a colour version's DamageMod is waited for
 local SIZE_EPS = 0.005
 
 local GRAPHS = {}  -- graph -> true for the kinds' graphs
@@ -41,11 +44,11 @@ end
 -- A new world (or a reload): ids from before mean nothing now; the next walk is a first one again.
 function R:reset()
 	self.seen = {}      -- id -> true: a creature of a kind the walks found (rolled, or there at the first walk)
-	self.ours = {}      -- id -> { entry, coat }: the animals put into the world
+	self.ours = {}      -- id -> { entry, coat, bonus, keep, wrote }: the animals put into the world (bonus: a colour
+	                    -- version's damage multiplier, kept while it is wild; wrote: the DamageMod value written last)
 	self.cands = {}     -- creatures waiting for their roll: { id, graph, faction, at }
 	self.asks = {}      -- id -> true: a model the host's client world is asked for
 	self.models = {}    -- id -> model GUID text the client world named
-	self.damage = {}    -- id -> { mul, until_s }: a colour version's DamageMod still to raise
 	self.players = {}   -- the players the last walk found (their positions are read when a creature is rolled)
 	self.walk = nil
 	self.next_walk = nil
@@ -144,17 +147,39 @@ function R:on_died(id)
 	self.seen[id] = nil
 end
 
--- Raises a colour version's DamageMod once it has one (the game may add it after the spawn).
-local function raise_damage(self, world, now)
-	for id, d in pairs(self.damage) do
-		local dm = get(world, "DamageMod", id)
-		if dm and dm.dataStorage and dm.dataStorage[3] then
-			dm.dataStorage[3] = dm.dataStorage[3] * d.mul
-			self.damage[id] = nil
-		elseif now > d.until_s then
-			self.damage[id] = nil
+-- A colour version's damage bonus on top of the DamageMod value the game holds now (it writes its own when it rescales
+-- the creature to a level).
+local function keep_damage(world, id, e)
+	local dm = get(world, "DamageMod", id)
+	local v = dm and dm.dataStorage and dm.dataStorage[3]
+	if not v or (e.wrote and math.abs(v - e.wrote) <= 1e-4) then return end
+	e.wrote = v * e.bonus
+	dm.dataStorage[3] = e.wrote
+end
+
+-- The colour versions' damage, each while it is that wild animal (tamed or gone: no more).
+local function keep_bonuses(self, world)
+	for id, e in pairs(self.ours) do
+		if e.keep then
+			local f = get(world, "Faction", id)
+			if still_ours(world, id, e) and f and (f.faction == 5 or f.faction == 6) then
+				keep_damage(world, id, e)
+			else
+				e.keep = nil
+			end
 		end
 	end
+end
+
+-- Creature `id` was tamed: its wild damage bonus comes off before Beastmaster gives it its role (main.lua calls this
+-- before the pack takes it), and it is no longer one of the wild animals.
+function R:tamed(world, id)
+	local e = self.ours[id]
+	self.ours[id] = nil
+	if not e or not e.wrote then return end
+	local dm = get(world, "DamageMod", id)
+	local v = dm and dm.dataStorage and dm.dataStorage[3]
+	if v and math.abs(v - e.wrote) <= 1e-4 then dm.dataStorage[3] = v / e.bonus end
 end
 
 -- Puts `entry` (a kinds pool entry; `coat`: a colour version) into the world in place of game creature `id`.
@@ -176,14 +201,15 @@ function R:swap(world, id, entry, coat)
 	if lvl and level then lvl.dataStorage[1] = level end
 	local scaling = get(world, "DynamicEnemyScaling", new)
 	if scaling then scaling.nextUpdateTime = 0 end  -- the game rescales health and damage to the new level
-	self.ours[new] = { entry = entry, coat = coat }
+	local e = { entry = entry, coat = coat }
+	self.ours[new] = e
 	self.seen[new] = true
 	if coat then
 		local mul = (self.env.setting("wild_coat_strength") or 100) / 100
 		if mul ~= 1 then
 			if self.env.on_spawn then self.env.on_spawn(world, new, nil, mul) end
-			self.damage[new] = { mul = mul, until_s = self.env.now(world) + DAMAGE_WAIT_S }
-			raise_damage(self, world, self.env.now(world))
+			e.bonus, e.keep = mul, true
+			keep_damage(world, new, e)
 		end
 	end
 	emf.log(string.format("our animals in the wild: entity %d is %s now (entity %d)", id, entry.name, new))
@@ -193,6 +219,13 @@ end
 -- Rolls creature `c` once: maybe a swap.
 local function decide(self, world, c)
 	if self.off then return end
+	-- still the creature the walk found (the game gives ids out again)
+	local f = get(world, "Faction", c.id)
+	if not f or f.faction ~= c.faction or self.ours[c.id] or get(world, "PlayerState", c.id)
+		or get(world, "ScaleComponent", c.id) or kind_graph(world, c.id, f) ~= c.graph then
+		return
+	end
+	if #self.players == 0 then return end
 	local s = self.env.setting
 	local coat_p = math.max(0, s("wild_coat_pct") or 0) / 100
 	local rep_p = math.max(0, s("wild_replace_pct") or 0) / 100
@@ -232,8 +265,7 @@ local function walk_slice(self, world, now)
 				local graph = kind_graph(world, id, f)
 				if graph then
 					self.seen[id] = true
-					local sc = get(world, "ScaleComponent", id)
-					if not w.first and not (sc and math.abs(sc.uniformScale - 1) > 0.01) then
+					if not w.first and not get(world, "ScaleComponent", id) then
 						self.cands[#self.cands + 1] = { id = id, graph = graph, faction = f.faction, at = now }
 						self.asks[id] = true
 					end
@@ -250,20 +282,24 @@ local function walk_slice(self, world, now)
 		if not w.present[id] then self.ours[id] = nil end
 	end
 	self.players = w.players
+	if w.first and #w.players == 0 then self.first = true end  -- nobody in the world yet: the next walk marks too
 	self.walk = nil
 end
 
 function R:step(world)
 	local now = self.env.now(world)
-	raise_damage(self, world, now)
-	if self.off then return end
+	keep_bonuses(self, world)
+	if self.off then
+		self.cands, self.asks = {}, {}
+		return
+	end
 	if not self.walk and (not self.next_walk or now >= self.next_walk) then
 		self.next_walk = now + M.WALK_S
 		self.walk = { ids = world:entities(), i = 1, present = {}, players = {}, first = self.first }
 		self.first = false
 	end
 	if self.walk then walk_slice(self, world, now) end
-	if #self.cands == 0 then return end
+	if self.walk or #self.cands == 0 then return end  -- rolled after the walk that found them: its players complete
 	local keep = {}
 	for _, c in ipairs(self.cands) do
 		if self.models[c.id] or now >= c.at + M.ASK_S then
