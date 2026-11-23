@@ -5844,6 +5844,24 @@ TEST_CASE("home: a beast at home has the health it has when called (its role, lo
     CHECK(now_of<ecs::Health>(b, 1235).dataStorage[3] == 70);  // the boar's: 1.7x
 }
 
+TEST_CASE("home: a change of Beast health reaches the beasts at home at once (not only when next shown)") {
+    BeastRig b({{"beast_health", "100"}, {"beast_damage", "100"}});
+    three_beasts(b);
+    large_stable(b, 950, 10, 0);
+    homes_ready(b, 3);
+    for (uint32_t id : {1234u, 1235u, 1236u}) component<ecs::Health>(b.r.fake, id).dataStorage[2] = 100;
+    b.seconds(33);
+    REQUIRE(b.r.fake.spawns.size() == 3);
+    REQUIRE(now_of<ecs::Health>(b, 1234).dataStorage[3] == 20);
+    b.r.fake.settings["beastmaster.beast_health"] = "200";
+    for (auto& [mod, cb] : b.r.fake.setting_watchers)  // the Mods tab changed it
+        if (mod == "beastmaster") cb.first(kServer, "beastmaster", "beast_health", cb.second);
+    b.seconds(2);
+    CHECK(b.r.fake.spawns.size() == 3);  // the same creatures: none shown again
+    CHECK(now_of<ecs::Health>(b, 1234).dataStorage[3] == 140);  // 100 x 1.2 x 2 - 100
+    CHECK(now_of<ecs::Health>(b, 1235).dataStorage[3] == 240);  // 100 x 1.7 x 2 - 100
+}
+
 TEST_CASE("home: a monster's hit on a beast at home sends that stable's beasts inside (out of the world); they come "
           "back 30 s after the last hit") {
     BeastRig b;

@@ -327,12 +327,23 @@ function H:show(world, b, account, owner, h, spot, now)
 	if lvl and lvl.dataStorage and mine and mine.dataStorage then lvl.dataStorage[1] = mine.dataStorage[1] end
 	local scaling = get(world, "DynamicEnemyScaling", id)
 	if scaling then scaling.nextUpdateTime = 0 end
-	if self.env.on_spawn then
-		local health = pack_mod.strength(self.env.setting)
-		self.env.on_spawn(world, id, sp, pack_mod.health_mul(b, self.env.setting("loyalty_pace"), health))
-	end
+	self:health(world, e)
 	guard(world, id, h)
 	return e
+end
+
+-- Home beast `e`'s health as when called: its role, loyalty and talents, times the beast_health setting (the health
+-- watch, env.on_spawn).
+function H:health(world, e)
+	if not self.env.on_spawn then return end
+	local health = pack_mod.strength(self.env.setting)
+	self.env.on_spawn(world, e.id, species.by_id(e.beast.species),
+		pack_mod.health_mul(e.beast, self.env.setting("loyalty_pace"), health))
+end
+
+-- beast_health changed: every beast at home follows at the next step.
+function H:strength_changed()
+	self.restrength = true
 end
 
 -- Whether beast `b` may be shown now.
@@ -549,6 +560,12 @@ end
 -- Every step of the server world: the beasts at home are calmed and their leases renewed; once a second, the check.
 function H:step(world)
 	local now = self.env.now(world)
+	if self.restrength then
+		self.restrength = nil
+		for id, e in pairs(self.ids) do
+			if ours(world, id) then self:health(world, e) end
+		end
+	end
 	for id, e in pairs(self.ids) do
 		pack_mod.calm(world, id)
 		if e.sc.held and (now < e.sc.leased or now - e.sc.leased >= RENEW_S) then
