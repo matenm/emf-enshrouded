@@ -172,16 +172,20 @@ $out = Join-Path $game "smoke.json"
 # Runs EMF.exe on the fake folder and returns what it wrote to out.json (with -Eval: the page script's window.emfProbe
 # and where the page is, as .probe). Unless EMF_TEST_APPDATA names one, the run gets an app-data folder of its own
 # (nothing carries over from another run: the key, folders.json) with the tester switch for Nexus on (New-AppData).
-function Invoke-Smoke([string]$Eval = "", [string]$SelectMod = "", [string[]]$More = @()) {
+function Invoke-Smoke([string]$Eval = "", [string]$SelectMod = "", [string[]]$More = @(), [scriptblock]$Before = $null) {
     # WebView2's browser process sometimes ends at start inside a full verify run (0x80004005; never seen when this script
     # runs alone), and an immediate second try has failed the same way (the last run's WebView2 still closing): up to two
     # more tries then, each after a pause and said in the output, after any stand-in server of this run is stopped
+    # $Before puts a step's files as the step expects them, before every try: a try whose browser ended part-way may
+    # already have changed them (a setting reset, a key bound)
+    if ($Before) { & $Before }
     $r = Invoke-SmokeOnce $Eval $SelectMod $More
     for ($try = 2; $try -le 3 -and $r.Json -match "browser process ended"; $try++) {
         Write-Host "retry: WebView2's browser process ended at start; try $try of this smoke step after a pause"
         Get-Process enshrouded_server -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$runTemp*" } |
             Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds (3 * ($try - 1))
+        if ($Before) { & $Before }
         $r = Invoke-SmokeOnce $Eval $SelectMod $More
     }
     return $r
@@ -253,7 +257,9 @@ try {
 
     # 1b. the Lua starter's settings: every control, a setting greyed out by another one, a key bind
     $settingsJs = "var W=function(c,f,n){n=n||0;if(c()){f();}else if(n<120){setTimeout(function(){W(c,f,n+1);},100);}else{f();}}; var pr={}; window.emfProbe=pr; var by=function(t){return [...document.querySelectorAll('#details .setting')].find(function(x){return x.querySelector('.setting-label').textContent===t;});}; var kb=function(){var x=by('Key that shows and hides the line'); return x&&x.querySelector('.keybind');}; W(function(){return !!by('Text');},function(){ pr.groups=[...document.querySelectorAll('#details .setting-group')].map(function(h){return h.textContent;}); var t=by('Text').querySelector('input'); pr.textMax=t.maxLength; pr.textOff=t.disabled; var c=by('Corner'); pr.options=[...c.querySelectorAll('option')].map(function(o){return o.textContent;}); pr.corner=c.querySelector('select').value; pr.cornerTip=c.title; pr.showTip=by('Show the line').title; pr.color=by('Colour').querySelector('input[type=color]').value; var r=by('Decimals of your position').querySelector('input[type=range]'); pr.range=r?[r.min,r.max,r.step].join(','):'none'; pr.key=kb().textContent; by('Show the line').querySelector('.switch').click(); W(function(){var x=by('Text'); return x&&x.querySelector('input').disabled;},function(){ var x=by('Text'); pr.textOffAfter=x.querySelector('input').disabled; pr.cond=(x.querySelector('.setting-cond')||{}).textContent||''; kb().click(); W(function(){return !!document.querySelector('#details .keybind.waiting');},function(){ pr.waiting=kb().textContent; window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyG',key:'g',bubbles:true})); W(function(){return kb()&&kb().textContent==='G';},function(){ pr.keyAfter=kb().textContent; window.emfDone=true; }); }); }); });"
-    $run = Invoke-Smoke -Eval $settingsJs -SelectMod "emf:my_first_mod" -More @("--probe-wait", "9000")
+    $starterIni = Join-Path $game "emf\config\my_first_mod.ini"
+    $starterAs = { param([string]$text) { if ($text) { [System.IO.File]::WriteAllText($starterIni, $text) } else { Remove-Item -LiteralPath $starterIni -ErrorAction SilentlyContinue } }.GetNewClosure() }
+    $run = Invoke-Smoke -Eval $settingsJs -SelectMod "emf:my_first_mod" -More @("--probe-wait", "9000") -Before (& $starterAs "")
     $p1b = if ($run.R -and $run.R.probe) { $run.R.probe.probe } else { $null }
     Check ($run.Code -eq 0 -and $null -ne $p1b) "the Lua starter's settings page ran its script ($($run.Code))"
     if ($p1b) {
@@ -267,14 +273,13 @@ try {
         Check ($p1b.textOffAfter -and $p1b.cond -eq "Only while Show the line is on.") "switching Show the line off greys out the text, saying why ($($p1b.cond))"
         Check ($p1b.waiting -like "Press a key*" -and $p1b.keyAfter -eq "G") "a click on the key bind waits for a key; G binds it ($($p1b.waiting) -> $($p1b.keyAfter))"
     }
-    $starterIni = Join-Path $game "emf\config\my_first_mod.ini"
     $iniText = if (Test-Path -LiteralPath $starterIni) { Get-Content -LiteralPath $starterIni -Raw } else { "" }
     Check (($iniText -match "(?m)^show=0") -and ($iniText -match "(?m)^toggle_key=G")) "both changes are in emf\config\my_first_mod.ini ($($iniText.Trim() -replace "`r`n", ' | '))"
 
     # 1c. key binds bind the key the game will see: by the layout's virtual key, NumLock, never the IME's key; Shift,
     # Ctrl and Alt only when released alone (Shift+H binds H)
     $keysJs = "var W=function(c,f,n){n=n||0;if(c()){f();}else if(n<120){setTimeout(function(){W(c,f,n+1);},100);}else{f();}}; var pr={}; window.emfProbe=pr; var by=function(t){return [...document.querySelectorAll('#details .setting')].find(function(x){return x.querySelector('.setting-label').textContent===t;});}; var kb=function(){var x=by('Key that shows and hides the line'); return x&&x.querySelector('.keybind');}; var key=function(type,code,k){var ev=new KeyboardEvent(type,{code:code,bubbles:true}); Object.defineProperty(ev,'keyCode',{get:function(){return k;}}); window.dispatchEvent(ev);}; pr.names=[keyName({keyCode:101,code:'Numpad5'}),keyName({keyCode:12,code:'Numpad5'}),keyName({keyCode:38,code:'Numpad8'}),keyName({keyCode:229,key:'Process'}),keyName({keyCode:90,code:'KeyY'}),keyName({keyCode:186,code:'Semicolon'}),keyName({keyCode:0,code:'KeyQ'}),keyName({keyCode:113,code:'F2'})].join(','); W(function(){return !!kb();},function(){ kb().click(); W(function(){return !!document.querySelector('#details .keybind.waiting');},function(){ key('keydown','ShiftLeft',16); pr.waitingAfterShift=!!document.querySelector('#details .keybind.waiting'); key('keydown','KeyH',72); W(function(){return kb()&&kb().textContent==='H';},function(){ pr.shiftH=kb().textContent; kb().click(); W(function(){return !!document.querySelector('#details .keybind.waiting');},function(){ key('keydown','ShiftLeft',16); key('keyup','ShiftLeft',16); W(function(){return kb()&&kb().textContent==='Shift';},function(){ pr.shiftAlone=kb().textContent; window.emfDone=true; }); }); }); }); });"
-    $run = Invoke-Smoke -Eval $keysJs -SelectMod "emf:my_first_mod" -More @("--probe-wait", "9000")
+    $run = Invoke-Smoke -Eval $keysJs -SelectMod "emf:my_first_mod" -More @("--probe-wait", "9000") -Before (& $starterAs "[my_first_mod]`r`nshow=0`r`ntoggle_key=G`r`n")
     $p1c = if ($run.R -and $run.R.probe) { $run.R.probe.probe } else { $null }
     Check ($run.Code -eq 0 -and $null -ne $p1c) "the key bind page script ran ($($run.Code))"
     if ($p1c) {
@@ -287,7 +292,7 @@ try {
 
     # 1d. Reset beside a setting someone set (its line goes from the ini), and Reset all (asks, then every setting)
     $resetJs = "var W=function(c,f,n){n=n||0;if(c()){f();}else if(n<120){setTimeout(function(){W(c,f,n+1);},100);}else{f();}}; var pr={}; window.emfProbe=pr; var by=function(t){return [...document.querySelectorAll('#details .setting')].find(function(x){return x.querySelector('.setting-label').textContent===t;});}; var rb=function(t){var x=by(t); return x&&x.querySelector('button.reset');}; W(function(){return !!rb('Key that shows and hides the line');},function(){ pr.before=!!rb('Show the line'); rb('Key that shows and hides the line').click(); W(function(){return !rb('Key that shows and hides the line');},function(){ var k=by('Key that shows and hides the line').querySelector('.keybind'); pr.key=k?k.textContent:''; by('Show the line').querySelector('.switch').click(); W(function(){var r=by('Decimals of your position'); r=r&&r.querySelector('input[type=range]'); return r&&!r.disabled;},function(){ var all=document.querySelector('.reset-all'); pr.all=!!all; all.dispatchEvent(new MouseEvent('click',{bubbles:true,detail:1})); var a2=document.querySelector('.reset-all'); a2.dispatchEvent(new MouseEvent('click',{bubbles:true,detail:2})); setTimeout(function(){ pr.dbl=document.querySelectorAll('#details button.reset').length; var rg=by('Decimals of your position').querySelector('input[type=range]'); rg.focus(); rg.value=rg.max; setTimeout(function(){ pr.typed=(document.activeElement===rg)+','+rg.value; rg.blur(); all=document.querySelector('.reset-all'); all.click(); W(function(){var a=document.querySelector('.reset-all'); return a&&/again/.test(a.textContent);},function(){ pr.asked=document.querySelector('.reset-all').textContent; document.querySelector('.reset-all').click(); W(function(){return !document.querySelector('.reset-all');},function(){ pr.left=document.querySelectorAll('#details button.reset').length; window.emfDone=true; }); }); }, 5600); }, 400); }); }); });"
-    $run = Invoke-Smoke -Eval $resetJs -SelectMod "emf:my_first_mod" -More @("--probe-wait", "30000")  # it waits out the 5 s question
+    $run = Invoke-Smoke -Eval $resetJs -SelectMod "emf:my_first_mod" -More @("--probe-wait", "30000") -Before (& $starterAs "[my_first_mod]`r`nshow=0`r`ntoggle_key=Shift`r`n")  # it waits out the 5 s question
     $p1d = if ($run.R -and $run.R.probe) { $run.R.probe.probe } else { $null }
     if (-not ($p1d -and $p1d.key)) { "reset step output: $($run.Json)" }  # what the page had, for a failure
     Check ($run.Code -eq 0 -and $null -ne $p1d) "the reset page script ran ($($run.Code))"
@@ -321,7 +326,10 @@ try {
     # 1f. EMF's own settings on the EMF tab: the in-game Settings tab's pages; the console key takes the next key press by
     # where the key is (Enter refused), and its line goes into emf\emf_core.ini
     $emfJs = "var W=function(c,f,n){n=n||0;if(c()){f();}else if(n<120){setTimeout(function(){W(c,f,n+1);},100);}else{f();}}; var pr={}; window.emfProbe=pr; var card=function(){return document.getElementById('emf-settings');}; var by=function(t){return [...card().querySelectorAll('.setting')].find(function(x){return x.querySelector('.setting-label').textContent===t;});}; var kb=function(){var x=by('Console key'); return x&&x.querySelector('.keybind');}; var key=function(code,k){window.dispatchEvent(new KeyboardEvent('keydown',{code:code,key:k,bubbles:true}));}; W(function(){return !!card().querySelector('.emf-page');},function(){ pr.pages=[...card().querySelectorAll('.emf-page')].map(function(b){return b.textContent;}).join('|'); pr.hidden=card().hidden; [...card().querySelectorAll('.emf-page')].find(function(b){return b.textContent==='Console';}).click(); W(function(){return !!kb();},function(){ pr.before=kb().textContent; pr.live=(by('Font').querySelector('.setting-when')||{}).textContent||''; kb().click(); W(function(){return !!card().querySelector('.keybind.waiting');},function(){ key('Enter','Enter'); pr.enter=!!card().querySelector('.keybind.waiting'); key('ControlLeft','Control'); pr.ctrl=!!card().querySelector('.keybind.waiting'); key('KeyQ','q'); W(function(){return kb()&&/0x10/.test(kb().textContent);},function(){ pr.after=kb().textContent; [...card().querySelectorAll('.emf-page')].find(function(b){return b.textContent==='Text on screen';}).click(); W(function(){return !!by('Text size (%)');},function(){ var x=by('Text size (%)'); var num=x.querySelector('input[type=number]'); num.focus(); num.value='999'; num.dispatchEvent(new Event('change',{bubbles:true})); x.querySelector('input[type=range]').focus(); W(function(){return !!card().querySelector('.setting-error');},function(){ pr.err=(card().querySelector('.setting-error')||{}).textContent||''; pr.shown=(by('Text size (%)').querySelector('input[type=number]')||{}).value||''; window.emfDone=true; }); }); }); }); }); });"
-    $run = Invoke-Smoke -Eval $emfJs -More @("--page", "emf", "--probe-wait", "9000")
+    $coreIni = Join-Path $game "emf\emf_core.ini"
+    $coreWas = if (Test-Path -LiteralPath $coreIni) { [System.IO.File]::ReadAllText($coreIni) } else { $null }
+    $coreBack = { if ($null -ne $coreWas) { [System.IO.File]::WriteAllText($coreIni, $coreWas) } else { Remove-Item -LiteralPath $coreIni -ErrorAction SilentlyContinue } }.GetNewClosure()
+    $run = Invoke-Smoke -Eval $emfJs -More @("--page", "emf", "--probe-wait", "9000") -Before $coreBack
     $p1f = if ($run.R -and $run.R.probe) { $run.R.probe.probe } else { $null }
     Check ($run.Code -eq 0 -and $null -ne $p1f) "the EMF settings script ran ($($run.Code))"
     if ($p1f) {
@@ -330,7 +338,6 @@ try {
         Check ($p1f.enter -and $p1f.ctrl -and $p1f.after -like "*0x10*") "Enter and Left Ctrl (AltGr presses it too) are refused, Q is taken as scan code 0x10 ($($p1f.enter); $($p1f.ctrl); $($p1f.after))"
         Check ($p1f.err -like "*between 60 and 200*" -and $p1f.shown -ne "999") "a refused value shows its reason and the saved value, though the focus moved to another field of the card ($($p1f.err); $($p1f.shown))"
     }
-    $coreIni = Join-Path $game "emf\emf_core.ini"
     $coreText = if (Test-Path -LiteralPath $coreIni) { Get-Content -LiteralPath $coreIni -Raw } else { "" }
     Check ($coreText -match "(?ms)^\[overlay\].*^key=0x10") "the console key is in emf\emf_core.ini under [overlay] ($($coreText.Trim() -replace "`r`n", ' | '))"
 
