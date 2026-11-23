@@ -433,21 +433,18 @@ All of these work from the game's chat for every player (`/beastmaster <word>`),
 
 ## The bear pack (`emf_beastmaster_bear`)
 
-An EML data patch that adds one new creature, `Beastmaster_Bear` (template `b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f02`): a
-realistic grizzly on a skeleton and animations of its own (it walks, runs, rears up to swipe, flinches and rolls over
-when it dies), played by a copy of the game wolf's animation graph and AI. Bear model and animations: "Realistic Animated
-Bear 3D Model" by WildMesh 3D, licensed under CC BY 4.0 (used in the game with changes). Pack 1.0's bear, made with
-Meshy on the game wolf's skeleton, is still known to Beastmaster. It is in
+An EML data patch that adds one new creature, `Beastmaster_Bear` (template `b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f02`). Since
+3.0 it is the wilds pack's broad brown bear, made in the game's style and fitted straight onto the game sabretooth, so
+it moves and fights with the sabretooth's own animations and AI; the earlier bear (on a skeleton of its own) is gone,
+and the bears you tamed come as this one, with the same name, loyalty and talents. It is in
 the **EMF creature packs** download on EMF's Nexus page. Install it with EMF.exe ("Install a downloaded file") or put
 its folder in the `mods` folder next to the game; EMF builds it when the game starts (it is EML content: EML or
-ShroudForge can apply it too). The template sets the size
-(`ScaleComponent` 1.4), the damage (DamageMod multiplier x1.5) and the speeds (walk 1.6 m/s, run 6 m/s as a wolf's,
-the rest x0.85). The health (x2.5) comes from
-Beastmaster when it spawns a bear: the game's template has no base health of its own.
+ShroudForge can apply it too). The template sets the size (`ScaleComponent` 1.4, which is also how Beastmaster tells a
+bear from a sabretooth). The health (x2.5) comes from Beastmaster when it spawns a bear.
 
 To rebuild it from its sources (for modders; the sources are not in the repository): `python -I
 tools/models/make_mod.py tools/models/packs/beastmaster_bear.json`. The pack holds the new model and its texture, plus
-instructions that copy and change the game's wolf at load time; no game files are copied into it.
+instructions that copy and change the game's sabretooth at load time; no game files are copied into it.
 
 ## The beasts pack (`emf_beastmaster_beasts`)
 
