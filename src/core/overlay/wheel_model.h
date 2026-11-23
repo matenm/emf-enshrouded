@@ -20,7 +20,6 @@ public:
     static constexpr uint64_t kTapMs = 300;      // a hold-key release sooner than this is a tap...
     static constexpr float kTapPickRadius = 120.0f;  // ...that picks only after a flick at least this long
     static constexpr uint16_t kScan1 = 0x02;      // the top row's 1 (scan code); 2-8 follow
-    static constexpr uint16_t kVkNumpad1 = 0x61;  // VK_NUMPAD1; 2-8 follow
     static constexpr uint16_t kVkLeft = 0x25, kVkRight = 0x27;  // VK_LEFT, VK_RIGHT: the previous / next page
 
     // hold_mode: the wheel stays open while the key `hold_vk` is held and its release picks; otherwise a left click

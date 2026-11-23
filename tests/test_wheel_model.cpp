@@ -283,6 +283,19 @@ TEST_CASE("wheel: 1-8 choose the slice with that number on the page shown (top r
     CHECK(!w.key(key(0x02, '1', true, true), 10));  // an extended key with that scan code is another key
 }
 
+TEST_CASE("wheel: the numpad chooses with NumLock off too (its keys then come as arrows, home, end, without E0)") {
+    WheelModel w;
+    w.open("Orders", names(8), false, 0, 0);
+    CHECK(w.key(key(0x4B, 0x25, true), 10) == 3);  // numpad 4 (VK_LEFT without E0): the fourth slice, not a page
+    w.open("Orders", names(8), false, 0, 0);
+    CHECK(w.key(key(0x4F, 0x23, true), 10) == 0);  // numpad 1 (VK_END)
+    w.open("Orders", names(8), false, 0, 0);
+    CHECK(w.key(key(0x48, 0x26, true), 10) == 7);  // numpad 8 (VK_UP)
+    w.open("Orders", names(8), false, 0, 0);
+    CHECK(!w.key(key(0x48, 0x26, true, true), 10));  // the arrow Up (E0): nothing
+    CHECK(w.is_open());
+}
+
 TEST_CASE("wheel: Left and Right turn the pages") {
     WheelModel w;
     w.open("Recipes", names(20), false, 0, 0);
@@ -293,4 +306,12 @@ TEST_CASE("wheel: Left and Right turn the pages") {
     w.key(key(0x4B, 0x25, true, true), 10);  // and round to the last page
     CHECK(w.page() == 2);
     CHECK(w.is_open());
+}
+
+TEST_CASE("wheel: a wheel opened with a number key does not pick with that key's own presses (its key repeat)") {
+    WheelModel w;
+    w.open("Orders", names(5), true, '2', 0);  // a mod's wheel key is "2", held
+    CHECK(!w.key(key(0x03, '2', true), 50));    // the held key repeating
+    CHECK(w.is_open());
+    CHECK(w.key(key(0x04, '3', true), 60) == 2);  // other numbers still choose
 }

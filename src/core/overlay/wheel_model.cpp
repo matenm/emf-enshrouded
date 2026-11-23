@@ -71,18 +71,21 @@ std::optional<int> WheelModel::finish(int result) {
 std::optional<int> WheelModel::key(const KeyEvent& e, uint64_t now_ms) {
     if (!open_) return std::nullopt;
     if (e.down && e.scan == InputRouter::kEscScan && !e.extended) return finish(-1);
-    if (e.down) {
-        // 1-8 pick the slice with that number on the page shown: the top row by its scan code (0x02-0x09: the same
-        // physical keys on every layout, also where they type other characters without Shift), the numpad by its key
+    if (e.down && !(hold_vk_ && e.vkey == hold_vk_)) {  // the wheel's own key is no number (a mod's key "2")
+        // 1-8 pick the slice with that number on the page shown, by scan code: the top row (0x02-0x09: the same
+        // physical keys on every layout, also where they type other characters without Shift) and the numpad (with
+        // NumLock off its keys come as arrows, Home, End... but keep their scan codes, without E0)
+        static constexpr uint16_t kNumpad[kPerPage] = {0x4F, 0x50, 0x51, 0x4B, 0x4C, 0x4D, 0x47, 0x48};
         int slice = -1;
         if (!e.extended && e.scan >= kScan1 && e.scan < kScan1 + kPerPage) slice = e.scan - kScan1;
-        else if (e.vkey >= kVkNumpad1 && e.vkey < kVkNumpad1 + kPerPage) slice = e.vkey - kVkNumpad1;
+        for (size_t i = 0; slice < 0 && !e.extended && i < kPerPage; ++i)
+            if (e.scan == kNumpad[i]) slice = static_cast<int>(i);
         if (slice >= 0) {
             if (static_cast<size_t>(slice) < page_count()) return finish(static_cast<int>(page_first()) + slice);
             return std::nullopt;  // no entry with that number
         }
-        if (e.vkey == kVkRight) scroll(-1.0f);  // the next page (as a notch of the mouse wheel down)
-        if (e.vkey == kVkLeft) scroll(1.0f);
+        if (e.extended && e.vkey == kVkRight) scroll(-1.0f);  // the arrows (E0): the next page, as the mouse wheel down
+        if (e.extended && e.vkey == kVkLeft) scroll(1.0f);
     }
     if (hold_mode_ && !e.down && e.vkey == hold_vk_) {
         const int h = highlighted();

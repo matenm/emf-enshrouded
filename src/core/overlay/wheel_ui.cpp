@@ -128,10 +128,10 @@ void draw_wheel(const WheelModel& wheel, ImVec2 display, const TextLook& look) {
             centered_text(dl, look, ImVec2(at.x, y), l.dim ? text_dim : on ? text_on : text_off, fit(l.text, width));
             y += step;
         }
-        // its number (1-8 choose it), small, near the outer edge
+        // its number (1-8 choose it), small, by the inner edge (clear of the label)
         const char digit[2] = {static_cast<char>('1' + i), '\0'};
-        const float rn = outer - line_h * 0.7f;
-        centered_text(dl, look, ImVec2(c.x + std::cos(mid) * rn, c.y + std::sin(mid) * rn - line_h * 0.5f), text_dim, digit);
+        const float rn = inner + line_h * 0.6f;
+        centered_text(dl, look, ImVec2(c.x + std::cos(mid) * rn, c.y + std::sin(mid) * rn), text_dim, digit);
     }
     // Centre: title (bold), page, and a dot showing where the mouse points.
     dl->AddCircleFilled(c, inner * 0.92f, IM_COL32(10, 11, 14, 225), 64);

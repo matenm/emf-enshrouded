@@ -347,14 +347,25 @@ TEST_CASE("InputRouter wheel: a key held before the wheel opened still releases 
     InputRouter r;
     CHECK(r.key(down(kW)) == Route::Game);  // W held (walking) when a wheel opens
     r.set_wheel(true);
-    CHECK(r.key(down(kW)) == Route::Console);  // its auto-repeat goes to the overlay
-    CHECK(r.key(down(kW)) == Route::Console);
+    CHECK(r.key(down(kW)) == Route::Swallow);  // its auto-repeats are no presses for the wheel (a number key's would
+    CHECK(r.key(down(kW)) == Route::Swallow);  // pick its slice)
     CHECK(r.legacy_key(down(kW)) == Route::Swallow);
     CHECK(r.key(up(kW)) == Route::Both);  // the game saw W go down: it must see it go up
     CHECK(r.legacy_key(up(kW)) == Route::Game);
     CHECK(r.key(down(kA)) == Route::Console);  // pressed and repeated during the wheel: the game never saw it
     CHECK(r.key(down(kA)) == Route::Console);
     CHECK(r.key(up(kA)) == Route::Console);
+}
+
+TEST_CASE("InputRouter wheel: the auto-repeats of a key held since before it opened (its hold key) never reach it") {
+    constexpr uint16_t k2 = 0x03;
+    InputRouter r;
+    CHECK(r.key(down(k2)) == Route::Game);  // "2" opens a mod's wheel
+    r.set_wheel(true);
+    CHECK(r.key(down(k2)) == Route::Swallow);  // its auto-repeats: not a press for the wheel
+    CHECK(r.key(down(k2)) == Route::Swallow);
+    CHECK(r.key(up(k2)) == Route::Both);  // its release: the wheel (hold mode picks) and the game, which saw it go down
+    CHECK(r.key(down(k2)) == Route::Console);  // a new press after that is the wheel's
 }
 
 TEST_CASE("InputRouter: a wheel's hold key still down after the wheel closed stays hidden from mods until released") {

@@ -23,6 +23,9 @@ Route InputRouter::decide(const KeyEvent& e) {
     if (wheel_ && !open_) {  // a wheel captures: no console toggling, the overlay sees every key
         if (e.down) {
             if (held) return Route::Swallow;  // auto-repeat of the key that last toggled the console
+            // an auto-repeat of a key held since before the wheel opened (its hold key): not a press for the wheel;
+            // its release still reaches the wheel and the game, which saw it go down
+            if (game_down_[index(e)]) return Route::Swallow;
             return Route::Console;
         }
         if (held) {
