@@ -4884,11 +4884,13 @@ TEST_CASE("pack beast: the bag opens with the game's chest screen; its items are
     b.reply("beastmaster.give packllama");
     b.spawnable(2);
     REQUIRE(b.reply("beastmaster.pack").find("comes") != std::string::npos);  // entity 1234
+    CHECK(offers_on(b, 1234) == 0u);  // not before its inventory is set up and its kept items are back
+    bag_of(b, 1234, 5000);
+    b.seconds(2);
     REQUIRE(offers_on(b, 1234) >= 1u);
     CHECK(last_offer(b, 1234)->o.verb == EMF_VERB_OPEN);
     CHECK(last_offer(b, 1234)->o.sequence == EMF_SEQUENCE_CHEST);
     // what its owner puts in: 7 of a material, and a sword at level 12, epic
-    bag_of(b, 1234, 5000);
     in_bag(b, 5000, 0, 0x111, 7);
     in_bag(b, 5000, 1, 0x222, 1, 5001);
     auto& sword = component<ecs::ItemState>(b.r.fake, 5001);
@@ -4920,6 +4922,76 @@ TEST_CASE("pack beast: the bag opens with the game's chest screen; its items are
     // before the game answers, its empty new bag never replaces what was kept
     b.seconds(2);
     CHECK(b.saved().find("c 0x00000000000000aa 273 7 0 0") != std::string::npos);
+}
+
+namespace {
+// Player 1's pack llama out as entity 1234 with 7 of item 0x111 in its bag, kept with the world.
+void llama_with_bag(BeastRig& b) {
+    with_offers(b.r.api);
+    b.reply("beastmaster.give packllama");
+    b.spawnable(2);
+    REQUIRE(b.reply("beastmaster.pack").find("comes") != std::string::npos);
+    bag_of(b, 1234, 5000);
+    b.seconds(2);
+    in_bag(b, 5000, 0, 0x111, 7);
+    b.seconds(1);
+    REQUIRE(b.saved().find("c 0x00000000000000aa 273 7 0 0") != std::string::npos);
+}
+}  // namespace
+
+TEST_CASE("pack beast review: a fallen llama, or its id taken by something else, never changes what its bag keeps") {
+    BeastRig b({{"call_cooldown_s", "0"}, {"call_mana_pct", "0"}});
+    llama_with_bag(b);
+    b.r.fake.attrs[{1234, EMF_ATTR_HEALTH}] = 0;  // it fell; the game empties or drops what it carried
+    in_bag(b, 5000, 0, 0, 0);
+    b.seconds(2);
+    CHECK(b.saved().find("c 0x00000000000000aa 273 7 0 0") != std::string::npos);
+    b.r.fake.attrs[{1234, EMF_ATTR_HEALTH}] = 100;  // the id is something else's now, with an inventory of its own
+    in_bag(b, 5000, 0, 0x999, 3);
+    b.seconds(2);
+    CHECK(b.saved().find("c 0x00000000000000aa 273 7 0 0") != std::string::npos);
+    CHECK(b.saved().find("2457 3") == std::string::npos);
+}
+
+TEST_CASE("pack beast review: an item that does not all go back in is given to its owner; the bag is not offered while another player is near") {
+    BeastRig b({{"call_cooldown_s", "0"}, {"call_mana_pct", "0"}});
+    llama_with_bag(b);
+    CHECK(b.reply("beastmaster.pack") == "Pack llama goes home.");
+    REQUIRE(b.reply("beastmaster.pack").find("comes") != std::string::npos);  // 1235
+    const size_t before = b.r.fake.puts.size();
+    bag_of(b, 1235, 5010);
+    b.seconds(1);
+    REQUIRE(b.r.fake.puts.size() == before + 1);
+    const EmfItemsRequest p = b.r.fake.puts[before];
+    const size_t gives = b.r.fake.gives.size();
+    p.cb(kServer, p.entity, p.item, p.count, 4, p.user);  // only 4 of 7 went in
+    b.seconds(1);
+    REQUIRE(b.r.fake.gives.size() == gives + 1);
+    CHECK(b.r.fake.gives.back().player == 1u);
+    CHECK(b.r.fake.gives.back().count == 3u);
+    // the owner's bag: while player 2 stands at the llama it is not offered (the chest screen would open for them)
+    b.seconds(2);
+    REQUIRE(offers_on(b, 1235) >= 1u);
+    place(b.r.fake, 2, 2, 10, 1);
+    b.seconds(2);
+    CHECK(contains(b.r.fake.offers_removed, 1235));
+    const size_t offers = offers_on(b, 1235);
+    place(b.r.fake, 2, 30, 10, 0);  // gone again
+    b.seconds(2);
+    CHECK(offers_on(b, 1235) == offers + 1);
+}
+
+TEST_CASE("pack beast review: the pack llama never takes an active slot: not with the first stable, not by Make active") {
+    BeastRig b({{"call_cooldown_s", "0"}, {"call_mana_pct", "0"}});
+    b.reply("beastmaster.give packllama");
+    b.reply("beastmaster.give wolf");
+    b.spawnable(1);
+    REQUIRE(b.reply("beastmaster.pack").find("comes") != std::string::npos);  // out first
+    at_stable(b);
+    b.seconds(1);
+    CHECK(b.saved().find("a 0x00000000000000aa Pack llama") == std::string::npos);
+    CHECK(b.saved().find("a 0x00000000000000aa Wolf") != std::string::npos);
+    CHECK(b.reply("beastmaster.active Pack llama").find("slot of its own") != std::string::npos);
 }
 
 TEST_CASE("pack beast: a pack llama let go for good gives what it carried to its owner") {

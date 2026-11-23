@@ -186,6 +186,10 @@ whatever your active slots, one per player, and it is not counted in your collec
 - **Nothing is lost:** what is in the bag is kept with the world (second by second, and when it goes home, steps aside
   or you leave) and goes back in when it comes again. Gear keeps its level and rarity; its wear is mended.
 - **Let go for good** (Release at a stable): what it carried goes into your inventory, the rest drops at your feet.
+- **Another player near it:** the bag is not offered while they stand at the llama (the game's chest screen would open
+  for them too); it comes back when they leave.
+- **If the game ends without saving** (a crash, Alt+F4) right after you put things into the bag, they may be both in the
+  bag and in your inventory: the bag is kept at once, your character only when the game saves.
 - For now it is given by the host (`beastmaster.give packllama`); a harness to craft is coming.
 
 ## Talents

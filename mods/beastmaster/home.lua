@@ -389,7 +389,7 @@ end
 function H:allowed(b, now)
 	if not self.p.belongs(b) then return false end
 	local sp = species.by_id(b.species)
-	if not sp or now < (self.refused[sp.id] or 0) then return false end
+	if not sp or sp.carrier or now < (self.refused[sp.id] or 0) then return false end  -- a pack beast waits unseen
 	return now >= (self.back_at[b] or 0)
 end
 

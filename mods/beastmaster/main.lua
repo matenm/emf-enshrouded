@@ -104,7 +104,6 @@ local trainees  -- the beasts in training shown at their Training Grounds (made 
 bag = require("bag").new({
 	now = now,
 	tell = tell,
-	name_of = function() return nil end,
 	save = function() save() end,
 })
 local pack = pack_mod.new({
@@ -125,6 +124,11 @@ local pack = pack_mod.new({
 	end,
 	at_home = function(id) return home:has(id) or trainees:has(id) end,
 })
+-- the bag follows only the account's pack llama out in the world (a fallen one, or an id taken by something else, not)
+bag.env.owns = function(id, account)
+	local e = pack.ids[id]
+	return e ~= nil and e.account == account and e.beast ~= nil and species.is_carrier(e.beast.species)
+end
 
 home = home_mod.new({
 	now = now,
@@ -270,6 +274,7 @@ end
 local stable_do = {}
 
 function stable_do.make_active(world, account, player, b)
+	if species.is_carrier(b.species) then return b.name .. " has a slot of its own: call it any time." end
 	if b.active then return b.name .. " is active already." end
 	if active_count(account) >= (open_slots(world, player) or 1) then return "No free active slot: store a beast first." end
 	b.active = true
@@ -508,6 +513,7 @@ function actions.train(world, player, account, key)
 	if not account then return "Your account is not known yet." end
 	local b = beasts:find(account, key)
 	if not b then return "No such beast (beastmaster.list shows yours)." end
+	if species.is_carrier(b.species) then return b.name .. " carries your things: it does not train." end
 	if b.training then return b.name .. " is training already (beastmaster.untrain brings it back)." end
 	if b.out then return b.name .. " is out: send it home first (beastmaster.dismiss)." end
 	if #training:grounds() == 0 then
@@ -1052,13 +1058,13 @@ on_first_stable = function(world)
 	for _, account in ipairs(beasts:accounts()) do
 		local open = open_slots(world, pack:owner(world, account)) or 1
 		local n = 0
-		for _, b in ipairs(beasts:list(account)) do
-			if b.out and n < open then
+		for _, b in ipairs(beasts:list(account)) do  -- a pack beast has a slot of its own, never an active one
+			if b.out and n < open and not species.is_carrier(b.species) then
 				b.active, n = true, n + 1
 			end
 		end
 		for _, b in ipairs(beasts:list(account)) do
-			if not b.active and n < open then
+			if not b.active and n < open and not species.is_carrier(b.species) then
 				b.active, n = true, n + 1
 			end
 		end

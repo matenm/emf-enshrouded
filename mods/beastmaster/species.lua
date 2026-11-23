@@ -88,7 +88,8 @@ M.list = {
 	-- the pack beast (GitHub #48): a llama on the game's cat-deer companion (the wilds pack's wilds_packllama, with a
 	-- 16-slot inventory in its template); GUIDs fixed forever
 	{ id = "packllama", name = "Pack llama", plural = "pack llamas", carrier = true, template = "d9da8d97-981f-4e72-86ac-ec81ff70b6d2",
-		model = "ebb344e5-9619-471d-a7dd-ee75ddc7ec65", pack = "the wilds pack (emf_beastmaster_wilds)", role_health = 1.0, role_damage = 1.0 },
+		model = "ebb344e5-9619-471d-a7dd-ee75ddc7ec65", pack = "the wilds pack (emf_beastmaster_wilds)", scale = 1.5,
+		role_health = 1.0, role_damage = 1.0 },
 }
 
 -- The wilds pack's fighting animals (species_wilds.lua): beasts like the ones above, known by replace.lua's list of the

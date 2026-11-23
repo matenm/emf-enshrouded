@@ -3,21 +3,24 @@
 -- "c <account> <item> <count> <level> <rarity>" and put back when the llama is called again (the creature itself is not
 -- saved by the game). Gear (a stack with its own item entity) keeps its level and rarity; its wear is mended.
 --
--- M.new(env) where env has: now(world), tell(world, player, text), owner_of(account) -> player entity or nil,
--- name_of(account) -> the owner's character name or nil, save().
+-- M.new(env) where env has: now(world), tell(world, player, text), save(), and (set once the pack exists)
+-- owns(id, account): `id` is still that account's pack llama out in the world.
 local M = {}
 local B = {}
 B.__index = B
 
 local OFFER = { verb = "Open", sequence = "chest", range = 6 }  -- sequence "chest": EMF's Lua 1.42
 local OFFER_EVERY_S = 5   -- offered again this often while EMF no longer holds the offer (the game may drop it)
-local PUT_TRIES = 30      -- seconds a new llama's inventory may take to be set up before its items wait for the next call
+local REFUSED_WAIT_S = 30 -- a refused offer is tried again after this long
+local PUT_WAIT_S = 30     -- a new llama's inventory may take this long to be set up; then its items wait for the next call
+local GUARD_M = 8         -- another player this near: the bag is not offered (the game's chest screen opens for anyone)
+local GUARD_EVERY_S = 1   -- how often who stands near is looked at
 
 function M.new(env)
 	return setmetatable({
 		env = env,
 		stacks = {},    -- account -> { {item, count, level, rarity}, ... } as kept with the world
-		live = {},      -- llama entity -> { account, owner, restored, tries, asked, offered_at }
+		live = {},      -- llama entity -> { account, owner, spawned_at, asked, waiting, restored, offered, ... }
 		no_chest = false,  -- an older EMF Lua: no bag (said once in the log)
 	}, B)
 end
@@ -60,23 +63,61 @@ local function same(a, b)
 	return true
 end
 
--- The llama `id` of `account` came into the world beside `owner`: its bag is offered, and its kept items wait to be put
--- back once the game has set up its inventory.
+-- The llama `id` of `account` came into the world beside `owner`: its kept items go back in once the game has set up its
+-- inventory, and only then is its bag offered.
 function B:spawned(world, account, id, owner)
-	self.live[id] = { account = account, owner = owner, restored = false, tries = 0 }
-	self:offer(world, id)
+	self.live[id] = { account = account, owner = owner, spawned_at = self.env.now(world) }
 end
 
-function B:offer(world, id)
-	local l = self.live[id]
-	if not l or self.no_chest then return end
-	local ok, res = pcall(emf.offer, world, id, OFFER, function(w, player, entity) self:opened(w, player, entity) end)
-	if not ok then
-		self.no_chest = true  -- an older Lua: no chest sequence
-		emf.log("the pack llama's bag needs EMF's Lua 1.42 or newer (" .. tostring(res) .. ")")
+-- Whether `id` is still this entry's llama, alive: a fallen llama, or an id the game gave to something else, is left
+-- alone (its last snapshot stands).
+function B:still(world, id, l)
+	if self.env.owns and not self.env.owns(id, l.account) then return false end
+	local cur = emf.health(world, id)
+	return not (cur ~= nil and cur <= 0)
+end
+
+-- Its owner's bag is offered while no other player stands near (the game's chest screen would open for them too).
+function B:guard(world, id, l, now)
+	if self.no_chest or now < (l.guard_at or 0) then return end
+	l.guard_at = now + GUARD_EVERY_S
+	local x, y, z = world:position(id)
+	if not x then return end
+	local other = false
+	for _, p in ipairs(world:entities()) do
+		if world:get("PlayerState", p) and world:account(p) ~= l.account then
+			local px, py, pz = world:position(p)
+			if px and (px - x) ^ 2 + (py - y) ^ 2 + (pz - z) ^ 2 <= GUARD_M * GUARD_M then other = true end
+		end
+	end
+	if other then
+		if l.offered then
+			emf.offer_remove(world, id)
+			l.offered = false
+		end
 		return
 	end
-	l.offered_at = self.env.now(world)
+	local dropped = l.offered and emf.offered and not emf.offered(world, id)
+	if (not l.offered or dropped) and now >= (l.offer_at or 0) then self:offer(world, id, l, now) end
+end
+
+function B:offer(world, id, l, now)
+	local ok, res = pcall(emf.offer, world, id, OFFER, function(w, player, entity) self:opened(w, player, entity) end)
+	if not ok then
+		if tostring(res):find("sequence", 1, true) then
+			self.no_chest = true  -- an older Lua: no chest sequence
+			emf.log("the pack llama's bag needs EMF's Lua 1.42 or newer (" .. tostring(res) .. ")")
+		else
+			emf.log("the pack llama's bag could not be offered: " .. tostring(res))
+		end
+		l.offer_at = now + REFUSED_WAIT_S
+		return
+	end
+	if res then
+		l.offered, l.offer_at = true, now + OFFER_EVERY_S
+	else
+		l.offered, l.offer_at = false, now + REFUSED_WAIT_S  -- the game's or another mod's offer is on it
+	end
 end
 
 -- E at the llama: its owner's chest screen opens by the game's own sequence; anyone else is told whose bag it is.
@@ -85,16 +126,19 @@ function B:opened(world, player, entity)
 	if not l then return end
 	local acct = world:account(player)
 	if acct and acct ~= l.account then
-		local name = self.env.name_of(l.account)
+		local name = l.owner and world.character_name and world:character_name(l.owner)
 		self.env.tell(world, player, "Only " .. (name or "its owner") .. " opens this bag.")
 	end
 end
 
--- Puts the kept items into a new llama once its inventory is set up; then follows what is in it.
+-- Puts the kept items into a new llama once its inventory is set up (what does not go in goes to its owner); then
+-- follows what is in it, and offers its bag.
 function B:step(world)
 	local now = self.env.now(world)
 	for id, l in pairs(self.live) do
-		if not l.restored then
+		if not self:still(world, id, l) then
+			self.live[id] = nil
+		elseif not l.restored then
 			if not l.asked then
 				local setup = world:get("InventorySetup", id)
 				if setup and setup.isInitialized then
@@ -103,21 +147,20 @@ function B:step(world)
 					l.waiting = #stacks
 					if l.waiting == 0 then l.restored = true end
 					for _, st in ipairs(stacks) do
-						emf.put(world, id, st.item, st.count, function()
+						emf.put(world, id, st.item, st.count, function(w, added)
+							added = added or 0
+							if added < st.count and l.owner then emf.give(w, l.owner, st.item, st.count - added) end
 							l.waiting = l.waiting - 1
 							if l.waiting <= 0 then l.restored = true end
 						end, st.level > 0 and { level = st.level, rarity = st.rarity } or nil)
 					end
-				else
-					l.tries = l.tries + 1
-					if l.tries > PUT_TRIES then self.live[id] = nil end  -- its items wait for the next call
+				elseif now - l.spawned_at > PUT_WAIT_S then
+					self.live[id] = nil  -- never offered: its items wait for the next call
 				end
 			end
 		else
 			self:snapshot(world, id)
-			if (now - (l.offered_at or -math.huge)) >= OFFER_EVERY_S and emf.offered and not emf.offered(world, id) then
-				self:offer(world, id)
-			end
+			self:guard(world, id, l, now)
 		end
 	end
 end
@@ -126,7 +169,7 @@ end
 -- llama's empty bag never replaces them.
 function B:snapshot(world, id)
 	local l = self.live[id]
-	if not l or not l.restored then return end
+	if not l or not l.restored or not self:still(world, id, l) then return end
 	local now = M.read(world, id)
 	if not now then return end
 	if not same(now, self.stacks[l.account] or {}) then
@@ -169,8 +212,8 @@ end
 
 function B:load(text)
 	self:reset()
-	for line in (text or ""):gmatch("[^\n]+") do
-		local account, item, count, level, rarity = line:match("^c (0x%x+) (%d+) (%d+) (%d+) (%d+)$")
+	for line in (text or ""):gmatch("[^\r\n]+") do
+		local account, item, count, level, rarity = line:match("^c (0x%x+) (%d+) (%d+) (%d+) (%d+)%s*$")
 		if account then
 			local list = self.stacks[account] or {}
 			list[#list + 1] = { item = tonumber(item), count = tonumber(count), level = tonumber(level),
