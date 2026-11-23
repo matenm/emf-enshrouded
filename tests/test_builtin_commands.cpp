@@ -1637,7 +1637,7 @@ TEST_CASE("builtin commands: move walks an enemy to a point or to an entity (pea
     CHECK(bsaid("move 61: entity 70 walks to (100.0, 20.0, -30.5) (move.stop 61)"));
     CHECK(bsaid("move 62: entity 70 walks to (100.0, 20.0, -30.5), ignoring players (move.stop 62)"));
     CHECK(bsaid("entity 13 not moved: it has no enemy AI to move"));
-    CHECK(bsaid("usage: move <enemy> <x> <y> <z> [peaceful] | move <enemy> <entity | me> [peaceful]"));
+    CHECK(bsaid("usage: move <enemy> <x> <y> <z> [peaceful] [arrive <metres>] | move <enemy> <entity | me> [peaceful] [arrive <metres>]"));
     CHECK(bsaid("move 61 ended"));
     CHECK(bsaid("no move 7"));
     REQUIRE(g_moves.size() == 2u);
@@ -1650,6 +1650,36 @@ TEST_CASE("builtin commands: move walks an enemy to a point or to an entity (pea
     CHECK(bsaid("move 61: entity 70 arrived"));
     g_moves[1].cb(nullptr, 62, EMF_MOVE_STUCK, g_moves[1].user);
     CHECK(bsaid("move 62: entity 70 is stuck (no way on for 15 s)"));
+}
+
+TEST_CASE("builtin commands: move takes arrive <metres> (GitHub #44), in any order with peaceful") {
+    BFixture f;
+    EmfApi api = *api_table();
+    api.enemy_move = fake_move;
+    api.enemy_move_cancel = fake_move_cancel;
+    f.ctx.api = &api;
+    g_moves.clear();
+    ItemsWorld iw;
+    MapStore ents;
+    emf::test::plant_entities(iw.w, ents, {42, 70, 900});
+    f.center.enqueue("move 70 100 20 -30.5 arrive 0.5");
+    f.center.enqueue("move 70 100 20 -30.5 arrive 1 peaceful");
+    f.center.enqueue("move 70 100 20 -30.5 peaceful arrive 3");
+    f.center.enqueue("move 70 1 2 3 arrive");      // no metres
+    f.center.enqueue("move 70 1 2 3 arrive x");
+    f.center.enqueue("move 70 1 2 3 arrive -1");
+    f.run(iw.w);
+    REQUIRE(g_moves.size() == 3u);
+    CHECK(g_moves[0].o.arrive == doctest::Approx(0.5f));
+    CHECK(g_moves[0].o.flags == 0u);
+    CHECK(g_moves[1].o.arrive == doctest::Approx(1.0f));
+    CHECK(g_moves[1].o.flags == EMF_MOVE_PEACEFUL);
+    CHECK(g_moves[2].o.arrive == doctest::Approx(3.0f));
+    CHECK(g_moves[2].o.flags == EMF_MOVE_PEACEFUL);
+    CHECK(bsaid("move 61: entity 70 walks to (100.0, 20.0, -30.5), arriving within 0.5 m (move.stop 61)"));
+    size_t usage = 0;
+    for (const auto& l : g_bout) usage += l.find("usage: move <enemy>") != std::string::npos;
+    CHECK(usage == 3u);
 }
 
 namespace {
@@ -1818,6 +1848,11 @@ TEST_CASE("builtin commands (v37): path checks its words; with the feature off i
     f.center.enqueue("path 3740 845 1440 doors as 60");    // from entity 60's position, planned as it
     f.center.enqueue("path 3740 845 1440 as 999");         // no such entity: no position
     f.center.enqueue("path 3740 845 1440 jumps doors closest 9000 as 60");  // every word at once
+    f.center.enqueue("path 3740 845 1440 closest nodes 20000");  // the count after the word, as the usage line says it
+    f.center.enqueue("path 3740 845 1440 nodes 9000 as 60");
+    f.center.enqueue("path 3740 845 1440 nodes");                // no count
+    f.center.enqueue("path 3740 845 1440 nodes 0");
+    f.center.enqueue("path 3740 845 1440 nodes 9000 8000");      // two counts
     f.run(rw.iw.w);
     size_t usage = 0, refused = 0;
     for (const auto& l : g_bout) {
@@ -1825,8 +1860,8 @@ TEST_CASE("builtin commands (v37): path checks its words; with the feature off i
                  std::string::npos;
         refused += l.find("path not asked") != std::string::npos;
     }
-    CHECK(usage == 7u);
-    CHECK(refused == 5u);
+    CHECK(usage == 10u);
+    CHECK(refused == 7u);
     CHECK(bsaid("path not asked (see the log: path_find refused"));
     CHECK(bsaid("path: entity 999 has no position in this world"));
 }
