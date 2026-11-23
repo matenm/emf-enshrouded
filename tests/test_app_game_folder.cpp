@@ -897,6 +897,29 @@ TEST_CASE("app keys: a key two switched-on mods share is a note, and each key bi
     CHECK(key_setting(s, "off_mod")->also.empty());
 }
 
+TEST_CASE("app keys: one mod with two settings on one key is named once; a server folder gets no key notes") {
+    TempGame g(L"keyself");
+    install_emf(g);
+    g.write(L"emf\\mods\\pair\\pair.dll", "dll");
+    g.write(L"emf\\mods\\pair\\mod.json", R"({"id": "pair", "name": "Pair", "version": "1.0.0", "settings": [
+        {"key": "a", "type": "keybind", "default": "K", "label": "Open", "live": true},
+        {"key": "b", "type": "keybind", "default": "k", "label": "Close", "live": true}]})");
+    FolderState s = scan_game_folder(g.dir);
+    CHECK(has_warning(s, "info", "K is the key of two settings of Pair: Open and Close"));
+
+    TempGame d(L"keyserver", false);
+    d.write(L"enshrouded_server.exe", "fake");
+    install_emf(d);
+    for (const char* id : {"wheels", "pets"}) d.write(L"emf\\mods\\" + std::wstring(id, id + std::strlen(id)) + L"\\" + std::wstring(id, id + std::strlen(id)) + L".dll", "dll");
+    d.write(L"emf\\mods\\wheels\\mod.json", key_mod("wheels", "Wheels", "F3"));
+    d.write(L"emf\\mods\\pets\\mod.json", key_mod("pets", "Pets", "F3"));
+    s = scan_game_folder(d.dir);
+    REQUIRE(s.server);
+    CHECK_FALSE(has_warning(s, "info", "is the key of"));  // a server has no keyboard
+    REQUIRE(key_setting(s, "wheels"));
+    CHECK(key_setting(s, "wheels")->also.empty());
+}
+
 TEST_CASE("app keys: keys shared on purpose are no note, but the key bind still names the other") {
     TempGame g(L"keyshared");
     install_emf(g);

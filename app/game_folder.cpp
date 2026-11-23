@@ -457,11 +457,17 @@ void note_shared_keys(FolderState& s) {
             ms.also_clash = g.clash();
         }
         if (!g.clash()) continue;
+        std::set<std::string> owners;
+        for (const auto* u : on) owners.insert(u->owner);
+        const bool one_mod = owners.size() == 1;
         std::string list;
         for (size_t i = 0; i < on.size(); ++i)
-            list += (i == 0 ? "" : i + 1 == on.size() ? " and " : ", ") + said(*on[i]);
-        warn(s, "info", g.name + " is the key of " + (on.size() == 2 ? std::string("two") : std::to_string(on.size())) +
-                            " mods that are switched on: " + list +
+            list += (i == 0 ? "" : i + 1 == on.size() ? " and " : ", ") + (one_mod ? on[i]->label : said(*on[i]));
+        const std::string n = on.size() == 2 ? "two" : on.size() == 3 ? "three" : std::to_string(on.size());
+        const std::string whose = one_mod                      ? " settings of " + on[0]->owner_name
+                                  : owners.size() == on.size() ? " mods that are switched on"
+                                                               : " settings of mods that are switched on";
+        warn(s, "info", g.name + " is the key of " + n + whose + ": " + list +
                             ". One press does both; change one of them in the mod's settings.");
     }
 }
@@ -1094,7 +1100,7 @@ FolderState scan_mod_folder(const std::wstring& game_in, ScanDepth depth) {
     scan_other(s, c);
     assign_keys(s);
     if (c.light) return s;  // no warnings: profiles read the switches only
-    note_shared_keys(s);
+    if (!s.server) note_shared_keys(s);  // a dedicated server has no keyboard
 
     // warnings that need the whole list
     std::vector<Warning> first;
