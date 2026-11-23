@@ -14,6 +14,7 @@
 
 #include "../mods/companion/companion_logic.h"
 #include "../mods/companion/owners.h"
+#include "../mods/companion/remote.h"
 #include "emf/emf_api.h"
 #include "game_bindings.h"
 #include "test_scratch.h"
@@ -1366,4 +1367,80 @@ TEST_CASE("owners: companion.as reads the player entity and the word after the c
     CHECK(!companion::parse_as({"companion.as", "x", "summon"}));
     CHECK(!companion::parse_as({"companion.as", "0", "summon"}));
     CHECK(!companion::parse_as({"companion.as"}));
+}
+
+// ---- players who joined: their keys over companion/ui (remote.h, GitHub #52) ----
+namespace cr = companion::remote;
+
+TEST_CASE("companion remote: key, pick, note and wheel messages come back as they were sent") {
+    for (cr::Key k : {cr::Key::Wheel, cr::Key::Follow, cr::Key::Stay, cr::Key::Attack, cr::Key::Dismiss}) {
+        const auto m = cr::decode(cr::encode_key(k));
+        REQUIRE(m);
+        CHECK(m->kind == cr::Msg::KeyPress);
+        CHECK(m->key == k);
+    }
+    auto p = cr::decode(cr::encode_pick(7, 3));
+    REQUIRE(p);
+    CHECK(p->kind == cr::Msg::Pick);
+    CHECK(p->seq == 7);
+    CHECK(p->choice == 3);
+    CHECK(cr::decode(cr::encode_pick(7, -5))->choice == -1);
+    auto n = cr::decode(cr::encode_note("Companion: staying\nhere"));
+    REQUIRE(n);
+    CHECK(n->text == "Companion: staying here");  // one line
+    auto w = cr::decode(cr::encode_wheel(9, "Companion (level 4)", {"Follow me", "Stay here"}));
+    REQUIRE(w);
+    CHECK(w->kind == cr::Msg::Wheel);
+    CHECK(w->seq == 9);
+    CHECK(w->text == "Companion (level 4)");
+    CHECK(w->labels == std::vector<std::string>{"Follow me", "Stay here"});
+}
+
+TEST_CASE("companion remote: a broken message is dropped (an unknown key, a wheel without entries, too many, a bad pick)") {
+    CHECK(!cr::decode(""));
+    CHECK(!cr::decode("key\njump"));
+    CHECK(!cr::decode("key"));
+    CHECK(!cr::decode("wheel\n1\nTitle"));
+    std::string big = "wheel\n1\nTitle";
+    for (int i = 0; i < 65; ++i) big += "\nx";
+    CHECK(!cr::decode(big));
+    CHECK(!cr::decode("pick\n1\n64"));
+    CHECK(!cr::decode("pick\nx\n1"));
+    CHECK(!cr::decode("shout\nhello"));
+    CHECK(!cr::decode(std::string(cr::kMaxMessage + 1, 'a')));
+}
+
+TEST_CASE("companion remote: a player's open wheel is theirs, taken once, replaced by a newer one, gone after 30 s") {
+    cr::WheelDesk<int> desk;
+    const uint32_t a = desk.open(0xAA, 1, 0);
+    const uint32_t b = desk.open(0xBB, 2, 0);
+    CHECK(!desk.take(0xBB, a, 10));  // another number: nothing, and b's own wheel stays open
+    CHECK(desk.take(0xAA, a, 10) == 1);
+    CHECK(!desk.take(0xAA, a, 20));  // once
+    const uint32_t c = desk.open(0xAA, 3, 0);
+    const uint32_t d = desk.open(0xAA, 4, 0);  // a newer wheel replaces it
+    CHECK(!desk.take(0xAA, c, 10));
+    const uint32_t e = desk.open(0xAA, 5, 0);
+    CHECK(!desk.take(0xAA, e, cr::WheelDesk<int>::kExpireMs + 1));  // too late
+    CHECK(desk.take(0xBB, b, 10) == 2);
+    desk.open(0xCC, 6, 0);
+    desk.forget(0xCC);  // a player who left
+    CHECK(desk.size() == 0);
+    (void)d;
+}
+
+TEST_CASE("companion remote: the player's game opens a server wheel only within 2 s of its own press; the server takes a "
+          "press per 300 ms") {
+    cr::ClientGate gate;
+    CHECK(gate.take_wheel(100) == cr::ClientGate::Answer::NotAsked);
+    gate.asked(1000);
+    CHECK(gate.take_wheel(2500) == cr::ClientGate::Answer::Open);
+    CHECK(gate.take_wheel(2600) == cr::ClientGate::Answer::NotAsked);  // once
+    gate.asked(1000);
+    CHECK(gate.take_wheel(3500) == cr::ClientGate::Answer::Late);
+    cr::PressGate presses;
+    CHECK(presses.allow(0xAA, 1000));
+    CHECK(!presses.allow(0xAA, 1200));
+    CHECK(presses.allow(0xBB, 1200));  // each player their own
+    CHECK(presses.allow(0xAA, 1300));
 }
