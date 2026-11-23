@@ -94,6 +94,8 @@ inline Thing read_thing(emf::World w, uint32_t id, const std::function<std::stri
         if (auto* sp = w.get<gen::SpawnEntityOnDestroy>(id)) {
             t.bee_hive = is_hive_dropper(sp->spawnEntity.bytes);
             t.hive_triggered = sp->triggered;
+        } else if (auto* ts = template_of<gen::SpawnEntityOnDestroy>(w, id)) {  // its template's only: not triggered yet
+            t.bee_hive = is_hive_dropper(ts->spawnEntity.bytes);
         }
     }
     t.enemy_spawner = has<gen::EnemySettings>(w, id) || has<gen::RandomSpawner>(w, id) || has<gen::TriggerSpawner>(w, id) ||

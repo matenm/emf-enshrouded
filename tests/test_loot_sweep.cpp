@@ -725,6 +725,43 @@ TEST_CASE("sweep limits: what a plant gives is learned from the game's pickups; 
     CHECK(s.tick(3000, 1, p, {plant_of(2, 5)}, {}, r).size() == 1);  // below the limit again
 }
 
+// A creature's drop without a pickup (a bat's fur patch, a skeleton's bones: not destructible) is learned the same way.
+TEST_CASE("sweep limits: what a ground drop without a pickup gives is learned from the pickups; then one of its kind at the limit stays") {
+    Sweeper s;
+    SweepRules r = all_on();
+    r.limits.materials = 50;
+    std::vector<Player> p = {{1, {0, 0, 0}, true, true}};
+    p[0].carried[0x30] = 50;
+    Thing bones = plant_of(1, 9);
+    bones.destructible = false;
+    REQUIRE(classify(bones) == Kind::Ground);
+    REQUIRE(s.tick(1000, 1, p, {bones}, {}, r).size() == 1);  // not known yet: picked, to learn what it gives
+    s.picked(1, {0x30, "Material_T1_Bone", 9}, 1100);
+    CHECK(s.items_learned() == 1);
+    Thing more = bones;
+    more.id = 2;
+    CHECK(s.tick(2000, 1, p, {more}, {}, r).empty());  // enough bones
+    p[0].carried[0x30] = 10;
+    CHECK(s.tick(3000, 1, p, {more}, {}, r).size() == 1);
+}
+
+// The per-player share comes before the learning mark: a plant of an unknown kind left for the next sweep by the share
+// does not hold back another plant of its kind (it would for the 3 s a learning plant waits for its pickup).
+TEST_CASE("sweep limits: an unknown plant held back by the player's share of a sweep does not hold back its kind") {
+    Sweeper s;
+    SweepRules r = all_on();
+    r.limits.consumables = 10;
+    std::vector<Player> p = {{1, {0, 0, 0}, true, true}};
+    std::vector<Thing> field;
+    for (uint32_t i = 0; i < Sweeper::kPerPlayer; ++i)
+        field.push_back(item(100 + i, "Material_T1_Wood", 0x10, 0, 1.0 + 0.1 * i));  // nearer: they take the share
+    field.push_back(plant_of(1, 5, 6));
+    const auto first = s.tick(1000, 1, p, field, {}, r);
+    REQUIRE(first.size() == Sweeper::kPerPlayer);
+    for (const auto& a : first) REQUIRE(a.entity != 1u);
+    CHECK(s.tick(1500, 1, p, {plant_of(2, 5, 3)}, {}, r).size() == 1);  // another of the kind: picked to learn
+}
+
 TEST_CASE("sweep limits: a plant that gives two items comes while one of them is below its limit") {
     Sweeper s;
     SweepRules r = all_on();

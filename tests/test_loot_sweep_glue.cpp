@@ -370,6 +370,21 @@ TEST_CASE("sweep glue: a bee hive is told by the template it spawns when destroy
     CHECK_FALSE(sweep::read_thing(r.w(), 70, names).bee_hive);  // a campfire's pickup
 }
 
+TEST_CASE("sweep glue: a bee hive whose SpawnEntityOnDestroy is its template's only is a hive too (not yet triggered)") {
+    Rig r;
+    comp<gen::InteractionOfferRuntime>(71);
+    tpl<gen::Destructible>(71).maxHealth = 1;
+    REQUIRE(emf::parse_guid("8abfb80f-14b1-47c3-a51d-fe83d956c9fe", tpl<gen::SpawnEntityOnDestroy>(71).spawnEntity.bytes));
+    const sweep::Thing t = sweep::read_thing(r.w(), 71, names);
+    CHECK(t.spawn_on_destroy);
+    CHECK(t.bee_hive);
+    CHECK_FALSE(t.hive_triggered);
+    auto& own = comp<gen::SpawnEntityOnDestroy>(71);  // its own component, once there, is the one that counts
+    REQUIRE(emf::parse_guid("8abfb80f-14b1-47c3-a51d-fe83d956c9fe", own.spawnEntity.bytes));
+    own.triggered = true;
+    CHECK(sweep::read_thing(r.w(), 71, names).hive_triggered);
+}
+
 // ---- 2.2: limits ----
 
 TEST_CASE("sweep glue: a pickup's item id and category; a plant's loot reference from its DefaultInventory") {
