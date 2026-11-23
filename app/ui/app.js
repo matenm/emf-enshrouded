@@ -353,7 +353,7 @@ function modRow(m) {
 function renderList() {
   const groups = $('groups');
   const f = filterText.trim().toLowerCase();
-  const match = (m) => !f || [m.name, m.id, m.description, m.loaded_by].join(' ').toLowerCase().includes(f);
+  const match = (m) => !f || [m.name, m.id, m.description, (m.authors || []).join(' '), m.loaded_by].join(' ').toLowerCase().includes(f);
   if (selected && !state.mods.some((m) => keyOf(m) === selected)) {  // --select gives "source:id"
     const named = state.mods.find((m) => m.source + ':' + m.id === selected);
     if (named) selected = keyOf(named);

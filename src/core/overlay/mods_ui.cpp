@@ -538,6 +538,9 @@ void draw_mods_tab(const std::vector<ModRecord>& mods, SettingsStore* settings, 
     ImGui::PopItemWidth();
     const size_t shown = mods_shown(mods, ui);
     if (!ui.filter.empty() && shown != mods.size()) ImGui::TextDisabled("%zu of %zu", shown, mods.size());
+    // The rows scroll under the filter, which stays in view.
+    ImGui::BeginChild("##mods_rows", ImVec2(0, 0));
+    if (shown == 0) ImGui::TextDisabled("Nothing matches the filter.");
     // The selected and hovered rows take the theme's dark gold (apply_look_theme), never ImGui's bright blue, so the
     // status colours stay readable; low values also stay dark when the game's HDR swapchain reads the overlay's colours
     // as PQ (see ENGINE_MAP.md).
@@ -555,6 +558,7 @@ void draw_mods_tab(const std::vector<ModRecord>& mods, SettingsStore* settings, 
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextDisabled("%s", mods_colour_legend().c_str());
     ImGui::PopTextWrapPos();
+    ImGui::EndChild();  // ##mods_rows
     ImGui::EndChild();
     ImGui::SameLine();
 
