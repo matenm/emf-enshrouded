@@ -218,4 +218,10 @@ function M.by_id(id)
 	return id and by_id[tostring(id):lower()] or nil
 end
 
+-- A pack beast's kind (species `carrier`): a slot of its own, never a fighter.
+function M.is_carrier(id)
+	local s = M.by_id(id)
+	return s ~= nil and s.carrier == true
+end
+
 return M

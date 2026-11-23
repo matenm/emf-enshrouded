@@ -223,6 +223,15 @@ local function state_text(b, aside)
 	return rest or "at home"
 end
 
+-- The pack beasts (species carrier) an account has: outside the collection's count, a slot of their own.
+local function carrier_count(account)
+	local n = 0
+	for _, x in ipairs(beasts:list(account)) do
+		if species.is_carrier(x.species) then n = n + 1 end
+	end
+	return n
+end
+
 local function active_count(account)
 	local n = 0
 	for _, x in ipairs(beasts:list(account)) do
@@ -234,13 +243,13 @@ end
 -- The beasts in the stable: all but the active ones once the world has a stable (it holds collection_max of them);
 -- before that the whole collection.
 local function stored_count(account)
-	return #beasts:list(account) - (beasts:stabled() and active_count(account) or 0)
+	return #beasts:list(account) - carrier_count(account) - (beasts:stabled() and active_count(account) or 0)
 end
 
 -- How many beasts `player` may have in all: collection_max in the stable besides the active ones (before a stable,
 -- collection_max). `joins_active`: a new beast takes a free active slot when there is one (a tame).
 local function collection_cap(world, player, account, joins_active)
-	local max = setting("collection_max")
+	local max = setting("collection_max") + carrier_count(account)  -- a pack beast is not counted
 	if not beasts:stabled() then return max end
 	local active = active_count(account)
 	local free = (joins_active and active < (open_slots(world, player) or math.huge)) and 1 or 0
@@ -1134,7 +1143,12 @@ local function give_command(world, args)
 	end
 	local _, account = who(world)
 	if not account then emf.reply("your account is not known yet") return end
-	local b, why = beasts:add(account, s.id, s.name, collection_cap(world, nil, account, false))
+	if s.carrier and carrier_count(account) > 0 then  -- one pack beast per player
+		emf.reply("you have a " .. s.name:lower() .. " already")
+		return
+	end
+	local b, why = beasts:add(account, s.id, s.name,
+		collection_cap(world, nil, account, false) + (s.carrier and 1 or 0))
 	if not b then
 		emf.reply(beasts:stabled() and string.format("your stable is full (%d beasts)", setting("collection_max")) or why)
 		return

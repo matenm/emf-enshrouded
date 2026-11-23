@@ -238,7 +238,7 @@ end
 function P:out_count(account)
 	local n = 0
 	for _, b in ipairs(self.env.beasts():list(account)) do
-		if b.out then n = n + 1 end
+		if b.out and not species.is_carrier(b.species) then n = n + 1 end  -- a pack beast has a slot of its own
 	end
 	return n
 end
@@ -436,12 +436,18 @@ function P:call(world, owner, account, beast)
 	if beast.out then return beast.name .. " is out already." end
 	local busy, busy_why = self.aside:building(world, account, owner, self.env.now(world), self:spots(account))
 	if busy then return waits(busy_why, "call again") end
-	if self.env.stabled() and not beast.active then
+	local carrier = species.is_carrier(beast.species)
+	if carrier then  -- a slot of its own: one pack beast out at a time, whatever the active slots
+		for _, b in ipairs(self.env.beasts():list(account)) do
+			if b ~= beast and b.out and species.is_carrier(b.species) then return b.name .. " is with you already." end
+		end
+	end
+	if not carrier and self.env.stabled() and not beast.active then
 		return beast.name .. " is in the stable: make it active at a stable " .. stable_mod.what_it_is() .. "."
 	end
 	if beast.rest > 0 then return string.format("%s rests for %s.", beast.name, mmss(beast.rest)) end
 	local n, max = self:out_count(account), self.env.slots(world, owner) or 1
-	if n >= max then
+	if not carrier and n >= max then
 		local back
 		for _, b in ipairs(self.env.beasts():list(account)) do
 			if resting(b) then back = back or b.name end
@@ -537,7 +543,7 @@ function P:fit_slots(world, account, owner)
 	local stabled = self.env.stabled()
 	local out = 0
 	for _, b in ipairs(self.env.beasts():list(account)) do
-		if b.out then
+		if b.out and not species.is_carrier(b.species) then  -- a pack beast has a slot of its own
 			if (stabled and not b.active) or (max and out >= max) then
 				self:dismiss(world, account, b)
 				self.env.tell(world, owner, string.format("%s goes home: %s.", b.name,

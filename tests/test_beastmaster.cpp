@@ -224,6 +224,24 @@ TEST_CASE("pack beast: the pack llama is a kind of its own: given, never wild, n
     CHECK(b.reply("beastmaster.species 73702659-0000-0000-0000-000000000000 11") == "unknown");
 }
 
+TEST_CASE("pack beast: the pack llama has a slot of its own: it comes with every active slot taken, one per player, outside the collection's count") {
+    BeastRig b({{"call_cooldown_s", "0"}, {"call_mana_pct", "0"}});
+    b.spawnable(8);
+    for (int i = 0; i < 4; ++i) b.reply("beastmaster.give wolf");
+    CHECK(b.reply("beastmaster.give packllama").find("added") != std::string::npos);
+    CHECK(b.reply("beastmaster.give packllama").find("already") != std::string::npos);  // one per player
+    // every active slot taken by wolves
+    int out = 0;
+    for (const char* name : {"Wolf", "Wolf 2", "Wolf 3", "Wolf 4"})
+        if (b.reply(std::string("beastmaster.call ") + name).find("comes") != std::string::npos) ++out;
+    REQUIRE(out >= 1);
+    CHECK(b.reply("beastmaster.call Wolf 4").find("dismiss one first") != std::string::npos);
+    CHECK(b.reply("beastmaster.call Pack llama").find("comes") != std::string::npos);  // its own slot
+    CHECK(b.reply("beastmaster.call Wolf 4").find("dismiss one first") != std::string::npos);  // it took none of theirs
+    const std::string list = b.reply("beastmaster.list");
+    CHECK(list.find("Pack llama - packllama") != std::string::npos);
+}
+
 TEST_CASE("beastmaster: the channel breaks when you walk away (more than 8 m) or the beast dies") {
     BeastRig b;
     b.look(1, 0, 10.5, 0, 0);
