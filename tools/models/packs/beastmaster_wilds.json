@@ -3,11 +3,14 @@
  "title": "Beastmaster: wilds",
  "version": "0.1.0",
  "out": "../../../analysis/models/mods/emf_beastmaster_wilds",
- "description": "Wild animals for the Beastmaster mod, made in the game's style: fox, wolf, bear, panther, lynx, goat, ram, deer, elk and a pack llama, each in several coats. Every animal stands on a game animal's skeleton and moves with that animal's own clips.",
+ "description": "Wild animals for the Beastmaster mod, made in the game's style: fox, wolf, bear, panther, lynx, goat, ram, deer, elk, wild ox, lion, hyena, jackal, ibex, bison, musk ox, antelope, mule, monitor lizard, a pack llama and a pack camel, most in several coats. Every animal stands on a game animal's skeleton and moves with that animal's own clips.",
  "authors": [
   "EMF contributors"
  ],
- "notes": "Each model was generated standing as its game animal stands at rest (two pictures made from renders of the game animal's body, then Meshy multi-image-to-3D at 12000 polygons) and fitted straight onto that animal's skeleton with blender/fit_to_game_skeleton.py --keep-uvs --material <slot> (the fox also --sides), without own proportions: the game's skeleton, clips and graph play, so the pack adds no skeleton, clip or graph. Fox and wolf stand on the wolf (material 0), bear, panther and lynx on the sabretooth (material 1), goat, ram, deer, elk and llama on the goat (material 0), the ox on the yak (material 0); the goat has no attack clips, so those five cannot fight. A coat is the same fitted model with another texture (a Meshy retexture that kept the model's UVs) at 512 px, 1.1 times the size; a base animal's texture is 1024 px. The bear, panther and lynx were made with the sabretooth's hanging front toes; what lies under the ground when they stand is flattened into a sole. Template and model GUIDs are fixed.",
+ "notes": "Each model was generated standing as its game animal stands at rest (two pictures made from renders of the game animal's body, then Meshy multi-image-to-3D at 12000 polygons) and fitted straight onto that animal's skeleton with blender/fit_to_game_skeleton.py --keep-uvs --material <slot> (the fox also --sides), without own proportions: the game's skeleton, clips and graph play, so the pack adds no skeleton, clip or graph. Fox and wolf stand on the wolf (material 0), bear, panther and lynx on the sabretooth (material 1), goat, ram, deer, elk and llama on the goat (material 0), the ox on the yak (material 0); the goat has no attack clips, so those five cannot fight. A coat is the same fitted model with another texture (a Meshy retexture that kept the model's UVs) at 512 px, 1.1 times the size; a base animal's texture is 1024 px. The bear, panther and lynx were made with the sabretooth's hanging front toes; what lies under the ground when they stand is flattened into a sole. The lion stands on the sabretooth, the hyena and the jackal on the wolf, the ibex on the goat, the bison and the musk ox on the yak, the antelope and the mule on the wild cat-deer (wildlife: they graze and flee), the monitor lizard on the crocodile, the pack camel on the cat-deer companion with the pack llama's bag. The content script beastmaster_harness.lua adds the Llama Harness and the Camel Saddle. Template and model GUIDs are fixed.",
+ "content_scripts": [
+  "beastmaster_harness.lua"
+ ],
  "creatures": [
   {
    "name": "wilds_fox",
@@ -1056,6 +1059,687 @@
      "value": {
       "uniformScale": 1.25
      }
+    }
+   ]
+  },
+  {
+   "name": "wilds_lion",
+   "glb": "../../../analysis/models/wilds/lion.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.hierarchy.json",
+   "source_model_guid": "5a45d5a3-c91f-4a96-bc75-ec80f2b18ae8",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.json",
+   "source_template": "Enemy_Wildbeast_Sabertooth",
+   "template_name": "Wilds_Lion",
+   "model_guid": "a4d67d50-7277-487f-80bf-9e41845bbcfc",
+   "template_guid": "50004771-332b-42c1-a130-76aee596e821",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/lion",
+    "slot": 1,
+    "flat_size": 64,
+    "material_guid": "958fe361-c77a-4e8f-b129-38c83803e24a"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.85
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_lion_white",
+   "glb": "../../../analysis/models/wilds/lion.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.hierarchy.json",
+   "source_model_guid": "5a45d5a3-c91f-4a96-bc75-ec80f2b18ae8",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.json",
+   "source_template": "Enemy_Wildbeast_Sabertooth",
+   "template_name": "Wilds_Lion_White",
+   "model_guid": "c6571a8b-fc43-4d95-b577-47c9ca9f88fa",
+   "template_guid": "56c94c24-6ebb-4aa8-976c-76ecd340533e",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/lion_white",
+    "slot": 1,
+    "flat_size": 64,
+    "material_guid": "2c8771a9-c173-42b3-aa82-5dc99e091ee3"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.935
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_lion_dark",
+   "glb": "../../../analysis/models/wilds/lion.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.hierarchy.json",
+   "source_model_guid": "5a45d5a3-c91f-4a96-bc75-ec80f2b18ae8",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.json",
+   "source_template": "Enemy_Wildbeast_Sabertooth",
+   "template_name": "Wilds_Lion_Dark",
+   "model_guid": "b2642dd5-0d26-498e-ad9c-cf6febaa2329",
+   "template_guid": "5039b748-2ed9-42c0-abed-a23e2ca49791",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/lion_dark",
+    "slot": 1,
+    "flat_size": 64,
+    "material_guid": "0c32dfd2-657e-4c5e-8f8b-d237391d182a"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.935
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_hyena",
+   "glb": "../../../analysis/models/wilds/hyena.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_wolf_01.hierarchy.json",
+   "source_model_guid": "91e2d4cc-01c9-4203-a92e-b08769364522",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_wolf_01.json",
+   "source_template": "Enemy_Wildbeast_wolf_earlygame",
+   "template_name": "Wilds_Hyena",
+   "model_guid": "242fd742-db83-4aca-81af-eb75a0ed3d02",
+   "template_guid": "46a0ad95-af5c-4331-895d-79c8aa55083a",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/hyena",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "3d7b6b07-87f9-44ce-a099-e652806fe043"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.9
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_hyena_brown",
+   "glb": "../../../analysis/models/wilds/hyena.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_wolf_01.hierarchy.json",
+   "source_model_guid": "91e2d4cc-01c9-4203-a92e-b08769364522",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_wolf_01.json",
+   "source_template": "Enemy_Wildbeast_wolf_earlygame",
+   "template_name": "Wilds_Hyena_Brown",
+   "model_guid": "b147b017-e5d5-456a-8c61-fcede1c4f20b",
+   "template_guid": "afe92584-517d-48d6-a6f5-1cac320cc77e",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/hyena_brown",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "2a605ccf-dc1e-4296-a2fe-5bae969b5501"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.99
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_hyena_pale",
+   "glb": "../../../analysis/models/wilds/hyena.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_wolf_01.hierarchy.json",
+   "source_model_guid": "91e2d4cc-01c9-4203-a92e-b08769364522",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_wolf_01.json",
+   "source_template": "Enemy_Wildbeast_wolf_earlygame",
+   "template_name": "Wilds_Hyena_Pale",
+   "model_guid": "cac7c874-0727-4521-82d6-cffb806f5e24",
+   "template_guid": "c182acd1-07e9-48dd-b6ec-19e06cd85de8",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/hyena_pale",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "d6cba37a-ed70-44ff-836c-63437d96cf20"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.99
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_jackal",
+   "glb": "../../../analysis/models/wilds/jackal.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_wolf_01.hierarchy.json",
+   "source_model_guid": "91e2d4cc-01c9-4203-a92e-b08769364522",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_wolf_01.json",
+   "source_template": "Enemy_Wildbeast_wolf_earlygame",
+   "template_name": "Wilds_Jackal",
+   "model_guid": "e7de2c4c-3b70-4b72-a92a-83039d8a5d8d",
+   "template_guid": "40375c39-dcff-4cab-96c5-1dd4e99bd693",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/jackal",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "7452229b-76d5-42bd-acb3-0233956cd97e"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.6
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_jackal_dark",
+   "glb": "../../../analysis/models/wilds/jackal.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_wolf_01.hierarchy.json",
+   "source_model_guid": "91e2d4cc-01c9-4203-a92e-b08769364522",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_wolf_01.json",
+   "source_template": "Enemy_Wildbeast_wolf_earlygame",
+   "template_name": "Wilds_Jackal_Dark",
+   "model_guid": "6d61b0a7-1406-4fa6-aa83-1a92d607f28c",
+   "template_guid": "d240e3ac-2105-42d7-b447-320b0b01c74a",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/jackal_dark",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "43bdf8d8-0f67-45d0-b6d6-f8e5e6fce2a9"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.66
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_jackal_silver",
+   "glb": "../../../analysis/models/wilds/jackal.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_wolf_01.hierarchy.json",
+   "source_model_guid": "91e2d4cc-01c9-4203-a92e-b08769364522",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_wolf_01.json",
+   "source_template": "Enemy_Wildbeast_wolf_earlygame",
+   "template_name": "Wilds_Jackal_Silver",
+   "model_guid": "b12ef81b-c93e-44b1-83ea-d2f8357270cc",
+   "template_guid": "ee8f4c63-e5d9-4c66-a305-03ceda2a04fd",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/jackal_silver",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "80889d23-c2b9-4867-aede-86703bf12c01"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.66
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_ibex",
+   "glb": "../../../analysis/models/wilds/ibex.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/enemy_goat.hierarchy.json",
+   "source_model_guid": "64c9c247-ac76-4b72-a632-5cafda86caa2",
+   "source_model_json": "../../../analysis/model_survey/dump/enemy_goat.json",
+   "source_template": "Animal_Wildlife_T1_Goat_AG2",
+   "template_name": "Wilds_Ibex",
+   "model_guid": "dc659fe3-9361-42fa-9464-30dfcf782178",
+   "template_guid": "968a2b5d-5185-41bb-815a-8125bfd4eb20",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/ibex",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "f2debf27-69ce-4d0a-8cd8-ee138ad617bb"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.2
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_ibex_white",
+   "glb": "../../../analysis/models/wilds/ibex.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/enemy_goat.hierarchy.json",
+   "source_model_guid": "64c9c247-ac76-4b72-a632-5cafda86caa2",
+   "source_model_json": "../../../analysis/model_survey/dump/enemy_goat.json",
+   "source_template": "Animal_Wildlife_T1_Goat_AG2",
+   "template_name": "Wilds_Ibex_White",
+   "model_guid": "fe628ad9-a6d2-477a-9498-9b17e7aae3d6",
+   "template_guid": "4bcb9596-3fc8-426c-86a6-1b35a0249687",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/ibex_white",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "8663694e-2eaa-4cc9-a187-f594487e2f4b"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.32
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_ibex_dark",
+   "glb": "../../../analysis/models/wilds/ibex.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/enemy_goat.hierarchy.json",
+   "source_model_guid": "64c9c247-ac76-4b72-a632-5cafda86caa2",
+   "source_model_json": "../../../analysis/model_survey/dump/enemy_goat.json",
+   "source_template": "Animal_Wildlife_T1_Goat_AG2",
+   "template_name": "Wilds_Ibex_Dark",
+   "model_guid": "acc5543f-d572-456f-86f8-9a0927ea449b",
+   "template_guid": "771575e7-e1fd-4692-980c-8afee8332e69",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/ibex_dark",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "738783eb-020e-4c70-978c-17128ec660b0"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.32
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_bison",
+   "glb": "../../../analysis/models/wilds/bison.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/Enemy_yak_01.hierarchy.json",
+   "source_model_guid": "d0211f52-8b8f-4090-89b0-4b853d67d320",
+   "source_model_json": "../../../analysis/model_survey/dump/Enemy_yak_01.json",
+   "source_template": "Animal_Wildlife_T5_Yak_AG2",
+   "template_name": "Wilds_Bison",
+   "model_guid": "d94f06fb-7897-4efc-861d-c7e158c65e94",
+   "template_guid": "5bdc9808-e08d-419e-81c9-7b9f37507135",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/bison",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "f603a20b-a525-400d-a4cb-11c12ddd2108"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.0
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_bison_white",
+   "glb": "../../../analysis/models/wilds/bison.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/Enemy_yak_01.hierarchy.json",
+   "source_model_guid": "d0211f52-8b8f-4090-89b0-4b853d67d320",
+   "source_model_json": "../../../analysis/model_survey/dump/Enemy_yak_01.json",
+   "source_template": "Animal_Wildlife_T5_Yak_AG2",
+   "template_name": "Wilds_Bison_White",
+   "model_guid": "191a7746-cf5b-4903-b6d3-de1d00f301b3",
+   "template_guid": "2854fd7c-225f-4050-8136-7eb893a1fcd1",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/bison_white",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "f609db01-6d21-4d28-8991-53d157b7def8"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.1
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_bison_black",
+   "glb": "../../../analysis/models/wilds/bison.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/Enemy_yak_01.hierarchy.json",
+   "source_model_guid": "d0211f52-8b8f-4090-89b0-4b853d67d320",
+   "source_model_json": "../../../analysis/model_survey/dump/Enemy_yak_01.json",
+   "source_template": "Animal_Wildlife_T5_Yak_AG2",
+   "template_name": "Wilds_Bison_Black",
+   "model_guid": "e72ac7c6-4af0-40cf-91cb-b024320482ec",
+   "template_guid": "66621bdc-0ea0-4b95-882c-cc9fa501ee10",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/bison_black",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "f143900e-5549-4dcf-bb7c-a8baa77b04f5"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.1
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_muskox",
+   "glb": "../../../analysis/models/wilds/muskox.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/Enemy_yak_01.hierarchy.json",
+   "source_model_guid": "d0211f52-8b8f-4090-89b0-4b853d67d320",
+   "source_model_json": "../../../analysis/model_survey/dump/Enemy_yak_01.json",
+   "source_template": "Animal_Wildlife_T5_Yak_AG2",
+   "template_name": "Wilds_Muskox",
+   "model_guid": "4aaf979f-e342-40fd-b4e5-567566014a6f",
+   "template_guid": "80998139-d86b-4945-bf7c-d3e9c2c3d9c3",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/muskox",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "2d185541-36cc-4645-8ef5-235622138b07"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.85
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_antelope",
+   "glb": "../../../analysis/models/wilds/antelope.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/animal_catdeer.hierarchy.json",
+   "source_model_guid": "882f5388-0547-4588-8d20-5e2383e99d6a",
+   "source_model_json": "../../../analysis/model_survey/dump/animal_catdeer.json",
+   "source_template": "Animal_Wildlife_T2_Catdeer_AG2",
+   "template_name": "Wilds_Antelope",
+   "model_guid": "5d3fabe0-1829-46a9-816a-fb3762dce384",
+   "template_guid": "feaf66ab-ba50-4277-8fc2-530ff5f0cdca",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/antelope",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "1b2fee69-2bac-4e39-ae33-da3ef106b62f"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.2
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_antelope_sable",
+   "glb": "../../../analysis/models/wilds/antelope.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/animal_catdeer.hierarchy.json",
+   "source_model_guid": "882f5388-0547-4588-8d20-5e2383e99d6a",
+   "source_model_json": "../../../analysis/model_survey/dump/animal_catdeer.json",
+   "source_template": "Animal_Wildlife_T2_Catdeer_AG2",
+   "template_name": "Wilds_Antelope_Sable",
+   "model_guid": "4283714b-20e4-4709-a40c-365bbe43c580",
+   "template_guid": "c8feb2d4-9d17-4406-b7f0-1e2c7eae5fc4",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/antelope_sable",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "7cdc9677-0dbe-484d-b0a9-f3f5d02caeb6"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.32
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_antelope_white",
+   "glb": "../../../analysis/models/wilds/antelope.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/animal_catdeer.hierarchy.json",
+   "source_model_guid": "882f5388-0547-4588-8d20-5e2383e99d6a",
+   "source_model_json": "../../../analysis/model_survey/dump/animal_catdeer.json",
+   "source_template": "Animal_Wildlife_T2_Catdeer_AG2",
+   "template_name": "Wilds_Antelope_White",
+   "model_guid": "3c6e6941-88f0-4c44-8112-57766999dd15",
+   "template_guid": "db1ac0ed-92f4-45db-b031-d23bde6f79b4",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/antelope_white",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "7bc274c8-238f-49d0-bee9-dfb1fd18c85e"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.32
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_mule",
+   "glb": "../../../analysis/models/wilds/mule.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/animal_catdeer.hierarchy.json",
+   "source_model_guid": "882f5388-0547-4588-8d20-5e2383e99d6a",
+   "source_model_json": "../../../analysis/model_survey/dump/animal_catdeer.json",
+   "source_template": "Animal_Wildlife_T2_Catdeer_AG2",
+   "template_name": "Wilds_Mule",
+   "model_guid": "53c0b4f3-186d-45d2-9080-8e9154ca9fa5",
+   "template_guid": "cd406bca-9dc0-4959-847f-986696d6a7df",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/mule",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "375396c5-d3a1-4eb4-aa33-dde3456fedc1"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.3
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_mule_grey",
+   "glb": "../../../analysis/models/wilds/mule.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/animal_catdeer.hierarchy.json",
+   "source_model_guid": "882f5388-0547-4588-8d20-5e2383e99d6a",
+   "source_model_json": "../../../analysis/model_survey/dump/animal_catdeer.json",
+   "source_template": "Animal_Wildlife_T2_Catdeer_AG2",
+   "template_name": "Wilds_Mule_Grey",
+   "model_guid": "ef237565-0078-486e-bd46-90ceda5033ae",
+   "template_guid": "e9b400b1-ddb8-4d47-a210-8ced9b92547f",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/mule_grey",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "7df6884c-9ba5-4e76-9af1-e1eb0243fdda"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.43
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_mule_black",
+   "glb": "../../../analysis/models/wilds/mule.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/animal_catdeer.hierarchy.json",
+   "source_model_guid": "882f5388-0547-4588-8d20-5e2383e99d6a",
+   "source_model_json": "../../../analysis/model_survey/dump/animal_catdeer.json",
+   "source_template": "Animal_Wildlife_T2_Catdeer_AG2",
+   "template_name": "Wilds_Mule_Black",
+   "model_guid": "16c269cf-1f0e-4713-ab34-79d410ee2e26",
+   "template_guid": "7c2ce935-828f-4f51-b129-0fe4f17404c9",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/mule_black",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "89d69581-c0d6-4afd-aea5-678c4c3ca35e"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.43
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_lizard",
+   "glb": "../../../analysis/models/wilds/lizard.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_crocodile_02.hierarchy.json",
+   "source_model_guid": "a6b635d6-c44e-4f5d-a582-a6b59d1bb79b",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_crocodile_02.json",
+   "source_template": "Enemy_Wildbeast_Crocodile_Amphibious",
+   "template_name": "Wilds_Lizard",
+   "model_guid": "9aca81d0-dab6-49c8-83f8-6028e07bff80",
+   "template_guid": "a6f39587-810c-4902-8acb-ef03944cddb8",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/lizard",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "4153bf50-3f3d-4a96-afab-4d5610435500"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.6
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_camel",
+   "glb": "../../../analysis/models/wilds/camel.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/animal_catdeer.hierarchy.json",
+   "source_model_guid": "882f5388-0547-4588-8d20-5e2383e99d6a",
+   "source_model_json": "../../../analysis/model_survey/dump/animal_catdeer.json",
+   "source_template": "Enemy_Companion_Catdeer",
+   "template_name": "Wilds_Camel",
+   "model_guid": "0fbee1de-3576-4a82-bf43-feb9c007b4b1",
+   "template_guid": "c692014d-0902-47b2-b885-dd2a8727b32d",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/camel",
+    "slot": 0,
+    "flat_size": 64,
+    "material_guid": "b2fc418e-d855-4498-bb86-44aaee09acf0"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 1.7
+     }
+    },
+    {
+     "type": "InventorySetup",
+     "value": {
+      "linksEntities": [
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       },
+       {
+        "id": 0
+       }
+      ],
+      "linksCategories": [
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid",
+       "Invalid"
+      ],
+      "inventoryFlags": [],
+      "genericSlotCount": 16,
+      "availableSlotCount": 16,
+      "isInitialized": false
+     }
+    },
+    {
+     "type": "InventorySetupInit",
+     "value": {}
     }
    ]
   },
