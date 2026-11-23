@@ -164,7 +164,8 @@ Write-File "emf\mods\canary\mod.json" (@'
 Write-File "emf\mods\canary\canary.dll" "fake"
 Write-File "mods\auto-loot-plus\mod.json" '{"id": "auto-loot-plus", "name": "Auto Loot Plus", "nexus_id": 170}'  # Browse marks it installed
 Write-File "emf\mods\canary\README.md" ("# Canary manual`n`nSome **bold** and *slanted* text with ``code``.`n`n- one`n- two`n`n| Key | Does |`n|---|---|`n| F3 | the wheel |`n`n" +
-    "[the site](https://example.com/canary) and [a page here](docs/page.md)`n`n<script>window.__x=1</script>`n`n" +
+    "[the site](https://example.com/canary) and [a page here](docs/page.md)`n`n" +
+    "[![build](https://img.example.com/b.svg)](https://example.com/ci) [wiki](https://example.com/Foo_(bar))`n`n<script>window.__x=1</script>`n`n" +
     '<img src=x onerror="window.__x=1"> readme' + "`n`n![a picture](shot.png)`n")
 $out = Join-Path $game "smoke.json"
 
@@ -226,7 +227,7 @@ try {
     $more = @("--probe-wait", "9000")  # ends as soon as the page script is done; the room is for a busy PC
     if ($Capture) { $more += @("--capture", "`"$([System.IO.Path]::GetFullPath($Capture))`"") }
     if ($Page) { $more += @("--page", $Page) }
-    $probe = "var W=function(c,f,n){n=n||0;if(c()){f();}else if(n<120){setTimeout(function(){W(c,f,n+1);},100);}else{f();}}; W(function(){return document.querySelectorAll('.mod-row').length>0||!document.getElementById('page-nogame').hidden;},function(){var rd=document.querySelector('.readme')||document.createElement('div'); window.emfProbe={imgs:document.querySelectorAll('img').length,inline:document.querySelectorAll('script:not([src])').length,ran:!!window.__x,readme:rd.textContent||'',heads:[...rd.querySelectorAll('h4,h5,h6')].map(function(h){return h.textContent;}).join('|'),tables:rd.querySelectorAll('table').length,cells:[...rd.querySelectorAll('td')].map(function(c){return c.textContent;}).join('|'),items:rd.querySelectorAll('li').length,strong:(rd.querySelector('strong')||{}).textContent||'',links:[...rd.querySelectorAll('.md-link')].map(function(a){return a.textContent+'='+a.title;}).join('|'),anchors:rd.querySelectorAll('a[href]').length};window.emfDone=true;});"
+    $probe = "var W=function(c,f,n){n=n||0;if(c()){f();}else if(n<120){setTimeout(function(){W(c,f,n+1);},100);}else{f();}}; W(function(){return document.querySelectorAll('.mod-row').length>0||!document.getElementById('page-nogame').hidden;},function(){var rd=document.querySelector('.readme')||document.createElement('div'); window.emfProbe={imgs:document.querySelectorAll('img').length,inline:document.querySelectorAll('script:not([src])').length,ran:!!window.__x,readme:rd.textContent||'',heads:[...rd.querySelectorAll('h4,h5,h6')].map(function(h){return h.textContent;}).join('|'),tables:rd.querySelectorAll('table').length,cells:[...rd.querySelectorAll('td')].map(function(c){return c.textContent;}).join('|'),items:rd.querySelectorAll('li').length,strong:(rd.querySelector('strong')||{}).textContent||'',links:[...rd.querySelectorAll('.md-link')].map(function(a){return a.textContent+'='+a.title;}).join('|'),anchors:rd.querySelectorAll('a[href]').length}; var lk=rd.querySelector('.md-link'); var sent=[]; var orig=window.send; window.send=function(m){sent.push(JSON.stringify(m));}; if(lk){lk.click();} window.send=orig; window.emfProbe.sent=sent.join('|'); window.emfDone=true;});"
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $run = Invoke-Smoke -Eval $probe -SelectMod $(if ($Select) { $Select } else { "emf:canary" }) -More $more
     Check ($run.Code -eq 0) "EMF.exe --smoke exits 0 ($($run.Code), $([int]$watch.Elapsed.TotalSeconds) s)"
@@ -243,7 +244,8 @@ try {
     Check ($null -ne $p1 -and $p1.imgs -eq 0 -and $p1.inline -eq 0 -and -not $p1.ran) "the canary's HTML and script stay text: no <img>, no inline script, nothing ran ($(if ($p1) { $p1 | ConvertTo-Json -Compress }))"
     Check ($null -ne $p1 -and $p1.readme -like "*<script>window.__x=1</script>*" -and $p1.readme -like "*<img src=x*") "the canary's README shows its HTML as text"
     Check ($null -ne $p1 -and $p1.heads -eq "Canary manual" -and $p1.tables -eq 1 -and $p1.cells -eq "F3|the wheel" -and $p1.items -eq 2 -and $p1.strong -eq "bold") "the README is formatted: a heading, a list, a table, bold ($(if ($p1) { "$($p1.heads); $($p1.tables); $($p1.cells); $($p1.items); $($p1.strong)" }))"
-    Check ($null -ne $p1 -and $p1.links -eq "the site=https://example.com/canary" -and $p1.anchors -eq 0 -and $p1.readme -like "*a page here*" -and $p1.readme -like "*a picture*") "only the https link is a link (through the host, no <a href>); the relative link and the picture stay text ($(if ($p1) { "$($p1.links); $($p1.anchors)" }))"
+    Check ($null -ne $p1 -and $p1.sent -eq '{"cmd":"open_url","url":"https://example.com/canary","external":true}') "a README link goes to the host as a link from a mod's text (any https site, not only Nexus) ($(if ($p1) { $p1.sent }))"
+    Check ($null -ne $p1 -and $p1.links -eq "the site=https://example.com/canary|[picture: build]=https://example.com/ci|wiki=https://example.com/Foo_(bar)" -and $p1.anchors -eq 0 -and $p1.readme -like "*a page here*" -and $p1.readme -like "*a picture*") "only the https link is a link (through the host, no <a href>); the relative link and the picture stay text ($(if ($p1) { "$($p1.links); $($p1.anchors)" }))"
     if ($Capture) { Check ((Test-Path -LiteralPath $Capture) -and (Get-Item -LiteralPath $Capture).Length -gt 1000) "the page was captured to $Capture" }
     Check ((Get-Content -LiteralPath (Join-Path $game "dinput8-chain.ini") -Raw) -eq "[Chain]`r`ncreative.dll`r`n") "looking changed nothing in the game folder"
 

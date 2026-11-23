@@ -27,7 +27,7 @@ struct AppArgs {
     bool stop_break = false;     // --stop-server-break: Ctrl+Break instead of Ctrl+C
     bool stop_shared_ok = false; // --shared-ok: send it although other programs share the server's console
     unsigned long stop_pid = 0;  // its pid (0 when the value is not a number)
-    unsigned probe_wait = 1000;  // ms, 100 to 10000
+    unsigned probe_wait = 1000;  // ms, 100 to 30000
     bool link_seen = false;      // an --nxm switch (with any value, also an empty one) or a bare nxm: argument came
 };
 

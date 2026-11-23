@@ -7,16 +7,39 @@
 
 const MD_ITEM = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
 const MD_FENCE = /^\s{0,3}(`{3,}|~{3,})/;
-const MD_HEADING = /^\s{0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
+const MD_HEADING = /^\s{0,3}(#{1,6})(?:\s+(.*))?$/;  // the closing #s are taken off by mdHeadingText
 const MD_RULE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/;
 const MD_QUOTE = /^\s{0,3}>/;
-const MD_TABLE_LINE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
-// sticky: they match at lastIndex only, so a long line is never copied for each character
+// A table's line of dashes: cells of -, maybe with a : at either end ("|---|:-:|").
+function mdTableLine(line) {
+  const cells = line.trim().split('|');
+  if (cells.length && !cells[0].trim()) cells.shift();
+  if (cells.length && !cells[cells.length - 1].trim()) cells.pop();
+  return cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c.trim()));
+}
+
+// A heading's text without the #s that may close it ("## Title ##").
+function mdHeadingText(text) {
+  let t = (text || '').trimEnd();
+  let k = t.length;
+  while (k > 0 && t[k - 1] === '#') k--;
+  if (k < t.length && (k === 0 || /\s/.test(t[k - 1]))) t = t.slice(0, k).trimEnd();
+  return t;
+}
+// sticky: they match at lastIndex only, so a long line is never copied for each character; bounded, so text that never
+// closes a link costs little; a URL may hold one level of brackets (".../Foo_(bar)")
 const MD_ESCAPE = /\\[\\`*_{}[\]()#+\-.!|>~]/y;
 const MD_TICKS = /`+/y;
-const MD_PICTURE = /!\[([^\]]*)\]\(([^)\s]*)(?:\s+"[^"]*")?\)/y;
-const MD_LINKED = /\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/y;
-const MD_AUTOLINK = /<(https:\/\/[^>\s]+)>/y;
+const MD_URL = '((?:[^()\\s]|\\([^()\\s]{0,2048}\\)){1,2048})(?:\\s+"[^"]{0,500}")?\\)';
+const MD_PICTURE = new RegExp('!\\[([^\\]]{0,500})\\]\\(' + MD_URL, 'y');
+const MD_LINKED = new RegExp('\\[([^\\]]{1,500})\\]\\(' + MD_URL, 'y');
+const MD_BADGE = new RegExp('\\[!\\[([^\\]]{0,500})\\]\\([^()\\s]{0,2048}(?:\\s+"[^"]{0,500}")?\\)\\]\\(' + MD_URL, 'y');  // a picture in a link
+const MD_AUTOLINK = /<(https:\/\/[^>\s]{1,2048})>/y;
+// A line longer than this is shown as it is (no block or inline reading: crafted lines cannot slow the page down).
+const MD_LONG = 2000;
+// A table shows at most this many columns and rows; the rest is said in a line under it.
+const MD_TABLE_COLUMNS = 64;
+const MD_TABLE_ROWS = 500;
 
 function mdAt(re, text, i) {
   re.lastIndex = i;
@@ -26,7 +49,8 @@ function mdAt(re, text, i) {
 // A link from the README: https:// opens through the host; anything else is its text only.
 function mdLink(label, url) {
   if (!/^https:\/\//.test(url)) return el('span', { class: 'md-rel' }, mdInline(label));
-  return el('button', { class: 'md-link', type: 'button', title: url, onclick: () => send({ cmd: 'open_url', url }) }, mdInline(label));
+  // external: a link from a mod's own text, so any https site (the app's own buttons open nexusmods.com only)
+  return el('button', { class: 'md-link', type: 'button', title: url, onclick: () => send({ cmd: 'open_url', url, external: true }) }, mdInline(label));
 }
 
 // One line's text with `code`, **bold**, *italic* / _italic_, [links](https://...), <https://...> and \-escapes.
@@ -51,6 +75,12 @@ function mdInline(text) {
     }
     if (c === '!' && (m = mdAt(MD_PICTURE, text, i))) {  // a picture: never loaded
       buf += '[picture: ' + (m[1] || m[2]) + ']';
+      i += m[0].length;
+      continue;
+    }
+    if (c === '[' && text[i + 1] === '!' && (m = mdAt(MD_BADGE, text, i))) {  // a badge: its picture's text, linked
+      flush();
+      out.push(mdLink('[picture: ' + (m[1] || 'badge') + ']', m[2]));
       i += m[0].length;
       continue;
     }
@@ -93,12 +123,16 @@ function mdBlank(line) { return !line.trim(); }
 // A table starts with a head line and, under it, a line of dashes; both need a '|' ("a | b" over a "---" rule is a
 // paragraph and a rule).
 function mdTableStarts(lines, i) {
-  return lines[i].includes('|') && i + 1 < lines.length && lines[i + 1].includes('|') && lines[i + 1].includes('-') &&
-    MD_TABLE_LINE.test(lines[i + 1]);
+  return lines[i].includes('|') && i + 1 < lines.length && lines[i + 1].length <= MD_LONG && lines[i + 1].includes('|') &&
+    lines[i + 1].includes('-') && mdTableLine(lines[i + 1]);
 }
+
+// A list item's parts, or null (a long line is never one).
+function mdItem(line) { return line.length <= MD_LONG ? MD_ITEM.exec(line) : null; }
 
 function mdStartsBlock(lines, i) {
   const l = lines[i];
+  if (l.length > MD_LONG) return true;  // shown as it is, on its own
   return MD_FENCE.test(l) || MD_HEADING.test(l) || MD_RULE.test(l) || MD_QUOTE.test(l) || MD_ITEM.test(l) || mdTableStarts(lines, i);
 }
 
@@ -114,12 +148,13 @@ const MD_MAX_DEPTH = 8;
 
 // A list from line i, with deeper-indented lists inside its items. Returns the list and the line after it.
 function mdList(lines, i, depth) {
-  const first = MD_ITEM.exec(lines[i]);
+  const first = mdItem(lines[i]);
   const indent = first[1].length;
   const ordered = /\d/.test(first[2]);
+  const start = ordered ? parseInt(first[2], 10) : 1;
   const items = [];
   while (i < lines.length) {
-    const m = MD_ITEM.exec(lines[i]);
+    const m = mdItem(lines[i]);
     if (!m || m[1].length < indent) break;
     if (m[1].length > indent && depth < MD_MAX_DEPTH) {  // a list inside the last item
       const inner = mdList(lines, i, depth + 1);
@@ -130,27 +165,30 @@ function mdList(lines, i, depth) {
     if (/\d/.test(m[2]) !== ordered) break;
     const parts = [m[3]];
     i++;
-    while (i < lines.length && !mdBlank(lines[i]) && /^\s+/.test(lines[i]) && !MD_ITEM.test(lines[i])) parts.push(lines[i++].trim());
+    while (i < lines.length && !mdBlank(lines[i]) && lines[i].length <= MD_LONG && /^\s+/.test(lines[i]) && !mdItem(lines[i])) parts.push(lines[i++].trim());
     items.push(mdInline(parts.join(' ')));
     let j = i;  // a blank line between two items keeps the list going
     while (j < lines.length && mdBlank(lines[j])) j++;
     if (j > i && j < lines.length) {
-      const next = MD_ITEM.exec(lines[j]);
+      const next = mdItem(lines[j]);
       if (next && next[1].length >= indent) i = j;
     }
   }
-  return { node: el(ordered ? 'ol' : 'ul', { class: 'md-list' }, items.map((parts) => el('li', {}, parts))), next: i };
+  const attrs = { class: 'md-list' };
+  if (ordered && start !== 1) attrs.start = start;  // "2." after a code block stays 2
+  return { node: el(ordered ? 'ol' : 'ul', attrs, items.map((parts) => el('li', {}, parts))), next: i };
 }
 
 // The README's text as page nodes (depth: inside how many quotes).
 function markdownNodes(text, depth = 0) {
-  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const lines = text.replace(/\r\n?|[\u2028\u2029]/g, '\n').split('\n');
   const out = [];
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
     let m;
     if (mdBlank(line)) { i++; continue; }
+    if (line.length > MD_LONG) { out.push(el('p', {}, line)); i++; continue; }
     if ((m = MD_FENCE.exec(line))) {  // a code block, to its closing fence or the end
       const body = [];
       i++;
@@ -160,19 +198,26 @@ function markdownNodes(text, depth = 0) {
       continue;
     }
     if ((m = MD_HEADING.exec(line))) {  // # is h4: the details already use h3 for "Readme"
-      out.push(el('h' + Math.min(m[1].length + 3, 6), { class: 'md-h' }, mdInline(m[2])));
+      out.push(el('h' + Math.min(m[1].length + 3, 6), { class: 'md-h' }, mdInline(mdHeadingText(m[2]))));
       i++;
       continue;
     }
     if (MD_RULE.test(line)) { out.push(el('hr', { class: 'md-rule' })); i++; continue; }
     if (mdTableStarts(lines, i)) {
-      const head = mdCells(line);
+      const all = mdCells(line);
+      const head = all.slice(0, MD_TABLE_COLUMNS);
       const rows = [];
+      let more = 0;
       i += 2;
-      while (i < lines.length && !mdBlank(lines[i]) && lines[i].includes('|')) rows.push(mdCells(lines[i++]));
+      while (i < lines.length && !mdBlank(lines[i]) && lines[i].length <= MD_LONG && lines[i].includes('|')) {
+        if (rows.length < MD_TABLE_ROWS) rows.push(mdCells(lines[i])); else more++;
+        i++;
+      }
       out.push(el('div', { class: 'md-table' }, el('table', {},
         el('thead', {}, el('tr', {}, head.map((c) => el('th', {}, mdInline(c))))),
         el('tbody', {}, rows.map((r) => el('tr', {}, head.map((_, k) => el('td', {}, mdInline(r[k] || '')))))))));
+      if (more || all.length > head.length)
+        out.push(el('p', { class: 'md-more' }, '(The table goes on: ' + [more ? more + ' more rows' : '', all.length > head.length ? (all.length - head.length) + ' more columns' : ''].filter(Boolean).join(', ') + ' in the README file.)'));
       continue;
     }
     if (MD_QUOTE.test(line)) {
@@ -183,7 +228,7 @@ function markdownNodes(text, depth = 0) {
         : el('p', {}, mdInline(body.join(' ')))));
       continue;
     }
-    if (MD_ITEM.test(line)) {
+    if (mdItem(line)) {
       const list = mdList(lines, i, 0);
       out.push(list.node);
       i = list.next;

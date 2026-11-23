@@ -591,6 +591,8 @@ public:
         if (!eval_js.empty() && view_) {  // the test's script, then poll for it to finish (window.emfDone) up to probe_wait
             view_->ExecuteScript(eval_js.c_str(), Callback<ICoreWebView2ExecuteScriptCompletedHandler>([this](HRESULT, LPCWSTR) -> HRESULT {
                                                       probe_deadline_ = GetTickCount64() + probe_wait;
+                                                      // the run's own time limit from here: the probe's, and room to collect
+                                                      SetTimer(hwnd, kSmokeTimer, probe_wait + 10000, nullptr);
                                                       SetTimer(hwnd, kProbeTimer, 100, nullptr);
                                                       return S_OK;
                                                   }).Get());
