@@ -159,7 +159,7 @@ TEST_CASE("wilds: the wilds pack's fighting animals are beasts; a creature on a 
     CHECK(b.reply(std::string("beastmaster.species ") + kWolfGraph + " 6 1.1") == "unknown");
     CHECK(b.reply("beastmaster.species 9c1b120e-4901-495c-9cc0-5de134fbe140 6 0.8") == "unknown");
     CHECK(b.reply(std::string("beastmaster.species ") + kWolfGraph + " 6") == "wolf");        // the game's: no scale
-    CHECK(b.reply(std::string("beastmaster.species ") + kWolfGraph + " 6 1.4") == "bear");    // the bear pack's
+    CHECK(b.reply("beastmaster.species 9c1b120e-4901-495c-9cc0-5de134fbe140 6 1.4") == "bear");  // the bear pack's
     CHECK(b.reply("beastmaster.species 9c1b120e-4901-495c-9cc0-5de134fbe140 6") == "sabretooth");
     CHECK(b.reply("beastmaster.give fox").find("added") != std::string::npos);
     CHECK(b.reply("beastmaster.give snow_leopard").find("added") != std::string::npos);
@@ -2317,25 +2317,28 @@ TEST_CASE("beastmaster: attack with nothing under the crosshair goes for the cre
     CHECK(b.reply("beastmaster.attack").find("No monster where you look") != std::string::npos);  // forgotten after 10 s
 }
 
-TEST_CASE("beastmaster: a bear is the wolf's graph at 1.4x scale (the pack's ScaleComponent); a wolf, or a reused id, is a wolf") {
+TEST_CASE("beastmaster: a bear is the sabretooth's graph at 1.4x scale (the pack's ScaleComponent); a game sabretooth is a sabretooth") {
     BeastRig b;
-    b.beast(1234, kWolfGraph, 2, 2, kWildBeast, 20, 100);  // a wild bear: it came to you, and you beat it down
+    const char* sabre = "9c1b120e-4901-495c-9cc0-5de134fbe140";
+    b.beast(1234, sabre, 2, 2, kWildBeast, 20, 100);  // a wild bear: it came to you, and you beat it down
     component<ecs::ScaleComponent>(b.r.fake, 1234).uniformScale = 1.4f;
     b.look(1, 0, 10.5, 0, 45);
     CHECK(b.reply("beastmaster.tame").find("Taming the bear") != std::string::npos);
     b.seconds(4);
     CHECK(b.reply("beastmaster.list").find("1. Bear - bear, loyalty 1, out") != std::string::npos);
-    b.beast(70, kWolfGraph, -2, 2, kWildBeast, 20, 100);  // a game wolf: still a wolf
-    CHECK(b.reply("beastmaster.tame").find("Taming the wolf") != std::string::npos);
+    b.beast(70, sabre, -2, 2, kWildBeast, 20, 100);  // a game sabretooth: no ScaleComponent
+    CHECK(b.reply("beastmaster.tame").find("Taming the sabretooth") != std::string::npos);
 }
 
-TEST_CASE("beastmaster: the bear pack 2's bear is its own graph (its own skeleton) at 1.4x; the older pack's is the wolf's") {
-    constexpr const char* kBearGraph = "b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f05";
+TEST_CASE("beastmaster: the bear pack's bear runs the sabretooth's graph at 1.4x (the new brown bear); the pack 2's own graph still counts") {
+    constexpr const char* kOldBearGraph = "b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f05";  // the bear pack 2.x's own skeleton
+    constexpr const char* kSabreGraph = "9c1b120e-4901-495c-9cc0-5de134fbe140";
     BeastRig b;
-    CHECK(b.reply(std::string("beastmaster.species ") + kBearGraph + " 6 1.4") == "bear");
-    CHECK(b.reply(std::string("beastmaster.species ") + kWolfGraph + " 6 1.4") == "bear");  // the bear pack 1.0
+    CHECK(b.reply(std::string("beastmaster.species ") + kSabreGraph + " 6 1.4") == "bear");
+    CHECK(b.reply(std::string("beastmaster.species ") + kSabreGraph + " 6") == "sabretooth");  // the game's: no scale
+    CHECK(b.reply(std::string("beastmaster.species ") + kOldBearGraph + " 6 1.4") == "bear");  // an old pack still in
     CHECK(b.reply(std::string("beastmaster.species ") + kWolfGraph + " 6 1") == "wolf");
-    b.beast(60, kBearGraph, 2, 2, kWildBeast, 20, 100);
+    b.beast(60, kSabreGraph, 2, 2, kWildBeast, 20, 100);
     component<ecs::ScaleComponent>(b.r.fake, 60).uniformScale = 1.4f;
     b.look(1, 0, 10.5, 0, 45);
     CHECK(b.reply("beastmaster.tame").find("Taming the bear") != std::string::npos);

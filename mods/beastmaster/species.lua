@@ -34,6 +34,7 @@ local M = {}
 local WILDBEAST, SCAVENGER = 6, 4
 local WOLF_GRAPH = "3180813f-a50d-47fc-be92-29a2383bd47d"
 local BOAR_GRAPH = "aed0ecec-8a98-4fd3-a450-ab4c508b0ad4"
+local SABRE_GRAPH = "9c1b120e-4901-495c-9cc0-5de134fbe140"
 local BEAR_SCALE = 1.3     -- the pack's bear is 1.4
 local AUROCHS_SCALE = 1.2  -- the pack's aurochs is 1.3
 local PACK = "the beasts pack (emf_beastmaster_beasts)"
@@ -44,19 +45,20 @@ M.list = {
 	{ id = "boar", name = "Boar", tank = true, role_health = 1.7, role_damage = 0.9, template = "255fd8d9-4447-445d-8ffc-4d9dc0afdd16",
 		graph = BOAR_GRAPH, max_scale = AUROCHS_SCALE },
 	{ id = "sabretooth", name = "Sabretooth", role_health = 1.15, role_damage = 1.25, template = "50b96064-3ffc-47a2-8c7d-1d592a3c459c",
-		graph = "9c1b120e-4901-495c-9cc0-5de134fbe140" },
+		graph = SABRE_GRAPH, max_scale = BEAR_SCALE },
 	{ id = "hound", name = "Hound", role_health = 1.3, role_damage = 1.1, template = "87575915-bc75-4611-ab71-0cd4e79535b1",
 		graph = WOLF_GRAPH, factions = { [SCAVENGER] = true }, sleeps = true },
 	-- the rats of houses and ruins (Enemy_Wildbeast_Rat_hook; its Coldheights kin runs the same graph): small, a friend
 	-- more than a fighter (GitHub #47)
 	{ id = "rat", name = "Rat", plural = "rats", role_health = 1.1, role_damage = 1.0, template = "927e63d6-a53e-4eda-af44-c7a229ac22a1",
 		graph = "57a2f080-1f1e-4d18-8170-2d80b756fe56", factions = { [WILDBEAST] = true }, small = true },
-	-- the bear pack (tools/models/packs/beastmaster_bear.json); GUIDs fixed forever. Pack 2.0: a bear on a skeleton
-	-- of its own with its own graph copy; 1.0's bear ran the wolf's graph (both at 1.4x)
+	-- the bear pack (tools/models/packs/beastmaster_bear.json); GUIDs fixed forever. Pack 3.0: the new brown bear fitted
+	-- on the sabretooth, so it runs the sabretooth's graph at 1.4x (a game sabretooth has no ScaleComponent); 2.x's bear
+	-- ran a graph copy of its own (`also`: an old pack still installed)
 	{ id = "bear", name = "Bear", tank = true, scale = 1.4, role_health = 2.2, role_damage = 1.1, template = "b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f02",
 		model = "b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f01", pack = "the bear pack (emf_beastmaster_bear)", health_mul = 2.5,
 		plural = "bears",
-		graph = "b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f05", also = WOLF_GRAPH,
+		graph = SABRE_GRAPH, also = "b3a7c2e1-5f4d-4c8b-9e21-7a0d4b6e2f05",
 		factions = { [WILDBEAST] = true }, min_scale = BEAR_SCALE, sleeps = true },
 	-- the beasts pack (tools/models/packs/beastmaster_beasts.json); GUIDs fixed forever
 	{ id = "aurochs", name = "Aurochs", tank = true, scale = 1.3, role_health = 2.0, role_damage = 1.0, template = "d5f2b8e3-7c4a-4e9f-8b21-6a3c8d4e0f02",
