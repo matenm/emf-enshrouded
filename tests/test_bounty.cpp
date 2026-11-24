@@ -128,10 +128,10 @@ size_t starters_in(const std::string& text) {
 }
 }  // namespace
 
-TEST_CASE("bounty: mod.json 1.2.0 has the board settings with the approved defaults") {
+TEST_CASE("bounty: mod.json 1.2.1 has the board settings with the approved defaults") {
     const auto m = emf::core::parse_manifest(slurp((std::filesystem::path(EMF_SOURCE_DIR) / "mods/bounty/mod.json").wstring()));
     REQUIRE_MESSAGE(m.manifest, m.error);
-    CHECK(m.manifest->version_text == "1.2.0");
+    CHECK(m.manifest->version_text == "1.2.1");
     std::map<std::string, emf::core::SettingDef> s;
     for (const auto& d : m.manifest->settings) {
         CAPTURE(d.key);
