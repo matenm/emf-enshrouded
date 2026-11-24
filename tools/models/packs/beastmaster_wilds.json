@@ -1,7 +1,7 @@
 {
  "id": "emf_beastmaster_wilds",
  "title": "Beastmaster: wilds",
- "version": "0.1.0",
+ "version": "1.0.0",
  "out": "../../../analysis/models/mods/emf_beastmaster_wilds",
  "description": "Wild animals for the Beastmaster mod, made in the game's style: fox, wolf, bear, panther, lynx, goat, ram, deer, elk, wild ox, lion, lioness, hyena, jackal, ibex, bison, musk ox, antelope, mule, monitor lizard, a pack llama and a pack camel, most in several coats. Every animal stands on a game animal's skeleton and moves with that animal's own clips.",
  "authors": [
