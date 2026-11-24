@@ -1163,6 +1163,56 @@
    ]
   },
   {
+   "name": "wilds_lioness_white",
+   "glb": "../../../analysis/models/wilds/lioness.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.hierarchy.json",
+   "source_model_guid": "5a45d5a3-c91f-4a96-bc75-ec80f2b18ae8",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.json",
+   "source_template": "Enemy_Wildbeast_Sabertooth",
+   "template_name": "Wilds_Lioness_White",
+   "model_guid": "65c5e1e0-04d5-42da-9255-d7afee9cabbf",
+   "template_guid": "49f2aaa6-437d-4e06-a792-2ff9872c55b1",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/lioness_white",
+    "slot": 1,
+    "flat_size": 64,
+    "material_guid": "4774ff86-d3eb-4959-96b8-855f7540447c"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.902
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_lioness_dark",
+   "glb": "../../../analysis/models/wilds/lioness.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.hierarchy.json",
+   "source_model_guid": "5a45d5a3-c91f-4a96-bc75-ec80f2b18ae8",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.json",
+   "source_template": "Enemy_Wildbeast_Sabertooth",
+   "template_name": "Wilds_Lioness_Dark",
+   "model_guid": "cb9c759d-f89f-4852-920e-c5a402f76343",
+   "template_guid": "77914bf9-e046-47a7-a5bd-135049b8d5d3",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex512/lioness_dark",
+    "slot": 1,
+    "flat_size": 64,
+    "material_guid": "8f67f4d2-221a-4403-b192-3364805288d8"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.902
+     }
+    }
+   ]
+  },
+  {
    "name": "wilds_hyena",
    "glb": "../../../analysis/models/wilds/hyena.glb",
    "hierarchy": "../../../analysis/model_survey/dump/char_enemy_wolf_01.hierarchy.json",
