@@ -46,6 +46,7 @@ struct Fake {
     std::vector<Give> gives;            // the drops made
     std::set<uint32_t> give_fails;      // give_item at these entities fails (gone: no transform), as in the core
     std::vector<EmfItemsRequest> puts, takes;
+    bool take_refused = false;  // take_items answers false (the core refused the request: no callback comes)
     struct Spawn {
         uint8_t guid[16];
         double x, y, z;
@@ -359,7 +360,7 @@ bool f_put_ex(EmfWorld*, const EmfItemsRequest* r) {
 }
 bool f_take(EmfWorld*, const EmfItemsRequest* r) {
     g->takes.push_back(*r);
-    return true;
+    return !g->take_refused;
 }
 uint32_t f_spawn(EmfWorld*, const uint8_t guid[16], double x, double y, double z) {
     if (g->spawn_fails || g->missing_templates.count(std::vector<uint8_t>(guid, guid + 16))) return 0;

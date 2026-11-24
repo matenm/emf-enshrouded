@@ -8376,3 +8376,27 @@ TEST_CASE("pack beast: without the wilds pack's items (the game knows no harness
     CHECK(has(b.reply("beastmaster.pack"), "the wilds pack (emf_beastmaster_wilds)"));
     CHECK(b.r.fake.takes.empty());
 }
+
+TEST_CASE("pack beast (review): a take the core refuses says the bag could not be checked") {
+    BeastRig b;
+    b.r.fake.item_names[9101] = "Item_Beastmaster_Llama_Harness";
+    b.r.fake.item_names[9102] = "Item_Beastmaster_Camel_Saddle";
+    b.r.fake.take_refused = true;
+    CHECK(has(b.reply("beastmaster.pack"), "Your bag could not be checked just now; try again."));
+}
+
+TEST_CASE("pack beast (review): a second press while the harness is taken does not say there is no pack beast") {
+    BeastRig b;
+    b.r.fake.item_names[9101] = "Item_Beastmaster_Llama_Harness";
+    b.r.fake.item_names[9102] = "Item_Beastmaster_Camel_Saddle";
+    b.reply("beastmaster.pack");
+    b.reply("beastmaster.pack");  // pressed again before the answer
+    REQUIRE(b.r.fake.takes.size() == 2u);
+    EmfItemsRequest first = b.r.fake.takes[0], second = b.r.fake.takes[1];
+    first.cb(kServer, first.entity, first.item, first.count, 1, first.user);  // the one harness
+    second.cb(kServer, second.entity, second.item, second.count, 0, second.user);
+    b.seconds(1);
+    CHECK(b.r.fake.takes.size() == 2u);  // no saddle asked for: a pack beast came meanwhile
+    CHECK(b.noted("You put the harness on a pack llama"));
+    CHECK_FALSE(b.noted("You have no pack beast"));
+}

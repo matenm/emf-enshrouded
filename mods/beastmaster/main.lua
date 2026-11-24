@@ -484,8 +484,11 @@ end
 
 -- The pack beast (species carrier): called when it is home, sent home when it is with its owner.
 -- No pack beast yet: a harness (llama) or a saddle (camel) from the player's bag makes one, tried in species.lua's order.
--- false when the game knows no such item (the wilds pack is not installed); its answer comes later, as a line.
+-- Returns called, queued: called false when the game knows no such item (the wilds pack is not installed), queued false
+-- when the core refused the take (no answer comes); else its answer comes later, as a line.
 local WILDS = "the wilds pack (emf_beastmaster_wilds)"
+local NO_PACK_BEAST = "You have no pack beast: craft a Llama Harness or a Camel Saddle at the Workbench (" .. WILDS .. ")."
+local BAG_BUSY = "Your bag could not be checked just now; try again."
 local function harness_try(world, player, account, i)
 	local carriers = {}
 	for _, sp in ipairs(species.list) do
@@ -493,16 +496,18 @@ local function harness_try(world, player, account, i)
 	end
 	local sp = carriers[i]
 	if not sp then
-		tell(world, player, "You have no pack beast: craft a Llama Harness or a Camel Saddle at the Workbench (" ..
-			WILDS .. ").")
-		return true
+		tell(world, player, NO_PACK_BEAST)
+		return true, true
 	end
 	-- emf.take raises an error for an item name the game does not know: the pack's items are not there
-	local called = pcall(emf.take, world, player, sp.harness, 1, function(w, taken)
+	local called, queued = pcall(emf.take, world, player, sp.harness, 1, function(w, taken)
 		if (taken or 0) < 1 then
-			if not harness_try(w, player, account, i + 1) then
-				tell(w, player, "You have no pack beast: craft a Llama Harness or a Camel Saddle at the Workbench (" ..
-					WILDS .. ").")
+			if carrier_count(account) > 0 then return end  -- a second press: the first one made a pack beast meanwhile
+			local c2, q2 = harness_try(w, player, account, i + 1)
+			if not c2 then
+				tell(w, player, NO_PACK_BEAST)
+			elseif not q2 then
+				tell(w, player, BAG_BUSY)
 			end
 			return
 		end
@@ -520,7 +525,7 @@ local function harness_try(world, player, account, i)
 		tell(w, player, string.format("You put the %s on a %s: %s carries your things (/beastmaster pack calls it).",
 			sp.harness_word, sp.name:lower(), b.name))
 	end)
-	return called
+	return called, called and queued
 end
 
 function actions.pack(world, player, account)
@@ -531,10 +536,12 @@ function actions.pack(world, player, account)
 			return pack:call(world, player, account, b)
 		end
 	end
-	if not harness_try(world, player, account, 1) then
+	local called, queued = harness_try(world, player, account, 1)
+	if not called then
 		return "Pack beasts come with " .. WILDS .. ": install it, then craft a Llama Harness or a Camel Saddle at the " ..
 			"Workbench."
 	end
+	if not queued then return BAG_BUSY end
 	return "You look in your bag for a harness or a saddle."
 end
 
