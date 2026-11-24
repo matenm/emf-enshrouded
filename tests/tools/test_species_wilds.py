@@ -53,7 +53,7 @@ class SpeciesWildsTests(unittest.TestCase):
 
     def test_every_beast_is_a_pack_creature_with_its_template_and_scale(self):
         beasts = [line for line in self.lines if line[0] == "beast"]
-        self.assertEqual(len(beasts), 29)  # 20, and the lion, hyena and jackal with two coats each
+        self.assertEqual(len(beasts), 32)  # 20, and the lion, lioness, hyena and jackal with two coats each
         for _, sid, creature, template, scale, wilds in beasts:
             with self.subTest(beast=sid):
                 self.assertIn(creature, self.pack)
@@ -106,6 +106,8 @@ class SpeciesWildsTests(unittest.TestCase):
             "wilds_muskox_white": ("yak", "coats"), "wilds_muskox_dark": ("yak", "coats"),
             "wilds_lizard_green": ("crocodile", "coats"), "wilds_lizard_sand": ("crocodile", "coats"),
             "wilds_lizard_black": ("crocodile", "coats"),
+            "wilds_lioness": ("sabretooth", "animals"), "wilds_lioness_white": ("sabretooth", "coats"),
+            "wilds_lioness_dark": ("sabretooth", "coats"),
         }
         for name, where in want.items():
             with self.subTest(name=name):

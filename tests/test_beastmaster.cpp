@@ -4024,7 +4024,7 @@ TEST_CASE("beastmaster: mod.json asks EMF for a portrait of every kind, the wild
     const std::regex wild_entry(R"re(\{ id = "([a-z_]+)",[^}]*?template = "([0-9a-f-]{36})")re");
     for (auto it = std::sregex_iterator(wilds.begin(), wilds.end(), wild_entry); it != std::sregex_iterator(); ++it)
         kinds[(*it)[1]] = (*it)[2];
-    REQUIRE(kinds.size() == 42u);  // and 29 of the wilds pack
+    REQUIRE(kinds.size() == 45u);  // and 32 of the wilds pack
     std::vector<std::string> problems;
     const auto items = emf::loader::read_portrait_lists(
         {{"beastmaster", slurp(std::filesystem::path(dir + "mod.json").wstring())}}, &problems);

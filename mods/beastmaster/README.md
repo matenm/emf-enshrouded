@@ -486,17 +486,17 @@ load.
 
 ## Our animals in the wild: the wilds pack (`emf_beastmaster_wilds`, 1.21.0)
 
-An EML data patch with 72 animals made in the game's style, each fitted straight onto a game animal's skeleton, so it
+An EML data patch with 75 animals made in the game's style, each fitted straight onto a game animal's skeleton, so it
 moves with that animal's own animations and AI: the fox, hyena, jackal and the coloured wolves on the wolf's; the bear,
-panther, lion and lynx on the sabretooth's; the goat, ibex, ram, deer and elk on the goat's; the Wild Ox, bison and
+panther, lion, lioness and lynx on the sabretooth's; the goat, ibex, ram, deer and elk on the goat's; the Wild Ox, bison and
 musk ox on the yak's; the antelope and mule on the wild cat-deer's; the monitor lizard on the amphibious crocodile's;
 and the pack llama and pack camel ("The pack llama and the pack camel" above). It also adds the Llama Harness and the
 Camel Saddle to the Workbench. With it installed:
 - **In the wild:** a game wolf, sabretooth, goat, yak, wild cat-deer or amphibious crocodile that turns up is now and then
   one of these instead (15 %), and more rarely a colour version (4 %) with more health and damage (125 %). A wolf can be
   a fox, hyena or jackal, or an arctic, silver or sand fox, a white, black or red wolf, a brown or pale hyena, or a dark
-  or silver jackal. A sabretooth can be a bear, panther, lynx or lion, or a black or cinnamon bear, a black panther,
-  jaguar or tiger, a dark or red lynx, or a white or dark lion. A snow sabretooth of the Cold Heights can be a bear or lynx, or a
+  or silver jackal. A sabretooth can be a bear, panther, lynx, lion or lioness, or a black or cinnamon bear, a black
+  panther, jaguar or tiger, a dark or red lynx, or a white or dark lion or lioness. A snow sabretooth of the Cold Heights can be a bear or lynx, or a
   snow bear, snow leopard or snow lynx. A goat can be a goat, deer or ibex (a black or piebald goat, a dark or fallow
   deer, a white or dark ibex);
   a mountain goat a ram or elk (a chamois, a black or golden ram, a mouflon, a white, dark or grey elk, a white deer);
@@ -504,7 +504,8 @@ Camel Saddle to the Workbench. With it installed:
   cat-deer an antelope or mule (a sable or white antelope, a grey or black mule); an amphibious crocodile a monitor
   lizard (a green, sand or black one). The goat's, ram's, deer's, elk's, ox's, antelope's and mule's kinds keep the
   game's wild animal mind, so they are never tamed; the monitor lizard fights as the crocodile does but is not tamed
-  either. The game creature decides, not the place: Beastmaster has no way to tell a desert from a forest, so a lion
+  either (the game's no-combat crocodile looks the same to Beastmaster, so it can become a lizard that fights). The game
+  creature decides, not the place: Beastmaster has no way to tell a desert from a forest, so a lion
   comes where sabretooths live.
   Each has the level of the creature it replaced and that creature's loot.
 - Never a creature within 25 m of a player (nothing changes in front of you), within 40 m of a flame altar, hurt, or
@@ -512,9 +513,9 @@ Camel Saddle to the Workbench. With it installed:
 - The server world has no render models for creatures; on a game you host your own game's world tells a snow
   sabretooth or a mountain goat by its model. A dedicated server cannot: there they get the sabretooth's or the goat's
   animals.
-- **Taming:** the foxes, hyenas, jackals, coloured wolves, bears, panthers, lions and lynxes are tamed like any beast
+- **Taming:** the foxes, hyenas, jackals, coloured wolves, bears, panthers, lions, lionesses and lynxes are tamed like any beast
   (beaten down, or fed: lean meat for foxes, hyenas, jackals and wolves, red berries for bears, cat bait for panthers,
-  lions and lynxes) and called from your collection; a colour version is about 10 % stronger than its animal. The
+  lions, lionesses and lynxes) and called from your collection; a colour version is about 10 % stronger than its animal. The
   wildlife AI's animals cannot fight, so they are never tamed.
 - Beastmaster knows these animals by its list of the ones it put into the world (nothing else on the server tells a fox
   from a wolf): after a script reload the ones already about cannot be tamed until the next world load.

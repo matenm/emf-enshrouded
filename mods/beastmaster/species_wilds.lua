@@ -140,6 +140,17 @@ M.beasts = {
 		template = "5039b748-2ed9-42c0-abed-a23e2ca49791", graph = SABRE_GRAPH, factions = { [WILDBEAST] = true },
 		scale = 0.935, creature = "wilds_lion_dark", pack = PACK, wilds = true, bait = "Food_T2_Cat_Bait",
 		colour_of = "lion" },
+	{ id = "lioness", name = "Lioness", plural = "lionesses", role_health = 1.2, role_damage = 1.45,
+		template = "8c80ab00-2569-4462-adf2-bbeb937eefdc", graph = SABRE_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.82, creature = "wilds_lioness", pack = PACK, wilds = true, bait = "Food_T2_Cat_Bait" },
+	{ id = "white_lioness", name = "White lioness", plural = "white lionesses", role_health = 1.35, role_damage = 1.6,
+		template = "49f2aaa6-437d-4e06-a792-2ff9872c55b1", graph = SABRE_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.902, creature = "wilds_lioness_white", pack = PACK, wilds = true, bait = "Food_T2_Cat_Bait",
+		colour_of = "lioness" },
+	{ id = "dark_lioness", name = "Dark lioness", plural = "dark lionesses", role_health = 1.35, role_damage = 1.6,
+		template = "77914bf9-e046-47a7-a5bd-135049b8d5d3", graph = SABRE_GRAPH, factions = { [WILDBEAST] = true },
+		scale = 0.902, creature = "wilds_lioness_dark", pack = PACK, wilds = true, bait = "Food_T2_Cat_Bait",
+		colour_of = "lioness" },
 }
 
 M.kinds = {
@@ -180,6 +191,8 @@ M.kinds = {
 				beast = "wilds_panther" },
 			{ name = "wilds_lynx", template = "7e1aac14-7949-4c89-8463-a8a58b57e029", scale = 0.6, beast = "lynx" },
 			{ name = "wilds_lion", template = "50004771-332b-42c1-a130-76aee596e821", scale = 0.85, beast = "lion" },
+			{ name = "wilds_lioness", template = "8c80ab00-2569-4462-adf2-bbeb937eefdc", scale = 0.82,
+				beast = "lioness" },
 		},
 		coats = {
 			{ name = "wilds_bear_black", template = "797eac81-cf61-413b-8ae4-81297aac0ae6", scale = 1.1,
@@ -200,6 +213,10 @@ M.kinds = {
 				beast = "white_lion" },
 			{ name = "wilds_lion_dark", template = "5039b748-2ed9-42c0-abed-a23e2ca49791", scale = 0.935,
 				beast = "dark_lion" },
+			{ name = "wilds_lioness_white", template = "49f2aaa6-437d-4e06-a792-2ff9872c55b1", scale = 0.902,
+				beast = "white_lioness" },
+			{ name = "wilds_lioness_dark", template = "77914bf9-e046-47a7-a5bd-135049b8d5d3", scale = 0.902,
+				beast = "dark_lioness" },
 		},
 	},
 	{ id = "snow_sabretooth", graph = SABRE_GRAPH, faction = WILDBEAST, model = "3d555869-f7ef-4462-b341-06cad1b2d7e6",
@@ -282,7 +299,8 @@ M.kinds = {
 		},
 	},
 	-- the amphibious crocodile: the monitor lizard on its skeleton; it fights as the crocodile does, but is not a beast
-	-- Beastmaster tames (the crocodile's AI keeps to water)
+	-- Beastmaster tames (the crocodile's AI keeps to water). The game's no-combat crocodile has the same graph, faction,
+	-- model and components, so it is replaced too
 	{ id = "crocodile", graph = CROCODILE_GRAPH, faction = WILDBEAST, model = "a6b635d6-c44e-4f5d-a582-a6b59d1bb79b",
 		animals = {
 			{ name = "wilds_lizard", template = "a6f39587-810c-4902-8acb-ef03944cddb8", scale = 0.6 },

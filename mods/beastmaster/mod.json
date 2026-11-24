@@ -51,7 +51,10 @@
     {"key": "beastmaster.silver_jackal", "template": "ee8f4c63-e5d9-4c66-a305-03ceda2a04fd", "frames": 24, "size": 192},
     {"key": "beastmaster.lion", "template": "50004771-332b-42c1-a130-76aee596e821", "frames": 24, "size": 192},
     {"key": "beastmaster.white_lion", "template": "56c94c24-6ebb-4aa8-976c-76ecd340533e", "frames": 24, "size": 192},
-    {"key": "beastmaster.dark_lion", "template": "5039b748-2ed9-42c0-abed-a23e2ca49791", "frames": 24, "size": 192}
+    {"key": "beastmaster.dark_lion", "template": "5039b748-2ed9-42c0-abed-a23e2ca49791", "frames": 24, "size": 192},
+    {"key": "beastmaster.lioness", "template": "8c80ab00-2569-4462-adf2-bbeb937eefdc", "frames": 24, "size": 192},
+    {"key": "beastmaster.white_lioness", "template": "49f2aaa6-437d-4e06-a792-2ff9872c55b1", "frames": 24, "size": 192},
+    {"key": "beastmaster.dark_lioness", "template": "77914bf9-e046-47a7-a5bd-135049b8d5d3", "frames": 24, "size": 192}
   ],
   "settings": [
     {"key": "wheel_key", "type": "keybind", "default": "F3", "label": "Beast wheel (hold)", "live": true, "shared": true, "group": "Controls"},
