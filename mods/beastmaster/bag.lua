@@ -74,7 +74,10 @@ end
 function B:still(world, id, l)
 	if self.env.owns and not self.env.owns(id, l.account) then return false end
 	local cur = emf.health(world, id)
-	return not (cur ~= nil and cur <= 0)
+	-- a new pack beast reads 0 health for its first moments, until the game fills it in (seen live): only 0 after it
+	-- was alive is a fall
+	if cur ~= nil and cur > 0 then l.alive = true end
+	return not (l.alive and cur ~= nil and cur <= 0)
 end
 
 -- Its owner's bag is offered while no other player stands near (the game's chest screen would open for them too).

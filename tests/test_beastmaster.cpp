@@ -8400,3 +8400,4 @@ TEST_CASE("pack beast (review): a second press while the harness is taken does n
     CHECK(b.noted("You put the harness on a pack llama"));
     CHECK_FALSE(b.noted("You have no pack beast"));
 }
+
