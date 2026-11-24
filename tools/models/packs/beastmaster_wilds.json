@@ -3,11 +3,11 @@
  "title": "Beastmaster: wilds",
  "version": "0.1.0",
  "out": "../../../analysis/models/mods/emf_beastmaster_wilds",
- "description": "Wild animals for the Beastmaster mod, made in the game's style: fox, wolf, bear, panther, lynx, goat, ram, deer, elk, wild ox, lion, hyena, jackal, ibex, bison, musk ox, antelope, mule, monitor lizard, a pack llama and a pack camel, most in several coats. Every animal stands on a game animal's skeleton and moves with that animal's own clips.",
+ "description": "Wild animals for the Beastmaster mod, made in the game's style: fox, wolf, bear, panther, lynx, goat, ram, deer, elk, wild ox, lion, lioness, hyena, jackal, ibex, bison, musk ox, antelope, mule, monitor lizard, a pack llama and a pack camel, most in several coats. Every animal stands on a game animal's skeleton and moves with that animal's own clips.",
  "authors": [
   "EMF contributors"
  ],
- "notes": "Each model was generated standing as its game animal stands at rest (two pictures made from renders of the game animal's body, then Meshy multi-image-to-3D at 12000 polygons) and fitted straight onto that animal's skeleton with blender/fit_to_game_skeleton.py --keep-uvs --material <slot> (the fox also --sides), without own proportions: the game's skeleton, clips and graph play, so the pack adds no skeleton, clip or graph. Fox and wolf stand on the wolf (material 0), bear, panther and lynx on the sabretooth (material 1), goat, ram, deer, elk and llama on the goat (material 0), the ox on the yak (material 0); the goat has no attack clips, so those five cannot fight. A coat is the same fitted model with another texture (a Meshy retexture that kept the model's UVs) at 512 px, 1.1 times the size; a base animal's texture is 1024 px. The bear, panther and lynx were made with the sabretooth's hanging front toes; what lies under the ground when they stand is flattened into a sole. The lion stands on the sabretooth, the hyena and the jackal on the wolf, the ibex on the goat, the bison and the musk ox on the yak, the antelope and the mule on the wild cat-deer (wildlife: they graze and flee), the monitor lizard on the crocodile, the pack camel on the cat-deer companion with the pack llama's bag. The content script beastmaster_harness.lua adds the Llama Harness and the Camel Saddle. Template and model GUIDs are fixed.",
+ "notes": "Each model was generated standing as its game animal stands at rest (two pictures made from renders of the game animal's body, then Meshy multi-image-to-3D at 12000 polygons) and fitted straight onto that animal's skeleton with blender/fit_to_game_skeleton.py --keep-uvs --material <slot> (the fox also --sides), without own proportions: the game's skeleton, clips and graph play, so the pack adds no skeleton, clip or graph. Fox and wolf stand on the wolf (material 0), bear, panther and lynx on the sabretooth (material 1), goat, ram, deer, elk and llama on the goat (material 0), the ox on the yak (material 0); the goat has no attack clips, so those five cannot fight. A coat is the same fitted model with another texture (a Meshy retexture that kept the model's UVs) at 512 px, 1.1 times the size; a base animal's texture is 1024 px. The bear, panther and lynx were made with the sabretooth's hanging front toes; what lies under the ground when they stand is flattened into a sole. The lion and the lioness stand on the sabretooth, the hyena and the jackal on the wolf, the ibex on the goat, the bison and the musk ox on the yak, the antelope and the mule on the wild cat-deer (wildlife: they graze and flee), the monitor lizard on the crocodile, the pack camel on the cat-deer companion with the pack llama's bag. The content script beastmaster_harness.lua adds the Llama Harness and the Camel Saddle. Template and model GUIDs are fixed.",
  "content_scripts": [
   "beastmaster_harness.lua"
  ],
@@ -1133,6 +1133,31 @@
      "type": "ScaleComponent",
      "value": {
       "uniformScale": 0.935
+     }
+    }
+   ]
+  },
+  {
+   "name": "wilds_lioness",
+   "glb": "../../../analysis/models/wilds/lioness.glb",
+   "hierarchy": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.hierarchy.json",
+   "source_model_guid": "5a45d5a3-c91f-4a96-bc75-ec80f2b18ae8",
+   "source_model_json": "../../../analysis/model_survey/dump/char_enemy_sabretooth_01.json",
+   "source_template": "Enemy_Wildbeast_Sabertooth",
+   "template_name": "Wilds_Lioness",
+   "model_guid": "d70514ce-cc95-421c-8f47-1fe40a2a52ea",
+   "template_guid": "8c80ab00-2569-4462-adf2-bbeb937eefdc",
+   "texture": {
+    "albedo_dir": "../../../analysis/models/wilds/tex/lioness",
+    "slot": 1,
+    "flat_size": 64,
+    "material_guid": "fd5682d1-39c9-4777-9764-f9fdef3b61ac"
+   },
+   "template_add": [
+    {
+     "type": "ScaleComponent",
+     "value": {
+      "uniformScale": 0.8
      }
     }
    ]
